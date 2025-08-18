@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+title: "CisPerplexity: Advanced Promoter Prediction Tool"
+message: "If you use this software, please cite it as below."
+type: software
+authors:
+  - family-names: "VRYella"
+    given-names: "CisPerplexity Team"
+    orcid: "https://orcid.org/0000-0000-0000-0000"
+repository-code: "https://github.com/VRYella/CisPerplexity"
+url: "https://github.com/VRYella/CisPerplexity"
+abstract: >-
+  CisPerplexity is an advanced bioinformatics tool for predicting 
+  promoter regions in DNA sequences using an integrated approach that 
+  combines dinucleotide perplexity analysis, structural features, and 
+  promoter motif detection. The tool employs Kadane's Algorithm for 
+  optimal low-perplexity region detection and provides a professional 
+  web interface for analysis and visualization.
+keywords:
+  - bioinformatics
+  - promoter prediction
+  - DNA analysis
+  - perplexity analysis
+  - Kadane's algorithm
+  - motif detection
+  - structural features
+  - streamlit
+license: MIT
+version: "1.0.0"
+date-released: "2024-01-01"
