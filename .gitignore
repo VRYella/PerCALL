@@ -50,4 +50,20 @@ Thumbs.db
 .ipynb_checkpoints
 
 # Streamlit
-.streamlit/
+.streamlit/secrets.toml
+
+# Testing and coverage
+htmlcov/
+.tox/
+.coverage
+.pytest_cache/
+nosetests.xml
+coverage.xml
+
+# Documentation
+docs/_build/
+
+# Data files (uncomment if you don't want to track large data files)
+# *.csv
+# *.xlsx
+# *.json
