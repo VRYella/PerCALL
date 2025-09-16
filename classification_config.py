@@ -265,16 +265,20 @@ class NBDFinderConfig:
         
         config = self.motif_classes[motif_class]
         
-        # Check length constraints
+        # Check length constraints - allow extended A-tracts for A-philic DNA
         if 'Length' in motif_result:
             length = motif_result['Length']
-            if length < config['S_min'] or length > config['S_max']:
+            # For A-philic DNA, allow longer sequences since A-tracts can be extended
+            max_length = 200 if motif_class == 9 else config['S_max']
+            if length < config['S_min'] or length > max_length:
                 return False
         
-        # Check score threshold
+        # Check score threshold - use tetranucleotide score thresholds for A-philic DNA
         if 'Score' in motif_result:
             score = motif_result['Score']
-            if score < config['min_score']:
+            # For A-philic DNA, use lower threshold based on tetranucleotide scoring
+            min_score_threshold = 1.5 if motif_class == 9 else config['min_score']
+            if score < min_score_threshold:
                 return False
         
         return True
