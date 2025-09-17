@@ -1076,6 +1076,585 @@ def display_analysis():
         st.info("👆 Please enter a DNA sequence to analyze.")
 
 
+    
+    # Add navigation
+    page = st.sidebar.radio(
+        "Navigation",
+        ["🔬 Analysis", "📖 About", "📊 Examples", "🛠️ Advanced"],
+        index=0
+    )
+    
+    # Add some spacing
+    st.sidebar.markdown("---")
+    
+    # Route to different pages
+    if page == "🔬 Analysis":
+        display_analysis()
+    elif page == "📖 About":
+        display_about()
+    elif page == "📊 Examples":
+        display_examples()
+    elif page == "🛠️ Advanced":
+        display_advanced()
+
+
+def display_examples():
+    """Display example analyses and tutorials"""
+    
+    st.markdown('<h1 class="main-header">📊 Examples & Tutorials</h1>', unsafe_allow_html=True)
+    
+    st.markdown("""
+    Explore these examples to understand how CisPerplexity works and what to expect from different types of sequences.
+    """)
+    
+    # Example categories
+    tab1, tab2, tab3 = st.tabs(["🧬 Biological Examples", "🔬 Test Cases", "📈 Interpretation Guide"])
+    
+    with tab1:
+        st.markdown('<h2 class="subheader">🧬 Biological Examples</h2>', unsafe_allow_html=True)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("""
+            ### Human β-globin Promoter
+            A well-characterized human promoter with classic TATA-box.
+            
+            **Expected Results:**
+            - Strong TATA-box signal around position 50
+            - Low perplexity in promoter region
+            - High confidence score (>80%)
+            """)
+            
+            if st.button("Load β-globin Example", key="globin"):
+                st.code("""CCCACAGGGCAGAGCCACCACCCTCAGACCTGAGCCCCAAGGCCTTGAGCCCC
+                AAGGCCTGATATAAGCAGCAGGGCCACCACCCTCAGACCTGAGCCCCAAGGC""")
+        
+        with col2:
+            st.markdown("""
+            ### E. coli lac Promoter
+            Bacterial promoter with -10 and -35 elements.
+            
+            **Expected Results:**
+            - Multiple motif matches
+            - Moderate perplexity variation
+            - Good structural feature scores
+            """)
+            
+            if st.button("Load lac Promoter Example", key="lac"):
+                st.code("""GCCCAATACGCAAACCGCCTCTCCCCGCGCGTTGGCCGATTCATTAATGCAGCTG
+                GCACGACAGGTTTCCCGACTGGAAAGCGGGCAGTGAGCGCAACGCAAT""")
+    
+    with tab2:
+        st.markdown('<h2 class="subheader">🔬 Test Cases</h2>', unsafe_allow_html=True)
+        
+        st.markdown("""
+        ### Understanding Algorithm Behavior
+        
+        These synthetic examples help illustrate how different sequence properties affect prediction:
+        """)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("""
+            **Low Complexity Sequence**
+            - High AT content
+            - Low dinucleotide diversity
+            - Should show low perplexity
+            """)
+            if st.button("Test Low Complexity", key="low_comp"):
+                st.code("AAAAAATTTTTAAAAAAATTTTTAAAAAAAATTTTTAAAAAAATTTTTT")
+        
+        with col2:
+            st.markdown("""
+            **High Complexity Sequence**  
+            - Balanced nucleotide content
+            - High dinucleotide diversity
+            - Should show high perplexity
+            """)
+            if st.button("Test High Complexity", key="high_comp"):
+                st.code("ATGCTAGCGATCGATCGTAGCGATCGTAGCGATCGTAGCGATCGTAGC")
+    
+    with tab3:
+        st.markdown('<h2 class="subheader">📈 Interpretation Guide</h2>', unsafe_allow_html=True)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("""
+            ### Confidence Scores
+            
+            - **90-100%**: Very high confidence
+              - Multiple supporting motifs
+              - Clear perplexity signature
+              - Strong structural features
+            
+            - **70-89%**: High confidence
+              - Good motif support
+              - Clear perplexity pattern
+              - Moderate structural scores
+            
+            - **50-69%**: Moderate confidence
+              - Some motif matches
+              - Visible perplexity changes
+              - Review manually
+            
+            - **<50%**: Low confidence
+              - Weak evidence
+              - Consider false positive
+              - Verify experimentally
+            """)
+        
+        with col2:
+            st.markdown("""
+            ### Perplexity Patterns
+            
+            **Typical Promoter Signal:**
+            - Sharp drop in perplexity
+            - Sustained low values (50-200 bp)
+            - Clear boundaries
+            
+            **Suspicious Patterns:**
+            - Very short regions (<50 bp)
+            - Extremely low perplexity (< 1.0)
+            - Isolated single points
+            
+            **Motif Validation:**
+            - TATA-box: Strong positive indicator
+            - Multiple motifs: Higher confidence
+            - Species-specific patterns matter
+            """)
+
+
+def display_advanced():
+    """Display advanced features and parameter tuning"""
+    
+    st.markdown('<h1 class="main-header">🛠️ Advanced Features</h1>', unsafe_allow_html=True)
+    
+    st.markdown("""
+    Advanced configuration options for power users and researchers.
+    """)
+    
+    # Advanced options
+    tab1, tab2, tab3 = st.tabs(["⚙️ Parameter Tuning", "📁 Batch Processing", "🔬 Algorithm Details"])
+    
+    with tab1:
+        st.markdown('<h2 class="subheader">⚙️ Parameter Tuning Guide</h2>', unsafe_allow_html=True)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("""
+            ### Window Size Selection
+            
+            **Perplexity Window (5-50 bp):**
+            - Smaller: More sensitive to local changes
+            - Larger: Smoother, less noise
+            - Recommended: 10 bp for most analyses
+            
+            **Analysis Window (50-500 bp):**
+            - Smaller: Detects shorter promoters
+            - Larger: More robust to noise
+            - Recommended: 100 bp for typical promoters
+            """)
+        
+        with col2:
+            st.markdown("""
+            ### Threshold Optimization
+            
+            **Perplexity Threshold (10-50th percentile):**
+            - Lower: More sensitive, more false positives
+            - Higher: More specific, fewer predictions
+            - Recommended: 25th percentile as starting point
+            
+            **Species-Specific Tuning:**
+            - Human: 20-30th percentile
+            - E. coli: 15-25th percentile
+            - Plant: 25-35th percentile
+            """)
+    
+    with tab2:
+        st.markdown('<h2 class="subheader">📁 Batch Processing</h2>', unsafe_allow_html=True)
+        
+        st.markdown("""
+        ### Multiple Sequence Analysis
+        
+        For analyzing multiple sequences, consider:
+        """)
+        
+        st.info("""
+        **Coming Soon**: Batch processing feature will allow:
+        - Upload multiple FASTA files
+        - Automated parameter optimization
+        - Comparative analysis reports
+        - Statistical summaries across sequences
+        """)
+        
+        st.markdown("""
+        ### Current Workarounds
+        
+        1. **Manual Processing**: Analyze sequences one by one
+        2. **Parameter Consistency**: Use same settings for comparable results
+        3. **Export Results**: Download JSON for each analysis
+        4. **External Analysis**: Combine results in Excel/R/Python
+        """)
+    
+    with tab3:
+        st.markdown('<h2 class="subheader">🔬 Algorithm Implementation</h2>', unsafe_allow_html=True)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("""
+            ### Kadane's Algorithm Details
+            
+            **Original Algorithm:**
+            ```python
+            def kadane_max(arr):
+                max_sum = arr[0]
+                current_sum = arr[0]
+                for i in range(1, len(arr)):
+                    current_sum = max(arr[i], 
+                                    current_sum + arr[i])
+                    max_sum = max(max_sum, current_sum)
+                return max_sum
+            ```
+            
+            **CisPerplexity Adaptation:**
+            - Modified for minimum sum (lowest perplexity)
+            - Returns region coordinates, not just values
+            - Handles multiple non-overlapping regions
+            """)
+        
+        with col2:
+            st.markdown("""
+            ### Performance Characteristics
+            
+            **Time Complexity:**
+            - Perplexity calculation: O(n)
+            - Kadane's algorithm: O(n²) 
+            - Motif detection: O(nm) where m = motif count
+            - Overall: O(n²) dominated
+            
+            **Memory Usage:**
+            - Linear in sequence length
+            - Structural features: ~150 values per dinucleotide
+            - Typical 1000bp sequence: <1MB memory
+            """)
+        
+        st.markdown("""
+        ### Source Code
+        
+        The complete implementation is available in the repository:
+        - `streamlit_app.py`: Main application
+        - `KADANE_IMPLEMENTATION.md`: Detailed algorithm description
+        - `selected_encoding_dict.json`: Structural feature database
+        """)
+
+
+def display_results(results: Dict, sequence: str):
+    """Display analysis results with enhanced metrics and visualizations"""
+    
+    st.markdown("---")
+    st.markdown('<h1 class="main-header">📊 Analysis Results</h1>', unsafe_allow_html=True)
+    
+    # Enhanced summary metrics
+    st.markdown('<h2 class="subheader">📈 Key Metrics</h2>', unsafe_allow_html=True)
+    
+    col1, col2, col3, col4, col5 = st.columns(5)
+    
+    with col1:
+        st.metric("Sequence Length", f"{results['sequence_length']:,} bp")
+    
+    with col2:
+        st.metric("Analysis Window", f"{results['window_size']} bp")
+    
+    with col3:
+        if results['perplexity'] is not None:
+            avg_perplexity = np.mean(results['perplexity'])
+            st.metric("Avg Perplexity", f"{avg_perplexity:.2f}")
+    
+    with col4:
+        promoter_count = len(results['predicted_promoters'])
+        st.metric("Predicted Promoters", promoter_count)
+    
+    with col5:
+        if results['predicted_promoters']:
+            avg_confidence = np.mean([p['confidence'] for p in results['predicted_promoters']])
+            st.metric("Avg Confidence", f"{avg_confidence:.1f}%")
+        else:
+            st.metric("Avg Confidence", "N/A")
+    
+    # Additional statistics
+    with st.expander("📊 Detailed Statistics", expanded=False):
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.markdown("**Sequence Composition**")
+            nucleotide_counts = {
+                'A': sequence.count('A'),
+                'T': sequence.count('T'), 
+                'G': sequence.count('G'),
+                'C': sequence.count('C')
+            }
+            for nuc, count in nucleotide_counts.items():
+                percentage = count / len(sequence) * 100
+                st.write(f"{nuc}: {count:,} ({percentage:.1f}%)")
+        
+        with col2:
+            st.markdown("**Perplexity Statistics**")
+            if results['perplexity'] is not None:
+                perp_stats = {
+                    'Min': np.min(results['perplexity']),
+                    'Max': np.max(results['perplexity']),
+                    'Std': np.std(results['perplexity']),
+                    'Threshold': results.get('perplexity_threshold', 'N/A')
+                }
+                for stat, value in perp_stats.items():
+                    if isinstance(value, (int, float)):
+                        st.write(f"{stat}: {value:.2f}")
+                    else:
+                        st.write(f"{stat}: {value}")
+        
+        with col3:
+            st.markdown("**Motif Summary**")
+            if results['motif_matches']:
+                total_motifs = sum(len(matches) for matches in results['motif_matches'].values())
+                unique_motifs = sum(1 for matches in results['motif_matches'].values() if matches)
+                st.write(f"Total motifs: {total_motifs}")
+                st.write(f"Unique types: {unique_motifs}")
+                st.write(f"Density: {total_motifs/len(sequence)*1000:.1f}/kb")
+    
+    # Results sections
+    if results['predicted_promoters']:
+        st.markdown('<h2 class="subheader">🎯 Predicted Promoter Regions</h2>', unsafe_allow_html=True)
+        
+        # Summary table
+        promoter_data = []
+        for i, promoter in enumerate(results['predicted_promoters']):
+            promoter_data.append({
+                'Region': f"Region {i+1}",
+                'Start': promoter['start'],
+                'End': promoter['end'],
+                'Length': promoter['end'] - promoter['start'],
+                'Confidence': f"{promoter['confidence']:.1f}%",
+                'Method': promoter.get('method', 'threshold'),
+                'Motifs': len(promoter.get('region_motifs', {}))
+            })
+        
+        df = pd.DataFrame(promoter_data)
+        st.dataframe(df, use_container_width=True)
+        
+        # Detailed view for each promoter
+        for i, promoter in enumerate(results['predicted_promoters']):
+            confidence_color = "🟢" if promoter['confidence'] > 80 else "🟡" if promoter['confidence'] > 60 else "🔴"
+            
+            with st.expander(f"{confidence_color} Promoter Region {i+1} | Pos: {promoter['start']}-{promoter['end']} | Confidence: {promoter['confidence']:.1f}%"):
+                col1, col2, col3, col4 = st.columns(4)
+                
+                with col1:
+                    st.metric("Length", f"{promoter['length']} bp")
+                with col2:
+                    st.metric("Avg Perplexity", f"{promoter['avg_perplexity']:.2f}")
+                with col3:
+                    st.metric("Motif Count", promoter['motif_count'])
+                with col4:
+                    st.metric("Confidence", f"{promoter['confidence']:.2%}")
+                
+                # Show additional Kadane's algorithm info if available
+                if 'window_start' in promoter and 'window_end' in promoter:
+                    st.write(f"**Kadane's Window:** {promoter['window_start']} - {promoter['window_end']}")
+                
+                # Show structural features if available
+                if 'structural_features' in promoter and promoter['structural_features']:
+                    st.write("**Structural Features:**")
+                    feature_data = []
+                    for feature_name, feature_info in promoter['structural_features'].items():
+                        feature_data.append({
+                            'Feature': feature_name,
+                            'Mean': f"{feature_info['mean']:.3f}",
+                            'Std Dev': f"{feature_info['std']:.3f}"
+                        })
+                    if feature_data:
+                        st.dataframe(pd.DataFrame(feature_data), use_container_width=True)
+                
+                # Show region-specific motifs if available
+                if 'region_motifs' in promoter and promoter['region_motifs']:
+                    st.write("**Motifs in this region:**")
+                    region_motif_data = []
+                    for motif_name, matches in promoter['region_motifs'].items():
+                        for start, end, seq in matches:
+                            region_motif_data.append({
+                                'Motif': motif_name,
+                                'Position': f"{start}-{end}",
+                                'Sequence': seq
+                            })
+                    if region_motif_data:
+                        st.dataframe(pd.DataFrame(region_motif_data), use_container_width=True)
+                
+                # Show sequence
+                promoter_seq = sequence[promoter['start']:promoter['end']+1]
+                st.text_area(f"Sequence:", promoter_seq, height=100)
+    
+    # Visualizations
+    if results['perplexity'] is not None and len(results['perplexity']) > 0:
+        st.markdown('<h2 class="subheader">📈 Perplexity Analysis</h2>', unsafe_allow_html=True)
+        
+        # Create perplexity plot
+        positions = np.arange(len(results['perplexity']))
+        
+        fig = go.Figure()
+        
+        # Add perplexity trace
+        fig.add_trace(go.Scatter(
+            x=positions,
+            y=results['perplexity'],
+            mode='lines',
+            name='Perplexity',
+            line=dict(color='blue', width=2)
+        ))
+        
+        # Add threshold line
+        if results['perplexity_threshold']:
+            fig.add_hline(
+                y=results['perplexity_threshold'],
+                line_dash="dash",
+                line_color="red",
+                annotation_text=f"Threshold: {results['perplexity_threshold']:.2f}"
+            )
+        
+        # Highlight predicted promoters
+        for promoter in results['predicted_promoters']:
+            fig.add_vrect(
+                x0=promoter['start'],
+                x1=promoter['end'],
+                fillcolor="red",
+                opacity=0.2,
+                layer="below",
+                line_width=0,
+            )
+        
+        fig.update_layout(
+            title="Dinucleotide Perplexity Analysis",
+            xaxis_title="Position (bp)",
+            yaxis_title="Perplexity",
+            hovermode='x'
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+    
+    # GC content plot
+    if results['gc_content'] is not None and len(results['gc_content']) > 0:
+        st.markdown('<h2 class="subheader">🧪 GC Content Analysis</h2>', unsafe_allow_html=True)
+        
+        positions = np.arange(len(results['gc_content']))
+        
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=positions,
+            y=results['gc_content'],
+            mode='lines',
+            name='GC Content (%)',
+            line=dict(color='green', width=2)
+        ))
+        
+        # Highlight predicted promoters
+        for promoter in results['predicted_promoters']:
+            fig.add_vrect(
+                x0=promoter['start'],
+                x1=promoter['end'],
+                fillcolor="red",
+                opacity=0.2,
+                layer="below",
+                line_width=0,
+            )
+        
+        fig.update_layout(
+            title="GC Content Analysis",
+            xaxis_title="Position (bp)",
+            yaxis_title="GC Content (%)",
+            hovermode='x'
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+    
+    # Motif detection results
+    if results['motif_matches']:
+        st.markdown('<h2 class="subheader">🔍 Detected Motifs</h2>', unsafe_allow_html=True)
+        
+        # Count total motifs
+        total_motifs = sum(len(matches) for matches in results['motif_matches'].values())
+        
+        if total_motifs > 0:
+            # Create motif summary table
+            motif_data = []
+            for motif_name, matches in results['motif_matches'].items():
+                if matches:
+                    for start, end, seq in matches:
+                        motif_data.append({
+                            'Motif': motif_name,
+                            'Position': f"{start}-{end}",
+                            'Sequence': seq,
+                            'Length': len(seq)
+                        })
+            
+            if motif_data:
+                df_motifs = pd.DataFrame(motif_data)
+                st.dataframe(df_motifs, use_container_width=True)
+                
+                # Motif count chart
+                motif_counts = df_motifs['Motif'].value_counts()
+                fig = px.bar(
+                    x=motif_counts.index,
+                    y=motif_counts.values,
+                    title="Motif Frequency",
+                    labels={'x': 'Motif Type', 'y': 'Count'}
+                )
+                fig.update_xaxes(tickangle=45)
+                st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No known promoter motifs detected in the sequence.")
+    
+    # Download results
+    st.markdown('<h2 class="subheader">💾 Download Results</h2>', unsafe_allow_html=True)
+    
+    # Prepare results for download
+    def convert_numpy_types(obj):
+        """Convert numpy types to native Python types for JSON serialization"""
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        elif isinstance(obj, dict):
+            return {k: convert_numpy_types(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [convert_numpy_types(item) for item in obj]
+        else:
+            return obj
+    
+    download_data = {
+        'sequence_info': {
+            'length': int(results['sequence_length']),
+            'window_size': int(results['window_size'])
+        },
+        'predicted_promoters': convert_numpy_types(results['predicted_promoters']),
+        'motif_matches': {k: v for k, v in results['motif_matches'].items() if v}
+    }
+    
+    # Convert to JSON
+    json_data = json.dumps(download_data, indent=2)
+    
+    st.download_button(
+        label="📄 Download Results (JSON)",
+        data=json_data,
+        file_name="promoter_prediction_results.json",
+        mime="application/json"
+    )
+
+
 def display_nbdfinder_results(results: Dict, sequence: str):
     """Display NBDFinder analysis results with enhanced metrics and visualizations"""
     
