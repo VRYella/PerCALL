@@ -1,6 +1,6 @@
 # CisPerplexity: Advanced Promoter Prediction Tool
 
-A professional Streamlit web application for predicting promoter regions in DNA sequences using an integrated approach that combines dinucleotide perplexity analysis, structural features, and promoter motif detection.
+A professional Streamlit web application for predicting promoter regions in DNA sequences using an integrated approach that combines dinucleotide perplexity analysis, structural features, promoter motif detection, and Non-B DNA structure identification.
 
 ## 🌟 Key Features
 
@@ -8,13 +8,14 @@ A professional Streamlit web application for predicting promoter regions in DNA 
 - **Dinucleotide Perplexity Analysis**: Calculates perplexity using sliding windows to identify low-complexity regions (promoters typically have lower perplexity)
 - **Kadane's Algorithm Integration**: Advanced optimization for finding optimal low-perplexity regions
 - **Structural Features**: Encodes sequences using conformational and physicochemical properties from comprehensive structural dictionary
-- **Motif Detection**: Identifies 17+ known promoter motifs including TATA-box, Initiator elements, and other regulatory sequences
+- **Promoter Motif Detection**: Identifies 17+ known promoter motifs including TATA-box, Initiator elements, and other regulatory sequences
+- **Non-B DNA Structure Detection**: Detects 11 classes of Non-B DNA structures (A-philic DNA, Curved DNA, G-Quadruplex, i-Motif, Z-DNA, Slipped DNA, Cruciform, Triplex, and more) with 22+ subclasses
 
 ### 📊 Professional Web Interface
 - **Navigation System**: Clean interface with Analysis, About, Examples, and Advanced sections
 - **Multiple Input Methods**: Paste sequences, upload FASTA files, or use curated example sequences
 - **Real-time Analysis**: Live perplexity calculation and promoter prediction with progress indicators
-- **Interactive Visualizations**: Professional Plotly charts showing perplexity, GC content, and motif frequency
+- **Interactive Visualizations**: Professional Plotly charts showing perplexity, GC content, motif frequency, and Non-B DNA structure distribution
 - **Enhanced Results Display**: Detailed metrics, confidence scores, and downloadable analysis reports
 - **Responsive Design**: Works seamlessly across desktop and mobile devices
 
@@ -22,8 +23,9 @@ A professional Streamlit web application for predicting promoter regions in DNA 
 1. **Perplexity Calculator**: Sliding window dinucleotide perplexity using entropy calculations
 2. **Structural Feature Encoder**: DNA property encoding using comprehensive 150+ parameter dictionary
 3. **Motif Detector**: Pattern matching for 17+ known promoter motifs
-4. **Kadane's Algorithm**: Optimal low-perplexity region detection using modified maximum subarray algorithm
-5. **Confidence Scoring**: Multi-factor confidence assessment based on perplexity, motifs, and region characteristics
+4. **Non-B DNA Structure Detector**: Comprehensive detection of 11 classes of Non-B DNA structures
+5. **Kadane's Algorithm**: Optimal low-perplexity region detection using modified maximum subarray algorithm
+6. **Confidence Scoring**: Multi-factor confidence assessment based on perplexity, motifs, and region characteristics
 
 ## 🚀 Quick Start
 
@@ -93,6 +95,26 @@ Detects patterns for:
 - **Structural Motifs**: G-quadruplex, i-motif formations
 - **Transcription Factor Sites**: Sp1, CAAT-box, and others
 
+### Non-B DNA Structures (NEW!)
+Integrated from the NonBDNAFinder repository, CisPerplexity now detects 11 classes of Non-B DNA structures:
+
+| Motif Class | Description | Subclasses |
+|-------------|-------------|------------|
+| **A-philic DNA** | A-form propensity DNA | High/Moderate/Weak Confidence |
+| **Curved DNA** | A-tract mediated bending | Local, Global, Directional |
+| **G-Quadruplex** | Four-stranded G-rich structures | Telomeric, Canonical, Extended |
+| **i-Motif** | C-rich four-stranded structures | Canonical, HuR AC motifs |
+| **Z-DNA** | Left-handed helix | Canonical Z-DNA |
+| **Slipped DNA** | Direct repeat structures | STRs, microsatellites |
+| **Cruciform** | Inverted repeat structures | Hairpin, stem-loop |
+| **Triplex** | Three-stranded structures | Mirror repeats |
+
+These structures are important for:
+- Gene regulation and transcription
+- DNA packaging and chromatin structure
+- Genomic stability and recombination
+- Disease associations and mutational hotspots
+
 ### Kadane's Algorithm Integration
 - **Purpose**: Finds globally optimal low-perplexity regions
 - **Advantage**: Superior to threshold-based methods
@@ -104,6 +126,7 @@ Detects patterns for:
 ```
 CisPerplexity/
 ├── streamlit_app.py              # Main Streamlit application
+├── nonb_motif_detector.py        # Non-B DNA structure detection module
 ├── selected_encoding_dict.json   # Structural feature dictionary
 ├── requirements.txt              # Python dependencies
 ├── Dockerfile                    # Docker container configuration

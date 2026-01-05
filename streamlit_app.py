@@ -13,6 +13,9 @@ from typing import Dict, List, Tuple, Optional
 import warnings
 warnings.filterwarnings('ignore')
 
+# Import Non-B DNA motif detector
+from nonb_motif_detector import detect_all_nonb_motifs
+
 # Page configuration
 st.set_page_config(
     page_title="CisPerplexity: Promoter Prediction Tool",
@@ -421,6 +424,7 @@ class PromoterPredictor:
         self.feature_encoder = StructuralFeatureEncoder(encoding_dict_path)
         self.motif_detector = MotifDetector()
         self.kadane = KadaneMaxSubarray()
+        self.detect_nonb = True  # Enable Non-B DNA motif detection
     
     def predict_promoters(self, sequence: str, window_size: int = 100, 
                          perplexity_window: int = 10,
@@ -446,6 +450,7 @@ class PromoterPredictor:
             'structural_features': None,
             'motif_density': None,
             'motif_matches': None,
+            'nonb_motifs': None,  # Add Non-B DNA motifs
             'predicted_promoters': [],
             'kadane_regions': [],
             'perplexity_threshold': None
@@ -473,6 +478,11 @@ class PromoterPredictor:
         # Detect motifs
         motif_matches = self.motif_detector.detect_motifs(sequence)
         results['motif_matches'] = motif_matches
+        
+        # Detect Non-B DNA motifs
+        if self.detect_nonb:
+            nonb_motifs = detect_all_nonb_motifs(sequence)
+            results['nonb_motifs'] = nonb_motifs
         
         # Determine perplexity threshold
         if perplexity_threshold is None:
@@ -608,6 +618,20 @@ def display_about():
         - **Initiator Elements**: Human and Drosophila variants
         - **Core Elements**: BREu, BREd, TCT, DPE, MTE
         - **Structural Motifs**: G-quadruplex, i-motif formations
+        - **Total**: 17+ known promoter motifs
+        
+        ### 4. Non-B DNA Structure Detection (NEW!)
+        - **A-philic DNA**: Structure-informed A-form propensity
+        - **Curved DNA**: Phased A-tracts causing DNA bending
+        - **G-Quadruplex**: Four-stranded G-rich structures
+        - **i-Motif**: C-rich four-stranded structures
+        - **Z-DNA**: Left-handed helix formations
+        - **Slipped DNA**: Direct repeat structures
+        - **Cruciform**: Inverted repeat structures
+        - **Triplex**: Mirror repeat structures
+        - **Total**: 11 classes with 22+ subclasses
+        
+        ### 5. Kadane's Algorithm Integration
         - **Total**: 17+ known promoter motifs
         
         ### 4. Kadane's Algorithm Integration
@@ -1449,6 +1473,114 @@ def display_results(results: Dict, sequence: str):
         else:
             st.info("No known promoter motifs detected in the sequence.")
     
+    # Non-B DNA Motif detection results
+    if results.get('nonb_motifs'):
+        st.markdown('<h2 class="subheader">🧬 Non-B DNA Structures</h2>', unsafe_allow_html=True)
+        
+        st.markdown("""
+        Non-B DNA structures are alternative DNA conformations that differ from the standard B-form double helix.
+        These structures can play important roles in gene regulation, DNA packaging, and genomic stability.
+        """)
+        
+        # Count total Non-B DNA motifs
+        total_nonb = sum(len(motifs) for motifs in results['nonb_motifs'].values())
+        
+        if total_nonb > 0:
+            # Create summary metrics
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Total Non-B DNA Motifs", total_nonb)
+            with col2:
+                motif_classes = sum(1 for motifs in results['nonb_motifs'].values() if motifs)
+                st.metric("Motif Classes Detected", motif_classes)
+            with col3:
+                all_nonb_motifs = []
+                for motifs in results['nonb_motifs'].values():
+                    all_nonb_motifs.extend(motifs)
+                if all_nonb_motifs:
+                    avg_score = np.mean([m.get('Score', 0) for m in all_nonb_motifs])
+                    st.metric("Average Confidence Score", f"{avg_score:.2f}")
+            
+            # Create Non-B DNA motif summary table
+            nonb_data = []
+            for motif_class, motifs in results['nonb_motifs'].items():
+                for motif in motifs:
+                    nonb_data.append({
+                        'Class': motif.get('Class', motif_class),
+                        'Subclass': motif.get('Subclass', 'N/A'),
+                        'Start': motif.get('Start'),
+                        'End': motif.get('End'),
+                        'Length': motif.get('Length', motif.get('End') - motif.get('Start') + 1),
+                        'Score': round(motif.get('Score', 0), 2)
+                    })
+            
+            if nonb_data:
+                df_nonb = pd.DataFrame(nonb_data)
+                
+                # Display expandable sections for each motif class
+                for motif_class in df_nonb['Class'].unique():
+                    class_motifs = df_nonb[df_nonb['Class'] == motif_class]
+                    with st.expander(f"**{motif_class}** ({len(class_motifs)} detected)", expanded=False):
+                        st.dataframe(class_motifs, use_container_width=True)
+                        
+                        # Show distribution if multiple motifs
+                        if len(class_motifs) > 1:
+                            fig = px.scatter(
+                                class_motifs,
+                                x='Start',
+                                y='Score',
+                                color='Subclass',
+                                size='Length',
+                                hover_data=['End', 'Length'],
+                                title=f"{motif_class} Distribution",
+                                labels={'Start': 'Position (bp)', 'Score': 'Confidence Score'}
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+                
+                # Overall Non-B DNA motif distribution
+                st.markdown("### Non-B DNA Motif Class Distribution")
+                class_counts = df_nonb['Class'].value_counts()
+                fig = px.bar(
+                    x=class_counts.index,
+                    y=class_counts.values,
+                    title="Non-B DNA Motif Frequency by Class",
+                    labels={'x': 'Motif Class', 'y': 'Count'},
+                    color=class_counts.values,
+                    color_continuous_scale='Viridis'
+                )
+                fig.update_xaxes(tickangle=45)
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Genomic position overview
+                st.markdown("### Genomic Distribution of Non-B DNA Structures")
+                fig = go.Figure()
+                
+                for motif_class in df_nonb['Class'].unique():
+                    class_motifs = df_nonb[df_nonb['Class'] == motif_class]
+                    fig.add_trace(go.Scatter(
+                        x=class_motifs['Start'],
+                        y=[motif_class] * len(class_motifs),
+                        mode='markers',
+                        name=motif_class,
+                        marker=dict(
+                            size=class_motifs['Score'] * 5,
+                            opacity=0.6
+                        ),
+                        text=class_motifs['Subclass'],
+                        hovertemplate='<b>%{text}</b><br>Position: %{x}<br>Score: %{marker.size}<extra></extra>'
+                    ))
+                
+                fig.update_layout(
+                    title="Non-B DNA Motifs Across Sequence",
+                    xaxis_title="Position (bp)",
+                    yaxis_title="Motif Class",
+                    hovermode='closest',
+                    height=400
+                )
+                st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No Non-B DNA structures detected in the sequence.")
+    
     # Download results
     st.markdown('<h2 class="subheader">💾 Download Results</h2>', unsafe_allow_html=True)
     
@@ -1474,7 +1606,8 @@ def display_results(results: Dict, sequence: str):
             'window_size': int(results['window_size'])
         },
         'predicted_promoters': convert_numpy_types(results['predicted_promoters']),
-        'motif_matches': {k: v for k, v in results['motif_matches'].items() if v}
+        'motif_matches': {k: v for k, v in results['motif_matches'].items() if v},
+        'nonb_motifs': convert_numpy_types(results.get('nonb_motifs', {}))
     }
     
     # Convert to JSON
