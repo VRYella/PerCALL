@@ -342,7 +342,7 @@ def detect_cruciform(sequence: str) -> List[Dict]:
     """Detect cruciform structures (inverted repeats/palindromes)"""
     
     def _revcomp(seq: str) -> str:
-        return seq.translate(str.maketrans("ACGT", "TGCA"))[::-1]
+        return seq.translate(str.maketrans("ATCG", "TAGC"))[::-1]
     
     seq = sequence.upper()
     out = []

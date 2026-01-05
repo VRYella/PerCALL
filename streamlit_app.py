@@ -629,12 +629,9 @@ def display_about():
         - **Slipped DNA**: Direct repeat structures
         - **Cruciform**: Inverted repeat structures
         - **Triplex**: Mirror repeat structures
-        - **Total**: 11 classes with 22+ subclasses
+        - **Total**: 8 classes with 22+ subclasses
         
         ### 5. Kadane's Algorithm Integration
-        - **Total**: 17+ known promoter motifs
-        
-        ### 4. Kadane's Algorithm Integration
         - **Purpose**: Optimal low-perplexity region detection
         - **Advantage**: Finds globally optimal regions vs. threshold-based methods
         - **Configuration**: Separate windows for perplexity calculation and region analysis
