@@ -263,10 +263,12 @@ This genome analyzer is part of the CisPerplexity project and integrates seamles
 Potential improvements:
 - [ ] Parallel processing for large genomes
 - [ ] Hyperscan acceleration for motif detection
-- [ ] Additional statistical tests
-- [ ] Interactive HTML reports
-- [ ] Batch processing mode for multiple genomes
-- [ ] Comparative analysis across genomes
+- [ ] Additional statistical tests (e.g., Mann-Whitney U, Kruskal-Wallis)
+- [ ] Interactive HTML reports with drill-down capabilities
+- [ ] Real-time progress tracking for very large genomes
+- [ ] Multi-chromosome analysis with chromosome-specific reports
+- [ ] Integration with genome annotation databases
+- [ ] Machine learning-based region classification
 
 ## Troubleshooting
 
