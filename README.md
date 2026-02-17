@@ -10,6 +10,7 @@ A professional Streamlit web application for predicting promoter regions in DNA 
 - **Structural Features**: Encodes sequences using conformational and physicochemical properties from comprehensive structural dictionary
 - **Promoter Motif Detection**: Identifies 17+ known promoter motifs including TATA-box, Initiator elements, and other regulatory sequences
 - **Non-B DNA Structure Detection**: Detects 11 classes of Non-B DNA structures (A-philic DNA, Curved DNA, G-Quadruplex, i-Motif, Z-DNA, Slipped DNA, Cruciform, Triplex, and more) with 22+ subclasses
+- **NEW: Genome-Wide Analysis**: Command-line tools for analyzing complete genomes with EDA report generation
 
 ### 📊 Professional Web Interface
 - **Navigation System**: Clean interface with Analysis, About, Examples, and Advanced sections
@@ -26,6 +27,7 @@ A professional Streamlit web application for predicting promoter regions in DNA 
 4. **Non-B DNA Structure Detector**: Comprehensive detection of 11 classes of Non-B DNA structures
 5. **Kadane's Algorithm**: Optimal low-perplexity region detection using modified maximum subarray algorithm
 6. **Confidence Scoring**: Multi-factor confidence assessment based on perplexity, motifs, and region characteristics
+7. **NEW: Genome Analyzer**: Command-line tool for whole-genome analysis with batch processing capabilities
 
 ## 🚀 Quick Start
 
@@ -51,13 +53,34 @@ docker run -p 8501:8501 cisperplexity
 pip install -r requirements.txt
 ```
 
-2. **Run the Application:**
+2. **Run the Web Application:**
 ```bash
 streamlit run streamlit_app.py
 ```
 
 3. **Access the Interface:**
    Open your browser to `http://localhost:8501`
+
+### 🧬 NEW: Genome-Wide Analysis (Command Line)
+
+For analyzing complete genomes and finding low perplexity regions with non-B DNA motifs:
+
+```bash
+# Analyze a single genome
+python genome_analyzer.py ecoli.fna --num-regions 10
+
+# Batch process multiple genomes
+python batch_genome_analysis.py
+
+# With custom parameters
+python genome_analyzer.py genome.fna \
+    --analysis-window 150 \
+    --num-regions 20 \
+    --percentile 30 \
+    --output-dir my_reports
+```
+
+See [GENOME_ANALYSIS_README.md](GENOME_ANALYSIS_README.md) for detailed documentation.
 
 ## 📖 Usage Guide
 
@@ -126,6 +149,8 @@ These structures are important for:
 ```
 CisPerplexity/
 ├── streamlit_app.py              # Main Streamlit application
+├── genome_analyzer.py            # Genome-wide analysis script (NEW!)
+├── batch_genome_analysis.py      # Batch processing script (NEW!)
 ├── nonb_motif_detector.py        # Non-B DNA structure detection module
 ├── selected_encoding_dict.json   # Structural feature dictionary
 ├── requirements.txt              # Python dependencies
@@ -134,7 +159,8 @@ CisPerplexity/
 ├── .streamlit/
 │   └── config.toml              # Streamlit configuration
 ├── README.md                    # This file
-└── KADANE_IMPLEMENTATION.md     # Detailed algorithm documentation
+├── KADANE_IMPLEMENTATION.md     # Detailed algorithm documentation
+└── GENOME_ANALYSIS_README.md    # Genome analysis documentation (NEW!)
 ```
 
 ## 🧠 Scientific Background
