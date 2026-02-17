@@ -1,13 +1,37 @@
+# NBDScanner - Consolidated Non-B DNA Motif Detection System
+# Core dependencies for the modular architecture
+
+# Web Framework
 streamlit>=1.28.0
+
+# Scientific Computing
 numpy>=1.21.0
 pandas>=1.3.0
+scipy>=1.7.0
+
+# Visualization  
 matplotlib>=3.5.0
 seaborn>=0.11.0
-scikit-learn>=1.0.0
-plotly>=5.0.0
+plotly>=5.17.0
+
+# Bioinformatics
 biopython>=1.79
 
-# Development and testing dependencies (optional)
-pytest>=6.0.0
-pytest-cov>=2.0.0
-flake8>=3.9.0
+# Data Export
+openpyxl>=3.0.0
+xlsxwriter>=3.0.0
+
+# Networking
+requests>=2.28.0
+
+# System Monitoring
+psutil>=5.8.0
+
+# Optional: Performance Acceleration (install separately for production use)
+# hyperscan>=0.7.0  # High-performance pattern matching (optional acceleration)
+# pyfastx>=0.8.0    # Fast FASTA/FASTQ parsing (optional acceleration)
+
+# Optional: Development tools
+# pytest>=7.0.0
+# black>=22.0.0
+# flake8>=5.0.0
