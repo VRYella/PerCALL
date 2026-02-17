@@ -67,3 +67,6 @@ docs/_build/
 # *.csv
 # *.xlsx
 # *.json
+
+# Generated EDA reports
+eda_reports/
