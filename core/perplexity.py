@@ -63,6 +63,7 @@ def compute_perplexity(seq: str, window: int = 10) -> np.ndarray:
     np.add.at(counts, (np.arange(n)[:, None], din), 1)
 
     # Probabilities: if count==0 treat as p=1 so that -p·log2(p) contributes 0
+    # Zero counts: set p=1 so that -p·log₂(p) contributes 0 (no information from absent pairs)
     p = np.where(counts == 0, 1.0, counts / (window - 1)).astype(np.float32)
     H = -np.sum(p * np.log2(p), axis=1)
     perp = (2.0 ** H).astype(np.float32)

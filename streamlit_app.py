@@ -144,6 +144,11 @@ def parse_fasta(text: str) -> List[Tuple[str, str]]:
 # ============================================================================
 
 
+def _region_seq(seq: str, region: dict, window: int) -> str:
+    """Extract the sequence for a region, extending by *window* for motif context."""
+    return seq[region["start"] : min(region["end"] + window, len(seq))]
+
+
 def gc_pct(seq: str) -> float:
     if not seq:
         return 0.0
@@ -484,7 +489,7 @@ def tab_regulatory_regions(results: List[dict]) -> pd.DataFrame:
             )
 
     if not rows:
-        st.info("No regulatory regions detected with the current parameters.  "
+        st.info("No regulatory regions detected with the current parameters. "
                 "Try lowering the Score Threshold or decreasing Minimum Region Length.")
         return pd.DataFrame()
 
@@ -513,6 +518,7 @@ def tab_regulatory_regions(results: List[dict]) -> pd.DataFrame:
 def tab_motif_analysis(
     results: List[dict],
     active_motifs: set,
+    window: int = 10,
 ) -> None:
     st.markdown('<p class="percall-section-header">Non-B DNA Motifs</p>', unsafe_allow_html=True)
 
@@ -540,7 +546,7 @@ def tab_motif_analysis(
             background_counts[m] += bg.get(m, 0)
 
         for reg in r["regions"]:
-            region_seq = r["seq"][reg["start"] : reg["end"] + 10]
+            region_seq = _region_seq(r["seq"], reg, window)
             rc = count_motifs(region_seq, active_motifs=set(ordered_motifs))
             for m in ordered_motifs:
                 region_counts[m] += rc.get(m, 0)
@@ -713,7 +719,7 @@ def tab_publication_report(
                 total_seq_bp += len(r["seq"])
                 for reg in r["regions"]:
                     total_region_bp += reg["width"]
-                    rs = r["seq"][reg["start"] : reg["end"] + params.get("window", 10)]
+                    rs = _region_seq(r["seq"], reg, params.get("window", 10))
                     rc = count_motifs(rs, active_motifs=set(ordered_motifs))
                     for m in ordered_motifs:
                         reg_counts[m] = reg_counts.get(m, 0) + rc.get(m, 0)
@@ -850,7 +856,7 @@ def main() -> None:
         regions_df = tab_regulatory_regions(results)
 
     with tab4:
-        tab_motif_analysis(results, params["active_motifs"])
+        tab_motif_analysis(results, params["active_motifs"], window=params["window"])
 
     with tab5:
         tab_genome_browser(results, params["active_motifs"])

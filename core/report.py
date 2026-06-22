@@ -213,7 +213,7 @@ def generate_pdf(
     col_widths = [70, 35, 20, 30]
     headers = ["Header", "Length (bp)", "GC%", "Regions"]
     _table_header(pdf, headers, col_widths)
-    for row in seq_stats[:50]:  # cap at 50 rows for length
+    for row in seq_stats[:50]:  # cap at 50 rows to prevent excessive PDF page count
         _table_row(
             pdf,
             [
