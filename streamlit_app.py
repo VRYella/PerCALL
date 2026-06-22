@@ -21,7 +21,7 @@ import os
 import re
 import sys
 import textwrap
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -419,7 +419,7 @@ def _results_to_json(results: List[dict], params: dict) -> bytes:
     safe_params["active_motifs"] = sorted(params.get("active_motifs", []))
     session = {
         "percall_version": "2025.1",
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "parameters": safe_params,
         "sequences": [
             {
@@ -507,6 +507,8 @@ def _sidebar() -> dict:
             if not fasta_text.startswith(">"):
                 fasta_text = f">pasted_sequence\n{fasta_text}"
         elif use_example:
+            # Primary path: example_data/ (new canonical location)
+            # Fallback: assets/ (legacy location kept for backward compatibility)
             _ex = os.path.join(_ROOT, "example_data", "example.fasta")
             if not os.path.isfile(_ex):
                 _ex = os.path.join(_ROOT, "assets", "example.fasta")
@@ -986,12 +988,15 @@ def _tab_results_explorer(results: List[dict], params: dict) -> None:
     # Filter controls
     col1, col2 = st.columns(2)
     with col1:
-        min_w = int(df["Width"].min()) if not df.empty else 0
-        max_w = int(df["Width"].max()) if not df.empty else 1000
+        min_w = int(df["Width"].min())
+        max_w = int(df["Width"].max())
         w_range = st.slider("Filter by Width (bp)", min_w, max_w, (min_w, max_w))
     with col2:
-        min_s = float(df["Mean Residual"].min()) if not df.empty else -1.0
-        max_s = float(df["Mean Residual"].max()) if not df.empty else 0.0
+        min_s = float(df["Mean Residual"].min())
+        max_s = float(df["Mean Residual"].max())
+        # Ensure a non-degenerate range so the slider renders correctly
+        if min_s == max_s:
+            min_s -= 0.001
         s_range = st.slider(
             "Filter by Mean Residual", min_s, max_s,
             (min_s, max_s), step=0.001, format="%.3f",

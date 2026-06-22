@@ -184,6 +184,7 @@ def plot_gc_profile(
     window : int  Window size for GC calculation (default 50).
     title : str   Figure title.
     """
+    # Sequence must be uppercase (ACGT/N); lowercase g/c will not be counted.
     n = len(seq)
     arr = np.frombuffer(seq.encode(), dtype=np.uint8)
     is_gc = ((arr == ord('G')) | (arr == ord('C'))).astype(np.float32)
@@ -541,7 +542,7 @@ def plot_sequence_domain_map(
         fig.add_annotation(
             x=(r["start"] + r["end"]) / 2, y=0.5,
             text=f"R{r['rank']}", showarrow=False,
-            font=dict(size=9, color="#060b18"), yanchor="middle",
+            font=dict(size=9, color="#e6edf3"), yanchor="middle",
         )
 
     fig.update_layout(
