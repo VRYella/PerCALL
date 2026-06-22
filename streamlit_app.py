@@ -561,6 +561,11 @@ _PC: dict = {
 # ============================================================================
 
 
+def _clean_seq(raw: str) -> str:
+    """Uppercase and replace non-ACGTN bases with N."""
+    return re.sub(r"[^ACGTN]", "N", raw.upper())
+
+
 def parse_fasta(text: str) -> List[Tuple[str, str]]:
     """Parse FASTA text into (header, sequence) pairs."""
     records: List[Tuple[str, str]] = []
@@ -572,15 +577,13 @@ def parse_fasta(text: str) -> List[Tuple[str, str]]:
             continue
         if line.startswith(">"):
             if header is not None:
-                seq = re.sub(r"[^ACGTN]", "N", "".join(parts).upper())
-                records.append((header, seq))
+                records.append((header, _clean_seq("".join(parts))))
             header = line[1:]
             parts = []
         else:
             parts.append(line)
     if header is not None:
-        seq = re.sub(r"[^ACGTN]", "N", "".join(parts).upper())
-        records.append((header, seq))
+        records.append((header, _clean_seq("".join(parts))))
     return records
 
 
@@ -1560,11 +1563,15 @@ def _page_region_caller() -> None:
     if rv is None:
         return
 
+    deepest = (
+        f"{min(r['mean_residual'] for r in rv['regions']):.4f}"
+        if rv["regions"] else "—"
+    )
     # Overview metrics
     _metric_strip([
         ("Sequence length", f"{len(rv['seq']):,} bp"),
         ("Regions called", str(len(rv["regions"]))),
-        ("Deepest trough", f"{min((r['mean_residual'] for r in rv['regions']), default=0):.4f}"),
+        ("Deepest trough", deepest),
         ("GC% overall", f"{gc_pct(rv['seq']):.1f}%"),
     ])
 
@@ -2043,8 +2050,8 @@ def _page_reports() -> None:
         try:
             from core.report import generate_pdf
 
-            ordered = [m for m in MOTIF_LABELS
-                       if m in stored_params.get("active_motifs", set())]
+            active_motifs_set = stored_params.get("active_motifs", set())
+            ordered = [m for m in MOTIF_LABELS if m in active_motifs_set]
             window = stored_params.get("window", 10)
             motif_counts: Dict[str, int] = {m: 0 for m in ordered}
             bg_counts: Dict[str, int] = {m: 0 for m in ordered}
