@@ -31,6 +31,12 @@ psutil>=5.8.0
 # hyperscan>=0.7.0  # High-performance pattern matching (optional acceleration)
 # pyfastx>=0.8.0    # Fast FASTA/FASTQ parsing (optional acceleration)
 
+# PDF Report Generation
+fpdf2>=2.7.0
+
+# Optional: PNG export from Plotly
+kaleido>=0.2.1
+
 # Optional: Development tools
 # pytest>=7.0.0
 # black>=22.0.0
