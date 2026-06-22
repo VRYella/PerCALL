@@ -1,229 +1,202 @@
-# CisPerplexity: Advanced Promoter Prediction Tool
+<div align="center">
 
-A professional Streamlit web application for predicting promoter regions in DNA sequences using an integrated approach that combines dinucleotide perplexity analysis, structural features, promoter motif detection, and Non-B DNA structure identification.
+# 🧬 PERCALL
 
-## 🌟 Key Features
+**PERplexity-based Regulatory Region CALLer**
 
-### 🧬 Integrated Algorithm
-- **Dinucleotide Perplexity Analysis**: Calculates perplexity using sliding windows to identify low-complexity regions (promoters typically have lower perplexity)
-- **Kadane's Algorithm Integration**: Advanced optimization for finding optimal low-perplexity regions
-- **Structural Features**: Encodes sequences using conformational and physicochemical properties from comprehensive structural dictionary
-- **Promoter Motif Detection**: Identifies 17+ known promoter motifs including TATA-box, Initiator elements, and other regulatory sequences
-- **Non-B DNA Structure Detection**: Detects 11 classes of Non-B DNA structures (A-philic DNA, Curved DNA, G-Quadruplex, i-Motif, Z-DNA, Slipped DNA, Cruciform, Triplex, and more) with 22+ subclasses
-- **NEW: Genome-Wide Analysis**: Command-line tools for analyzing complete genomes with EDA report generation
+*Predict promoter regions in DNA sequences using information theory, Kadane's algorithm, and Non-B DNA structure detection — all from a sleek scientific web interface.*
 
-### 📊 Professional Web Interface
-- **Navigation System**: Clean interface with Analysis, About, Examples, and Advanced sections
-- **Multiple Input Methods**: Paste sequences, upload FASTA files, or use curated example sequences
-- **Real-time Analysis**: Live perplexity calculation and promoter prediction with progress indicators
-- **Interactive Visualizations**: Professional Plotly charts showing perplexity, GC content, motif frequency, and Non-B DNA structure distribution
-- **Enhanced Results Display**: Detailed metrics, confidence scores, and downloadable analysis reports
-- **Responsive Design**: Works seamlessly across desktop and mobile devices
+[![Python](https://img.shields.io/badge/Python-3.8%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.28%2B-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)](https://streamlit.io)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://docker.com)
+[![License: MIT](https://img.shields.io/badge/License-MIT-22c55e?style=for-the-badge)](LICENSE)
 
-### 🔬 Analysis Components
-1. **Perplexity Calculator**: Sliding window dinucleotide perplexity using entropy calculations
-2. **Structural Feature Encoder**: DNA property encoding using comprehensive 150+ parameter dictionary
-3. **Motif Detector**: Pattern matching for 17+ known promoter motifs
-4. **Non-B DNA Structure Detector**: Comprehensive detection of 11 classes of Non-B DNA structures
-5. **Kadane's Algorithm**: Optimal low-perplexity region detection using modified maximum subarray algorithm
-6. **Confidence Scoring**: Multi-factor confidence assessment based on perplexity, motifs, and region characteristics
-7. **NEW: Genome Analyzer**: Command-line tool for whole-genome analysis with batch processing capabilities
-
-## 🚀 Quick Start
-
-### Using Docker (Recommended)
-
-```bash
-# Clone the repository
-git clone https://github.com/VRYella/CisPerplexity.git
-cd CisPerplexity
-
-# Run with Docker Compose
-docker-compose up
-
-# Or build and run manually
-docker build -t cisperplexity .
-docker run -p 8501:8501 cisperplexity
-```
-
-### Local Installation
-
-1. **Install Dependencies:**
-```bash
-pip install -r requirements.txt
-```
-
-2. **Run the Web Application:**
-```bash
-streamlit run streamlit_app.py
-```
-
-3. **Access the Interface:**
-   Open your browser to `http://localhost:8501`
-
-### 🧬 NEW: Genome-Wide Analysis (Command Line)
-
-For analyzing complete genomes and finding low perplexity regions with non-B DNA motifs:
-
-```bash
-# Analyze a single genome
-python genome_analyzer.py ecoli.fna --num-regions 10
-
-# Batch process multiple genomes
-python batch_genome_analysis.py
-
-# With custom parameters
-python genome_analyzer.py genome.fna \
-    --analysis-window 150 \
-    --num-regions 20 \
-    --percentile 30 \
-    --output-dir my_reports
-```
-
-See [GENOME_ANALYSIS_README.md](GENOME_ANALYSIS_README.md) for detailed documentation.
-
-## 📖 Usage Guide
-
-### Basic Analysis
-1. **Navigate to Analysis**: Use the sidebar navigation to access the analysis interface
-2. **Select Input Method**: Choose between pasting sequence, uploading FASTA, or using examples
-3. **Adjust Parameters**: Configure analysis and perplexity window sizes in the sidebar
-4. **Run Analysis**: Click the "🔬 Analyze Sequence" button
-5. **Review Results**: Examine predicted promoter regions, visualizations, and detected motifs
-6. **Download Data**: Export results in JSON format for further analysis
-
-### Advanced Features
-- **Parameter Tuning**: Adjust window sizes and thresholds for different sequence types
-- **Example Library**: Explore curated examples with expected results
-- **Comprehensive Documentation**: Access detailed algorithm explanations in the About section
-
-## 🔧 Algorithm Details
-
-### Dinucleotide Perplexity Analysis
-- **Method**: Sliding window entropy calculation
-- **Formula**: Perplexity = 2^H, where H = -Σ(p × log₂(p))
-- **Innovation**: Kadane's Algorithm adaptation for optimal region detection
-- **Configuration**: Separate windows for calculation (5-50 bp) and analysis (50-500 bp)
-
-### Structural Features
-The encoding dictionary includes 150+ parameters:
-- **Conformational**: Twist, Roll, Slide, Tilt, Wedge, Major Groove Depth, etc.
-- **Physicochemical**: Free energy, Melting temperature, Stiffness, Bendability
-- **Letter-based**: GC content, Purine content, Keto content, etc.
-
-### Promoter Motifs
-Detects patterns for:
-- **Core Elements**: TATA-box, Initiator elements (Human/Drosophila)
-- **Regulatory Elements**: BREu, BREd, TCT, DPE, MTE
-- **Structural Motifs**: G-quadruplex, i-motif formations
-- **Transcription Factor Sites**: Sp1, CAAT-box, and others
-
-### Non-B DNA Structures (NEW!)
-Integrated from the NonBDNAFinder repository, CisPerplexity now detects 11 classes of Non-B DNA structures:
-
-| Motif Class | Description | Subclasses |
-|-------------|-------------|------------|
-| **A-philic DNA** | A-form propensity DNA | High/Moderate/Weak Confidence |
-| **Curved DNA** | A-tract mediated bending | Local, Global, Directional |
-| **G-Quadruplex** | Four-stranded G-rich structures | Telomeric, Canonical, Extended |
-| **i-Motif** | C-rich four-stranded structures | Canonical, HuR AC motifs |
-| **Z-DNA** | Left-handed helix | Canonical Z-DNA |
-| **Slipped DNA** | Direct repeat structures | STRs, microsatellites |
-| **Cruciform** | Inverted repeat structures | Hairpin, stem-loop |
-| **Triplex** | Three-stranded structures | Mirror repeats |
-
-These structures are important for:
-- Gene regulation and transcription
-- DNA packaging and chromatin structure
-- Genomic stability and recombination
-- Disease associations and mutational hotspots
-
-### Kadane's Algorithm Integration
-- **Purpose**: Finds globally optimal low-perplexity regions
-- **Advantage**: Superior to threshold-based methods
-- **Implementation**: Modified for minimum sum detection
-- **Output**: Multiple non-overlapping candidate regions with confidence scores
-
-## 📁 File Structure
-
-```
-CisPerplexity/
-├── streamlit_app.py              # Main Streamlit application
-├── genome_analyzer.py            # Genome-wide analysis script (NEW!)
-├── batch_genome_analysis.py      # Batch processing script (NEW!)
-├── nonb_motif_detector.py        # Non-B DNA structure detection module
-├── selected_encoding_dict.json   # Structural feature dictionary
-├── requirements.txt              # Python dependencies
-├── Dockerfile                    # Docker container configuration
-├── docker-compose.yml           # Docker Compose setup
-├── .streamlit/
-│   └── config.toml              # Streamlit configuration
-├── README.md                    # This file
-├── KADANE_IMPLEMENTATION.md     # Detailed algorithm documentation
-└── GENOME_ANALYSIS_README.md    # Genome analysis documentation (NEW!)
-```
-
-## 🧠 Scientific Background
-
-### The CisPerplexity Hypothesis
-Promoter regions exhibit distinct sequence characteristics:
-- **Lower Perplexity**: Due to regulatory constraints and specific composition patterns
-- **Structural Properties**: Unique conformational features affecting DNA-protein interactions
-- **Motif Signatures**: Conserved regulatory sequences for transcription factor binding
-
-### Performance Characteristics
-- **Time Complexity**: O(n²) for region finding, O(n) for perplexity calculation
-- **Memory Efficiency**: Optimized numpy operations
-- **Scalability**: Handles sequences up to 10,000+ bp efficiently
-- **Accuracy**: High confidence predictions with multi-factor validation
-
-## 🛠️ Configuration
-
-### Analysis Parameters
-- **Perplexity Window**: 5-50 bp (default: 10 bp)
-- **Analysis Window**: 50-500 bp (default: 100 bp)  
-- **Threshold**: 10-50th percentile (default: 25th percentile)
-
-### Input Requirements
-- **Sequence Types**: DNA sequences (A, T, G, C only)
-- **Length**: Minimum 50 bp, recommended <10,000 bp
-- **Formats**: Plain text, FASTA files
-
-## 📊 Output Features
-- **Predicted Regions**: Start/end positions with confidence scores
-- **Method Attribution**: Kadane's algorithm vs. threshold-based detection
-- **Structural Analysis**: Mean and standard deviation for each property
-- **Motif Detection**: Region-specific and sequence-wide motif analysis
-- **Interactive Visualizations**: Perplexity plots, GC content analysis, motif frequency charts
-- **Downloadable Results**: JSON format for further analysis
-
-## 🔬 Research Background
-
-This tool implements algorithms from the CisPerplexity research project, which explores the relationship between DNA dinucleotide perplexity and promoter regions. The hypothesis is that promoter regions exhibit lower perplexity compared to neighboring genomic regions due to their regulatory constraints and sequence composition.
-
-## 📚 Citation
-
-If you use CisPerplexity in your research, please cite:
-
-```
-CisPerplexity: An Integrated Computational Tool for Promoter Prediction Using 
-Dinucleotide Perplexity Analysis and Kadane's Algorithm. (2024)
-```
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our contributing guidelines and feel free to submit issues and enhancement requests.
-
-## 📞 Support
-
-- **GitHub Issues**: [Report bugs or request features](https://github.com/VRYella/CisPerplexity/issues)
-- **Documentation**: See `KADANE_IMPLEMENTATION.md` for detailed algorithm information
-- **Examples**: Use the built-in Examples section for tutorials and use cases
-
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+</div>
 
 ---
 
-**Built with ❤️ using Streamlit, NumPy, Plotly, and modern bioinformatics tools.**
+## ✨ What is PERCALL?
+
+PERCALL analyses DNA sequences and **calls candidate regulatory / promoter regions** by combining three complementary signals:
+
+| Signal | Method | Rationale |
+|--------|--------|-----------|
+| 📐 **Dinucleotide perplexity** | Sliding-window entropy | Promoters have lower compositional complexity |
+| 🔍 **Non-B DNA motifs** | Regex scanning (8 classes) | Structural motifs are enriched at regulatory loci |
+| 🏆 **Kadane's algorithm** | Modified minimum-subarray | Globally optimal low-perplexity region extraction |
+
+The result is a ranked list of predicted regulatory windows with confidence scores, interactive visualisations, and one-click data export.
+
+---
+
+## 🗂 Repository Layout
+
+```
+PerCALL/
+├── streamlit_app.py        ← main web application (single entry-point)
+├── core/
+│   ├── motifs.py           ← Non-B DNA regex patterns & scanning
+│   ├── perplexity.py       ← sliding-window entropy calculation
+│   ├── plotting.py         ← Plotly chart builders
+│   ├── region_caller.py    ← Kadane-based region detection
+│   └── report.py           ← PDF report generation (fpdf2)
+├── example_data/           ← 11 curated bacterial/fungal genomes
+├── output/                 ← analysis results land here
+├── requirements.txt
+├── Dockerfile
+├── docker-compose.yml
+└── .streamlit/config.toml
+```
+
+---
+
+## 🚀 Quick Start
+
+### Option A — Docker (recommended)
+
+```bash
+git clone https://github.com/VRYella/PerCALL.git
+cd PerCALL
+docker compose up
+```
+
+Open **http://localhost:8501** in your browser.
+
+### Option B — Local Python
+
+```bash
+git clone https://github.com/VRYella/PerCALL.git
+cd PerCALL
+pip install -r requirements.txt
+streamlit run streamlit_app.py
+```
+
+---
+
+## 🖥 Interface Overview
+
+PERCALL is a **five-page horizontal-navbar app** — no sidebar, no clutter.
+
+| Tab | Purpose |
+|-----|---------|
+| 🏠 **Home** | Hero overview, feature cards, workflow guide |
+| 🔬 **Analysis** | Sequence input, parameter controls, run analysis |
+| 📊 **Results** | Interactive Plotly charts, region table, motif hits |
+| 🧪 **Examples** | 11 curated example genomes with expected outputs |
+| 📄 **Reports & Exports** | CSV / JSON / PDF downloads |
+
+---
+
+## 🔬 Algorithm Details
+
+### 1 · Dinucleotide Perplexity
+
+For a window of length *w* centred at position *i*, PERCALL calculates the **Shannon perplexity** over the 16 possible dinucleotide frequencies:
+
+```
+H  = -Σ p(xy) · log₂ p(xy)
+PP = 2^H        (perplexity, range 1–16)
+```
+
+Low perplexity → skewed dinucleotide usage → promoter-like composition.
+
+### 2 · Kadane-based Region Caller
+
+Rather than applying a fixed threshold, PERCALL uses a **modified minimum-subarray (Kadane's) algorithm** on the perplexity signal to find the contiguous windows with the globally lowest cumulative perplexity — delivering results that adapt to each sequence.
+
+### 3 · Non-B DNA Motif Scanning
+
+Eight classes of Non-B DNA structures are scanned with compiled regexes:
+
+| Key | Structure | Regex basis |
+|-----|-----------|-------------|
+| `G4` | G-Quadruplex | 4 × G≥3 runs with 1–7 nt loops |
+| `iMotif` | i-Motif | 4 × C≥3 runs |
+| `ZDNA` | Z-DNA | Alternating CG / GC / CA / TG ≥4 units |
+| `eGZDNA` | Expanded G/Z-DNA | CGG / GGC trinucleotide repeats ≥4 |
+| `Triplex` | Triplex-forming | AG mirror repeats ≥10 bp |
+| `STR` | Short Tandem Repeat | 1–6 bp unit × ≥4 copies |
+| `DirectRepeat` | Direct Repeat | 4–10 bp unit with ≤10 bp gap |
+| `PolyAT` | PolyA/T | Homopolymeric A or T run ≥7 bp |
+
+---
+
+## 📈 Analysis Parameters
+
+| Parameter | Default | Range | Effect |
+|-----------|---------|-------|--------|
+| Perplexity window | 10 bp | 5–50 bp | Grain of entropy calculation |
+| Analysis window | 100 bp | 50–500 bp | Size of reported candidate regions |
+| Percentile threshold | 25th | 10–50 | Stringency of region selection |
+
+---
+
+## 📦 Example Data
+
+The `example_data/` directory ships with 11 sequences spanning diverse organisms:
+
+- *Escherichia coli* K-12 (`ecoli.fna`)  
+- *Mycobacterium tuberculosis* H37Rv (`mtb.fasta`)  
+- *Helicobacter pylori* (`hpylori.fna`)  
+- *Staphylococcus aureus* (`saureus.fna`)  
+- *Streptococcus pneumoniae* (`Streptococcus pneumoniae.fna`)  
+- *Saccharomyces cerevisiae* (`Scer.fna`)  
+- *Buchnera aphidicola* · *Candidatus Carsonella ruddii* · *Cellulomonas shaoxiangyii* · *Miltoncostaea marina*  
+- Generic FASTA demo (`example.fasta`)
+
+Load any of these from the **Examples** tab with one click.
+
+---
+
+## 📤 Export Formats
+
+| Format | Content |
+|--------|---------|
+| **JSON** | Full session — regions, scores, motifs, parameters |
+| **CSV** | Tabular region results (position, score, motifs) |
+| **PDF** | Publication-ready report with figures and statistics |
+
+---
+
+## 🛠 Development
+
+```bash
+# Install dev dependencies
+pip install -r requirements.txt pytest flake8
+
+# Lint (strict — syntax + undefined names only)
+flake8 streamlit_app.py --count --select=E9,F63,F7,F82 --show-source
+
+# Run app in headless mode for smoke-test
+streamlit run streamlit_app.py --server.headless true --server.port 8501
+```
+
+CI runs on Python 3.8 · 3.9 · 3.10 · 3.11 via GitHub Actions (see `.github/workflows/ci-cd.yml`).
+
+---
+
+## 📚 Citation
+
+If PERCALL contributes to your research, please cite:
+
+```bibtex
+@software{percall2024,
+  title   = {{PERCALL}: PERplexity-based Regulatory Region CALLer},
+  author  = {Yella, Venkata Rajesh},
+  year    = {2024},
+  url     = {https://github.com/VRYella/PerCALL},
+  license = {MIT}
+}
+```
+
+---
+
+## 📄 License
+
+Released under the **MIT License**. See [LICENSE](LICENSE) for details.
+
+---
+
+<div align="center">
+Built with ❤️ using <a href="https://streamlit.io">Streamlit</a> · <a href="https://numpy.org">NumPy</a> · <a href="https://plotly.com">Plotly</a>
+</div>
