@@ -2,10 +2,7 @@
 streamlit_app.py
 ────────────────
 PERCALL — PERplexity-based Regulatory Region CALLer
-===================================================
-
-A premium scientific Streamlit platform for exploring perplexity-derived
-regulatory regions without altering the original PERCALL computational core.
+Premium Scientific Platform · White Theme · 5-Page Horizontal Navbar
 """
 
 from __future__ import annotations
@@ -25,9 +22,6 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-# ---------------------------------------------------------------------------
-# Path setup
-# ---------------------------------------------------------------------------
 _ROOT = os.path.dirname(os.path.abspath(__file__))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
@@ -35,526 +29,545 @@ if _ROOT not in sys.path:
 from core.motifs import MOTIF_LABELS, count_motifs, scan_motifs
 from core.perplexity import compute_perplexity, local_residual
 from core.plotting import (
-    plot_gc_profile,
     plot_genome_browser,
     plot_motif_distribution,
     plot_motif_enrichment,
-    plot_perplexity_profile,
     plot_region_distribution,
     plot_sequence_domain_map,
 )
 from core.region_caller import find_regions
 
 # ============================================================================
-# Page configuration
+# Page configuration — sidebar fully collapsed / hidden
 # ============================================================================
 
 st.set_page_config(
     page_title="PERCALL — Scientific Platform",
     page_icon="🧬",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 # ============================================================================
-# Design system
+# Premium White Design Framework — CSS
 # ============================================================================
 
-_DARK_CSS = """
-<style>
-#MainMenu, footer {visibility: hidden;}
-header[data-testid="stHeader"] {background: transparent !important;}
+_CSS = """<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900&display=swap');
 
-.stApp {
-    background:
-        radial-gradient(circle at top left, rgba(0, 212, 255, 0.14), transparent 26%),
-        radial-gradient(circle at top right, rgba(0, 255, 157, 0.10), transparent 24%),
-        linear-gradient(180deg, #050a14 0%, #091223 42%, #060b18 100%);
-    color: #e6edf7;
+/* ── Streamlit chrome removal ── */
+#MainMenu, footer { visibility: hidden; }
+header[data-testid="stHeader"] { background: transparent !important; }
+div[data-testid="stDecoration"] { display: none !important; }
+section[data-testid="stSidebar"] { display: none !important; }
+button[data-testid="baseButton-headerNoPadding"] { display: none !important; }
+
+/* ── App background: pure white ── */
+.stApp { background: #FFFFFF !important; color: #0F172A !important; }
+
+/* ── Typography ── */
+*, h1, h2, h3, h4, h5, h6, p, span, label, div {
+    font-family: 'Inter', 'IBM Plex Sans', system-ui, -apple-system, sans-serif !important;
 }
+h1 { color: #0F172A !important; font-weight: 800 !important; letter-spacing: -0.025em; }
+h2 { color: #0F172A !important; font-weight: 700 !important; letter-spacing: -0.02em; }
+h3 { color: #1E293B !important; font-weight: 600 !important; }
 
-section[data-testid="stSidebar"] {
-    background: rgba(4, 10, 22, 0.92) !important;
-    border-right: 1px solid rgba(86, 186, 255, 0.18) !important;
-    backdrop-filter: blur(18px);
-}
-
+/* ── Main container ── */
 .main .block-container {
-    max-width: 1420px;
-    padding-top: 1.2rem;
-    padding-bottom: 3rem;
+    padding-top: 0 !important;
+    padding-bottom: 3rem !important;
+    max-width: 1440px !important;
+    padding-left: 2.5rem !important;
+    padding-right: 2.5rem !important;
 }
 
-@keyframes fadeRise {
-    from { opacity: 0; transform: translateY(10px); }
-    to   { opacity: 1; transform: translateY(0); }
+/* ═══════════════════════════════════════════════════════════
+   TOP NAVBAR — st.tabs styled as horizontal navigation bar
+   ═══════════════════════════════════════════════════════════ */
+.stTabs { margin-top: 0 !important; }
+
+[data-baseweb="tab-list"] {
+    background: #FFFFFF !important;
+    border-bottom: 2px solid #E2E8F0 !important;
+    padding: 0 2.5rem !important;
+    gap: 0 !important;
+    box-shadow: 0 1px 8px rgba(0, 0, 0, 0.06) !important;
+    position: sticky;
+    top: 0;
+    z-index: 200;
 }
 
-@keyframes glowPulse {
-    0%, 100% { box-shadow: 0 0 0 rgba(0, 212, 255, 0.0); }
-    50% { box-shadow: 0 0 24px rgba(0, 212, 255, 0.22); }
-}
-
-@keyframes driftFwd {
-    from { stroke-dashoffset: 0; }
-    to { stroke-dashoffset: -76; }
-}
-
-@keyframes driftBack {
-    from { stroke-dashoffset: 0; }
-    to { stroke-dashoffset: 76; }
-}
-
-h1, h2, h3, h4, h5, h6, p, span, label, div {
-    font-family: Inter, "IBM Plex Sans", system-ui, sans-serif !important;
-}
-
-h1 {
-    color: #f5fbff !important;
-    letter-spacing: -0.03em;
-    margin-bottom: 0.4rem !important;
-}
-
-h2, h3 {
-    color: #dff7ff !important;
-}
-
-.page-kicker {
-    font-size: 0.76rem;
+[data-baseweb="tab"] {
+    background: transparent !important;
+    border-radius: 0 !important;
+    color: #64748B !important;
+    font-weight: 500 !important;
+    font-size: 0.77rem !important;
     text-transform: uppercase;
-    letter-spacing: 0.18em;
-    color: #6bcfff;
-    margin-bottom: 0.35rem;
-    font-weight: 700;
+    letter-spacing: 0.1em;
+    padding: 1rem 1.35rem !important;
+    height: auto !important;
+    min-height: 3.2rem !important;
+    margin: 0 !important;
+    border: none !important;
+    transition: color 0.18s ease, background 0.18s ease !important;
 }
-
-.page-subtitle {
-    color: #90a7c2;
-    font-size: 1rem;
-    line-height: 1.65;
-    max-width: 980px;
-    margin-bottom: 1.2rem;
+[data-baseweb="tab"]:hover {
+    background: #F8FAFC !important;
+    color: #2563EB !important;
 }
-
-.nav-status {
-    margin: 0.8rem 0 1.2rem 0;
-    padding: 1rem 1.15rem;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(107, 207, 255, 0.18);
-    border-radius: 18px;
-    backdrop-filter: blur(18px);
-    animation: fadeRise 0.35s ease-out;
+[aria-selected="true"][data-baseweb="tab"] {
+    color: #2563EB !important;
+    background: transparent !important;
+    font-weight: 700 !important;
 }
-
-.nav-status strong {
-    color: #f4fbff;
-    font-size: 1.02rem;
+[data-baseweb="tab-highlight"] {
+    background-color: #2563EB !important;
+    height: 3px !important;
+    border-radius: 3px 3px 0 0 !important;
 }
+[data-baseweb="tab-border"] { display: none !important; }
+[data-baseweb="tab-panel"] { padding: 0 !important; }
 
-.nav-status span {
-    display: block;
-    color: #87a0bc;
-    margin-top: 0.15rem;
-    font-size: 0.92rem;
+/* ── Cards ── */
+.sci-card {
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 16px;
+    padding: 1.5rem 1.75rem;
+    margin: 0.65rem 0;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+    animation: fadeRise 0.32s ease-out;
 }
-
-.glass-card,
-.story-card,
-.workflow-step,
-.feature-card,
-.empty-state {
-    background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.03));
-    border: 1px solid rgba(95, 189, 255, 0.16);
-    border-radius: 20px;
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
-    box-shadow: 0 10px 34px rgba(0, 0, 0, 0.22);
-    animation: fadeRise 0.35s ease-out;
+.hl-card {
+    background: linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%);
+    border: 1px solid #BFDBFE;
+    border-left: 4px solid #2563EB;
+    border-radius: 0 14px 14px 0;
+    padding: 1.2rem 1.5rem;
+    margin: 0.65rem 0;
 }
-
-.glass-card {
-    padding: 1.25rem 1.35rem;
-    margin: 0.55rem 0;
+.hl-card h4 {
+    color: #1E40AF !important;
+    margin: 0 0 0.3rem 0 !important;
+    font-size: 0.96rem !important;
+    font-weight: 600 !important;
 }
+.hl-card p { color: #1E3A8A; margin: 0; font-size: 0.87rem; line-height: 1.6; }
 
-.story-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 0.9rem;
-    margin: 1rem 0 1.3rem 0;
-}
-
-.story-card, .feature-card {
-    padding: 1rem 1.05rem;
-}
-
-.story-card h4,
-.feature-card h4 {
-    margin: 0 0 0.45rem 0 !important;
-    color: #f4fbff !important;
-    font-size: 1rem !important;
-}
-
-.story-card p,
-.feature-card p {
-    margin: 0;
-    color: #91a7c2;
-    font-size: 0.9rem;
-    line-height: 1.6;
-}
-
-.feature-meta {
+/* ── Badges ── */
+.badge {
     display: inline-block;
-    margin-bottom: 0.55rem;
-    font-size: 0.7rem;
+    padding: 0.28rem 0.8rem;
+    border-radius: 999px;
+    font-size: 0.69rem;
+    font-weight: 600;
+    letter-spacing: 0.07em;
     text-transform: uppercase;
-    letter-spacing: 0.16em;
-    color: #6bcfff;
-    font-weight: 700;
+    margin: 0.22rem;
 }
+.badge-blue  { background: #DBEAFE; color: #1D4ED8; border: 1px solid #93C5FD; }
+.badge-cyan  { background: #ECFEFF; color: #0E7490; border: 1px solid #67E8F9; }
+.badge-green { background: #D1FAE5; color: #065F46; border: 1px solid #6EE7B7; }
+.badge-amber { background: #FEF3C7; color: #92400E; border: 1px solid #FCD34D; }
 
-.workflow-ribbon {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: 0.8rem;
-    margin: 1rem 0 1.4rem 0;
-}
-
-.workflow-step {
-    padding: 1rem 0.95rem;
-    min-height: 118px;
-    position: relative;
-}
-
-.workflow-step::after {
-    content: "→";
-    position: absolute;
-    right: -0.55rem;
-    top: calc(50% - 0.8rem);
-    color: rgba(107, 207, 255, 0.55);
-    font-size: 1.2rem;
-}
-
-.workflow-ribbon .workflow-step:last-child::after {
-    display: none;
-}
-
-.workflow-step small {
-    color: #6bcfff;
-    text-transform: uppercase;
-    letter-spacing: 0.16em;
-    font-size: 0.68rem;
-    font-weight: 700;
-}
-
-.workflow-step strong {
-    display: block;
-    color: #f4fbff;
-    font-size: 1rem;
-    margin: 0.35rem 0 0.45rem 0;
-}
-
-.workflow-step p {
-    margin: 0;
-    color: #90a7c2;
-    font-size: 0.88rem;
-    line-height: 1.55;
-}
-
+/* ── Hero section ── */
 .percall-hero {
     text-align: center;
-    padding: 1.3rem 0 0.5rem 0;
+    padding: 3.8rem 1rem 1.8rem 1rem;
 }
-
 .percall-logo {
-    font-size: 4.4rem;
+    font-size: 5.2rem;
     font-weight: 900;
-    letter-spacing: 0.22em;
+    letter-spacing: 0.24em;
     line-height: 1;
-    margin-bottom: 0.55rem;
-    background: linear-gradient(135deg, #6ee7ff 0%, #00d4ff 45%, #00ff9d 100%);
+    margin-bottom: 0.5rem;
+    background: linear-gradient(135deg, #1D4ED8 0%, #2563EB 35%, #0EA5E9 70%, #06B6D4 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    text-shadow: 0 0 38px rgba(0, 212, 255, 0.18);
 }
-
 .percall-full-name {
-    color: #9ab3ce;
-    letter-spacing: 0.22em;
+    color: #64748B;
+    letter-spacing: 0.2em;
     text-transform: uppercase;
-    font-size: 0.9rem;
+    font-size: 0.81rem;
+    font-weight: 500;
     margin-bottom: 0.8rem;
 }
-
+.percall-tagline {
+    color: #0F172A;
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    max-width: 700px;
+    margin: 0 auto 1.4rem auto;
+    line-height: 1.35;
+}
 .percall-badges {
     display: flex;
     justify-content: center;
-    gap: 0.55rem;
+    gap: 0.4rem;
     flex-wrap: wrap;
-    margin: 0.8rem 0 1.3rem 0;
+    margin: 0 auto 1.8rem auto;
+    max-width: 920px;
 }
 
-.badge {
-    display: inline-block;
-    border-radius: 999px;
-    padding: 0.36rem 0.9rem;
+/* ── Brand bar (above tabs) ── */
+.brand-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    padding: 0.65rem 2.5rem;
+    background: #FFFFFF;
+    border-bottom: 1px solid #F1F5F9;
+}
+.brand-logo-text {
+    font-size: 1.28rem;
+    font-weight: 900;
+    letter-spacing: 0.16em;
+    background: linear-gradient(135deg, #1D4ED8, #2563EB, #0EA5E9);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+.brand-sep  { color: #CBD5E1; font-size: 1.1rem; }
+.brand-desc { font-size: 0.7rem; color: #94A3B8; letter-spacing: 0.11em; text-transform: uppercase; font-weight: 500; }
+
+/* ── Workflow bar ── */
+.workflow-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 0;
+    margin: 1.2rem 0 1.8rem 0;
+    border: 1px solid #E2E8F0;
+    border-radius: 16px;
+    overflow: hidden;
+}
+.workflow-step {
+    background: #FFFFFF;
+    padding: 1.2rem 0.9rem;
+    text-align: center;
+    border-right: 1px solid #E2E8F0;
+    transition: background 0.18s;
+}
+.workflow-step:last-child { border-right: none; }
+.workflow-step:hover { background: #F8FAFC; }
+.step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: #2563EB;
+    color: #FFFFFF;
     font-size: 0.72rem;
     font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    margin-bottom: 0.6rem;
 }
+.workflow-step strong { display: block; color: #0F172A; font-size: 0.84rem; font-weight: 600; margin-bottom: 0.25rem; }
+.workflow-step p { margin: 0; color: #64748B; font-size: 0.78rem; line-height: 1.45; }
 
-.badge-blue {
-    background: rgba(0, 212, 255, 0.14);
-    border: 1px solid rgba(0, 212, 255, 0.26);
-    color: #6ee7ff;
+/* ── Feature cards grid ── */
+.feature-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 1rem;
+    margin: 0.75rem 0 1.5rem 0;
 }
-
-.badge-emerald {
-    background: rgba(0, 255, 157, 0.12);
-    border: 1px solid rgba(0, 255, 157, 0.24);
-    color: #86ffcd;
+.feature-card {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 16px;
+    padding: 1.5rem 1.6rem;
+    transition: all 0.22s;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
-
-.badge-amber {
-    background: rgba(227, 179, 65, 0.12);
-    border: 1px solid rgba(227, 179, 65, 0.22);
-    color: #ffd98b;
+.feature-card:hover {
+    border-color: #93C5FD;
+    box-shadow: 0 6px 22px rgba(37, 99, 235, 0.1);
+    transform: translateY(-3px);
 }
-
-.section-header {
-    font-size: 0.76rem;
-    text-transform: uppercase;
-    letter-spacing: 0.18em;
-    font-weight: 800;
-    color: #6bcfff;
-    margin: 1.3rem 0 0.8rem 0;
-    padding-bottom: 0.4rem;
-    border-bottom: 1px solid rgba(107, 207, 255, 0.22);
+.feature-card .fc-icon { font-size: 1.9rem; margin-bottom: 0.7rem; display: block; }
+.feature-card h4 {
+    color: #0F172A !important;
+    font-size: 0.97rem !important;
+    font-weight: 600 !important;
+    margin: 0 0 0.4rem 0 !important;
 }
+.feature-card p { color: #64748B; font-size: 0.85rem; line-height: 1.6; margin: 0; }
 
-.info-pill {
-    display: inline-block;
-    margin: 0.18rem;
-    padding: 0.5rem 0.78rem;
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(107, 207, 255, 0.14);
-    border-radius: 12px;
-    color: #d8e7f8;
-    font-size: 0.86rem;
-}
-
-.empty-state {
-    padding: 1.3rem 1.35rem;
-    margin: 0.8rem 0 1.2rem 0;
-}
-
-.empty-state strong {
-    display: block;
-    font-size: 1rem;
-    color: #eff8ff;
-    margin-bottom: 0.35rem;
-}
-
-.empty-state span {
-    color: #8ea5bf;
-    line-height: 1.6;
-    font-size: 0.92rem;
-}
-
+/* ── Metric strip ── */
 .metric-strip {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
     gap: 0.75rem;
-    margin: 0.9rem 0 1.1rem 0;
+    margin: 0.75rem 0 1.25rem 0;
 }
-
-.metric-strip .feature-card {
-    padding: 0.95rem 1rem;
+.metric-item {
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 12px;
+    padding: 1rem 1.2rem;
+    text-align: center;
+    transition: border-color 0.2s;
 }
+.metric-item:hover { border-color: #93C5FD; }
+.metric-val { display: block; color: #2563EB; font-size: 1.55rem; font-weight: 800; letter-spacing: -0.03em; }
+.metric-lbl { color: #64748B; font-size: 0.69rem; text-transform: uppercase;
+    letter-spacing: 0.11em; font-weight: 600; margin-top: 0.15rem; }
 
-.metric-strip .value {
-    display: block;
-    color: #f4fbff;
-    font-size: 1.5rem;
-    font-weight: 800;
-    margin-top: 0.18rem;
-}
-
-.metric-strip .label {
-    color: #7fa1c1;
-    font-size: 0.78rem;
+/* ── Section header ── */
+.section-hdr {
+    font-size: 0.69rem;
     text-transform: uppercase;
-    letter-spacing: 0.16em;
+    letter-spacing: 0.17em;
     font-weight: 700;
+    color: #2563EB;
+    margin: 1.6rem 0 0.85rem 0;
+    padding-bottom: 0.4rem;
+    border-bottom: 2px solid #DBEAFE;
+    display: block;
 }
 
-.dna-s1 {
-    stroke-dasharray: 10 5;
-    animation: driftFwd 2.6s linear infinite;
-}
-
-.dna-s2 {
-    stroke-dasharray: 10 5;
-    animation: driftBack 2.6s linear infinite;
-}
-
-div[data-testid="metric-container"] {
-    background: rgba(255,255,255,0.04) !important;
-    border: 1px solid rgba(95, 189, 255, 0.16) !important;
-    border-radius: 16px !important;
-    padding: 1rem 0.95rem !important;
-    animation: glowPulse 3.8s ease-in-out infinite;
-}
-
-div[data-testid="metric-container"] label {
-    color: #85a0be !important;
+/* ── Page header ── */
+.page-kicker {
+    font-size: 0.69rem;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-size: 0.75rem !important;
+    letter-spacing: 0.19em;
+    font-weight: 700;
+    color: #2563EB;
+    margin-bottom: 0.25rem;
+    display: block;
+}
+.page-subtitle {
+    color: #64748B;
+    font-size: 0.97rem;
+    line-height: 1.7;
+    max-width: 920px;
+    margin-bottom: 1.5rem;
 }
 
-div[data-testid="metric-container"] div {
-    color: #f4fbff !important;
+/* ── Info pills ── */
+.info-pill {
+    display: inline-block;
+    margin: 0.2rem;
+    padding: 0.38rem 0.75rem;
+    background: #F1F5F9;
+    border: 1px solid #E2E8F0;
+    border-radius: 999px;
+    color: #0F172A;
+    font-size: 0.81rem;
+    font-weight: 500;
 }
 
-.stButton > button,
-.stDownloadButton > button {
-    width: 100%;
-    border-radius: 14px !important;
-    border: 1px solid rgba(107, 207, 255, 0.20) !important;
-    background: linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03)) !important;
-    color: #edf7ff !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.02em;
-    min-height: 2.8rem;
+/* ── Empty state ── */
+.empty-state {
+    background: #F8FAFC;
+    border: 2px dashed #E2E8F0;
+    border-radius: 16px;
+    padding: 2.6rem 2rem;
+    text-align: center;
+    margin: 1rem 0 1.5rem 0;
 }
+.empty-state strong { display: block; font-size: 1.05rem; color: #0F172A; font-weight: 600; margin-bottom: 0.45rem; }
+.empty-state span   { color: #64748B; font-size: 0.9rem; line-height: 1.7; }
 
-.stButton > button:hover,
-.stDownloadButton > button:hover {
-    border-color: rgba(107, 207, 255, 0.42) !important;
-    box-shadow: 0 0 18px rgba(0, 212, 255, 0.14) !important;
-    color: #ffffff !important;
+/* ── Buttons ── */
+.stButton > button {
+    border-radius: 10px !important;
+    font-weight: 500 !important;
+    border: 1px solid #E2E8F0 !important;
+    background: #FFFFFF !important;
+    color: #0F172A !important;
+    transition: all 0.18s !important;
+    min-height: 2.6rem !important;
 }
-
+.stButton > button:hover {
+    border-color: #2563EB !important;
+    color: #2563EB !important;
+    box-shadow: 0 2px 10px rgba(37, 99, 235, 0.14) !important;
+}
 .stButton > button[kind="primary"] {
-    background: linear-gradient(135deg, #00d4ff 0%, #00ff9d 100%) !important;
-    color: #04101d !important;
+    background: #2563EB !important;
+    color: #FFFFFF !important;
     border: none !important;
+    font-weight: 600 !important;
 }
+.stButton > button[kind="primary"]:hover {
+    background: #1D4ED8 !important;
+    box-shadow: 0 4px 16px rgba(37, 99, 235, 0.35) !important;
+}
+.stDownloadButton > button {
+    border-radius: 10px !important;
+    border: 1px solid #BFDBFE !important;
+    background: #EFF6FF !important;
+    color: #2563EB !important;
+    font-weight: 500 !important;
+}
+.stDownloadButton > button:hover { background: #DBEAFE !important; border-color: #93C5FD !important; }
 
+/* ── Form inputs ── */
+.stTextInput input, .stTextArea textarea,
 .stSelectbox [data-baseweb="select"] > div,
-.stMultiSelect [data-baseweb="select"] > div,
-.stTextArea textarea,
-.stTextInput input,
-.stFileUploader > div,
-.stNumberInput input {
-    background: rgba(255,255,255,0.05) !important;
-    color: #edf7ff !important;
-    border: 1px solid rgba(107, 207, 255, 0.16) !important;
-    border-radius: 14px !important;
+.stFileUploader > div, .stNumberInput input {
+    background: #FFFFFF !important;
+    color: #0F172A !important;
+    border: 1px solid #E2E8F0 !important;
+    border-radius: 10px !important;
+}
+.stTextInput input:focus, .stTextArea textarea:focus {
+    border-color: #2563EB !important;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1) !important;
+    outline: none !important;
 }
 
-.stSlider [data-baseweb="slider"] div[role="slider"] {
-    box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.16);
+/* ── Metrics widget ── */
+div[data-testid="metric-container"] {
+    background: #F8FAFC !important;
+    border: 1px solid #E2E8F0 !important;
+    border-radius: 12px !important;
+    padding: 0.9rem 1rem !important;
+}
+div[data-testid="metric-container"] label {
+    color: #64748B !important;
+    font-size: 0.7rem !important;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
 }
 
-.stTabs [data-baseweb="tab-list"] {
-    background: rgba(255,255,255,0.04);
-    border-radius: 18px;
-    padding: 0.3rem;
-    gap: 0.25rem;
+/* ── Expander ── */
+.streamlit-expanderHeader {
+    background: #F8FAFC !important;
+    border: 1px solid #E2E8F0 !important;
+    border-radius: 10px !important;
+    color: #0F172A !important;
+    font-weight: 500 !important;
+}
+.streamlit-expanderContent {
+    background: #FFFFFF !important;
+    border: 1px solid #E2E8F0 !important;
+    border-top: none !important;
+    border-radius: 0 0 10px 10px !important;
 }
 
-.stTabs [data-baseweb="tab"] {
-    border-radius: 14px !important;
+/* ── Progress bar ── */
+.stProgress > div > div {
+    background: linear-gradient(90deg, #2563EB, #0EA5E9) !important;
+    border-radius: 999px !important;
 }
 
-.stTabs [aria-selected="true"] {
-    background: linear-gradient(135deg, rgba(0,212,255,0.18), rgba(0,255,157,0.12)) !important;
-    color: #eff9ff !important;
+/* ── Dataframe ── */
+.stDataFrame {
+    border-radius: 12px !important;
+    overflow: hidden !important;
+    border: 1px solid #E2E8F0 !important;
 }
 
+/* ── DNA animation ── */
+.dna-s1 { stroke-dasharray: 12 6; animation: driftFwd 3.2s linear infinite; }
+.dna-s2 { stroke-dasharray: 12 6; animation: driftBack 3.2s linear infinite; }
+
+/* ── Keyframes ── */
+@keyframes fadeRise {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes driftFwd  { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -80; } }
+@keyframes driftBack { from { stroke-dashoffset: 0; } to { stroke-dashoffset: 80;  } }
+@keyframes logoShine {
+    0%, 100% { filter: brightness(1); }
+    50%       { filter: brightness(1.08); }
+}
+
+/* ── Responsive ── */
 @media (max-width: 900px) {
-    .percall-logo {
-        font-size: 3rem;
-        letter-spacing: 0.12em;
-    }
-
-    .workflow-step::after {
-        display: none;
-    }
+    .percall-logo { font-size: 3.5rem; letter-spacing: 0.14em; }
+    .workflow-grid { grid-template-columns: 1fr 1fr 1fr; }
+    .feature-grid  { grid-template-columns: 1fr; }
+    [data-baseweb="tab"] { padding: 0.75rem 0.7rem !important; font-size: 0.72rem !important; }
+    .main .block-container { padding-left: 1rem !important; padding-right: 1rem !important; }
+    .brand-bar { padding: 0.65rem 1rem; }
 }
-</style>
-"""
-st.markdown(_DARK_CSS, unsafe_allow_html=True)
+</style>"""
+
+st.markdown(_CSS, unsafe_allow_html=True)
 
 # ============================================================================
-# DNA animation
+# Static HTML fragments
 # ============================================================================
 
-_DNA_ANIMATION = """
-<div style="text-align:center;padding:0.2rem 0 1rem 0">
-<svg viewBox="0 0 640 62" xmlns="http://www.w3.org/2000/svg"
-     style="width:100%;max-width:660px;height:62px;overflow:visible">
+_BRAND_BAR = """
+<div class="brand-bar">
+  <span class="brand-logo-text">PERCALL</span>
+  <span class="brand-sep">·</span>
+  <span class="brand-desc">PERplexity-based Regulatory Region CALLer</span>
+</div>"""
+
+_DNA_SVG = """
+<div style="text-align:center;padding:.6rem 0 1.4rem 0">
+<svg viewBox="0 0 640 56" xmlns="http://www.w3.org/2000/svg"
+     style="width:100%;max-width:700px;height:56px;overflow:visible">
   <path class="dna-s1"
-    d="M0,31 Q40,6 80,31 Q120,56 160,31 Q200,6 240,31 Q280,56 320,31
-       Q360,6 400,31 Q440,56 480,31 Q520,6 560,31 Q600,56 640,31"
-    fill="none" stroke="#00d4ff" stroke-width="2.8" opacity="0.88"/>
+    d="M0,28 Q40,6 80,28 Q120,50 160,28 Q200,6 240,28 Q280,50 320,28
+       Q360,6 400,28 Q440,50 480,28 Q520,6 560,28 Q600,50 640,28"
+    fill="none" stroke="#2563EB" stroke-width="2.4" opacity="0.72"/>
   <path class="dna-s2"
-    d="M0,31 Q40,56 80,31 Q120,6 160,31 Q200,56 240,31 Q280,6 320,31
-       Q360,56 400,31 Q440,6 480,31 Q520,56 560,31 Q600,6 640,31"
-    fill="none" stroke="#00ff9d" stroke-width="2.8" opacity="0.88"/>
-  <line x1="80" y1="27" x2="80" y2="35" stroke="rgba(255,255,255,0.28)" stroke-width="1.6"/>
-  <line x1="160" y1="27" x2="160" y2="35" stroke="rgba(255,255,255,0.28)" stroke-width="1.6"/>
-  <line x1="240" y1="27" x2="240" y2="35" stroke="rgba(255,255,255,0.28)" stroke-width="1.6"/>
-  <line x1="320" y1="27" x2="320" y2="35" stroke="rgba(255,255,255,0.28)" stroke-width="1.6"/>
-  <line x1="400" y1="27" x2="400" y2="35" stroke="rgba(255,255,255,0.28)" stroke-width="1.6"/>
-  <line x1="480" y1="27" x2="480" y2="35" stroke="rgba(255,255,255,0.28)" stroke-width="1.6"/>
-  <line x1="560" y1="27" x2="560" y2="35" stroke="rgba(255,255,255,0.28)" stroke-width="1.6"/>
+    d="M0,28 Q40,50 80,28 Q120,6 160,28 Q200,50 240,28 Q280,6 320,28
+       Q360,50 400,28 Q440,6 480,28 Q520,50 560,28 Q600,6 640,28"
+    fill="none" stroke="#0EA5E9" stroke-width="2.4" opacity="0.72"/>
+  <line x1="80"  y1="22" x2="80"  y2="34" stroke="#CBD5E1" stroke-width="1.6"/>
+  <line x1="160" y1="22" x2="160" y2="34" stroke="#CBD5E1" stroke-width="1.6"/>
+  <line x1="240" y1="22" x2="240" y2="34" stroke="#CBD5E1" stroke-width="1.6"/>
+  <line x1="320" y1="22" x2="320" y2="34" stroke="#CBD5E1" stroke-width="1.6"/>
+  <line x1="400" y1="22" x2="400" y2="34" stroke="#CBD5E1" stroke-width="1.6"/>
+  <line x1="480" y1="22" x2="480" y2="34" stroke="#CBD5E1" stroke-width="1.6"/>
+  <line x1="560" y1="22" x2="560" y2="34" stroke="#CBD5E1" stroke-width="1.6"/>
 </svg>
-</div>
-"""
+</div>"""
 
-PAGE_CONFIG = [
-    ("Home", "🏠 Home"),
-    ("Sequence Workbench", "🧬 Sequence Workbench"),
-    ("Perplexity Explorer", "📈 Perplexity Explorer"),
-    ("Baseline & Residual Analysis", "📉 Baseline & Residual"),
-    ("PERCALL Region Caller", "🗺 PERCALL Region Caller"),
-    ("Regulatory Domain Explorer", "🧭 Regulatory Domains"),
-    ("Non-B DNA Structure Center", "🧪 Non-B DNA Center"),
-    ("Interactive Genome Viewer", "🖥 Interactive Genome Viewer"),
-    ("Statistics & Discovery Center", "📊 Discovery Center"),
-    ("Publication Studio", "📑 Publication Studio"),
-    ("Methods & Algorithm", "∑ Methods & Algorithm"),
-    ("About PERCALL", "ℹ️ About PERCALL"),
-]
+# ============================================================================
+# Light-theme plot palette & layout defaults
+# ============================================================================
 
-PAGE_DESCRIPTIONS = {
-    "Home": "Scientific overview, design narrative, and launch pathway.",
-    "Sequence Workbench": "Sequence ingestion, quality control, composition, and architecture.",
-    "Perplexity Explorer": "Interactive perplexity profiling and comparative sequence analytics.",
-    "Baseline & Residual Analysis": "Signal construction, baseline compensation, and residual inspection.",
-    "PERCALL Region Caller": "Flagship bounded minimum-mean Kadane region-calling environment.",
-    "Regulatory Domain Explorer": "Filter, search, and inspect detected regulatory domains.",
-    "Non-B DNA Structure Center": "Motif enrichment, positional mapping, and structure-aware interpretation.",
-    "Interactive Genome Viewer": "Track-based visual inspection of sequence, regions, and motifs.",
-    "Statistics & Discovery Center": "Aggregate analytics, correlations, and discovery summaries.",
-    "Publication Studio": "Export publication-grade figures, tables, and reports.",
-    "Methods & Algorithm": "Mathematical transparency for the supplied PERCALL algorithm.",
-    "About PERCALL": "Citation, software identity, credits, and repository context.",
+_LL: dict = dict(
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="#F8FAFC",
+    font=dict(color="#0F172A", family="Inter, system-ui, sans-serif", size=11),
+    hoverlabel=dict(bgcolor="#FFFFFF", font_color="#0F172A", bordercolor="#E2E8F0"),
+    margin=dict(l=55, r=20, t=60, b=45),
+)
+_LX: dict = dict(
+    gridcolor="#E2E8F0", zerolinecolor="#CBD5E1",
+    color="#64748B", linecolor="#E2E8F0",
+)
+_LY: dict = dict(
+    gridcolor="#E2E8F0", zerolinecolor="#CBD5E1",
+    color="#64748B", linecolor="#E2E8F0",
+)
+_PC: dict = {
+    "perp":  "#2563EB",
+    "base":  "#94A3B8",
+    "res":   "#F59E0B",
+    "gc":    "#10B981",
+    "trough": "#EF4444",
+    "rfill": "rgba(37,99,235,0.07)",
+    "rline": "rgba(37,99,235,0.55)",
 }
-
 
 # ============================================================================
 # Utility helpers
 # ============================================================================
 
 
+def _clean_seq(raw: str) -> str:
+    """Uppercase and replace non-ACGTN bases with N."""
+    return re.sub(r"[^ACGTN]", "N", raw.upper())
+
+
 def parse_fasta(text: str) -> List[Tuple[str, str]]:
-    """Parse FASTA-format text into [(header, sequence)] pairs."""
+    """Parse FASTA text into (header, sequence) pairs."""
     records: List[Tuple[str, str]] = []
     header: Optional[str] = None
     parts: List[str] = []
@@ -564,17 +577,13 @@ def parse_fasta(text: str) -> List[Tuple[str, str]]:
             continue
         if line.startswith(">"):
             if header is not None:
-                seq = "".join(parts).upper()
-                seq = re.sub(r"[^ACGTN]", "N", seq)
-                records.append((header, seq))
+                records.append((header, _clean_seq("".join(parts))))
             header = line[1:]
             parts = []
         else:
             parts.append(line)
     if header is not None:
-        seq = "".join(parts).upper()
-        seq = re.sub(r"[^ACGTN]", "N", seq)
-        records.append((header, seq))
+        records.append((header, _clean_seq("".join(parts))))
     return records
 
 
@@ -582,6 +591,20 @@ def gc_pct(seq: str) -> float:
     if not seq:
         return 0.0
     return round(100.0 * (seq.count("G") + seq.count("C")) / len(seq), 2)
+
+
+def _example_files() -> List[str]:
+    ex_dir = os.path.join(_ROOT, "example_data")
+    if not os.path.isdir(ex_dir):
+        return []
+    return sorted(
+        name for name in os.listdir(ex_dir)
+        if name.lower().endswith((".fasta", ".fa", ".fna", ".txt"))
+    )
+
+
+def _valid_results(results: List[dict]) -> List[dict]:
+    return [r for r in results if not r["skipped"] and r["perp"].size > 0]
 
 
 def _region_seq(seq: str, region: dict, window: int) -> str:
@@ -600,19 +623,14 @@ def process_sequence(
     score_cutoff: float,
     active_motifs: set,
 ) -> dict:
-    """Run the full PERCALL pipeline on one sequence."""
+    """Run the full PERCALL pipeline on a single sequence."""
     perp = compute_perplexity(seq, window=window)
     if perp.size == 0 or np.all(np.isnan(perp)):
         return {
-            "header": header,
-            "seq": seq,
-            "perp": perp,
-            "baseline": perp.copy(),
-            "residual": perp.copy(),
-            "regions": [],
-            "skipped": True,
+            "header": header, "seq": seq, "perp": perp,
+            "baseline": perp.copy(), "residual": perp.copy(),
+            "regions": [], "skipped": True,
         }
-
     res = local_residual(perp, baseline_win=baseline_win)
     baseline = (
         pd.Series(perp)
@@ -620,25 +638,15 @@ def process_sequence(
         .mean()
         .values
     )
-
     regions = find_regions(
-        res,
-        seq,
-        min_len=min_len,
-        max_len=max_len,
-        top_k=top_k,
-        score_cutoff=score_cutoff,
-        window=window,
-        active_motifs=active_motifs,
+        res, seq,
+        min_len=min_len, max_len=max_len, top_k=top_k,
+        score_cutoff=score_cutoff, window=window, active_motifs=active_motifs,
     )
     return {
-        "header": header,
-        "seq": seq,
-        "perp": perp,
-        "baseline": baseline,
-        "residual": res,
-        "regions": regions,
-        "skipped": False,
+        "header": header, "seq": seq, "perp": perp,
+        "baseline": baseline, "residual": res,
+        "regions": regions, "skipped": False,
     }
 
 
@@ -682,1306 +690,1375 @@ def _regions_df(results: List[dict]) -> pd.DataFrame:
     rows = []
     for r in results:
         for reg in r["regions"]:
-            rows.append(
-                {
-                    "Sequence": r["header"][:60],
-                    "Rank": reg["rank"],
-                    "Start": reg["start"],
-                    "End": reg["end"],
-                    "Width": reg["width"],
-                    "Trough": reg["trough"],
-                    "Mean Residual": reg["mean_residual"],
-                    "GC%": reg["gc_pct"],
-                    "Motifs": reg["motifs"],
-                }
-            )
+            rows.append({
+                "Sequence": r["header"][:60],
+                "Rank": reg["rank"],
+                "Start": reg["start"],
+                "End": reg["end"],
+                "Width": reg["width"],
+                "Trough": reg["trough"],
+                "Mean Residual": reg["mean_residual"],
+                "GC%": reg["gc_pct"],
+                "Motifs": reg["motifs"],
+            })
     return pd.DataFrame(rows)
 
 
 def _summary_df(results: List[dict]) -> pd.DataFrame:
-    rows = []
-    for r in results:
-        rows.append(
-            {
-                "Header": r["header"][:70],
-                "Length (bp)": len(r["seq"]),
-                "GC%": gc_pct(r["seq"]),
-                "Regions": len(r["regions"]),
-                "Status": "Skipped" if r["skipped"] else "OK",
-            }
+    return pd.DataFrame([
+        {
+            "Header": r["header"][:70],
+            "Length (bp)": len(r["seq"]),
+            "GC%": gc_pct(r["seq"]),
+            "Regions": len(r["regions"]),
+            "Status": "Skipped" if r["skipped"] else "OK",
+        }
+        for r in results
+    ])
+
+
+# ============================================================================
+# UI component helpers
+# ============================================================================
+
+
+def _metric_strip(items: List[Tuple[str, str]]) -> None:
+    html = ['<div class="metric-strip">']
+    for label, value in items:
+        html.append(
+            f'<div class="metric-item">'
+            f'<span class="metric-val">{value}</span>'
+            f'<span class="metric-lbl">{label}</span>'
+            f'</div>'
         )
-    return pd.DataFrame(rows)
+    html.append("</div>")
+    st.markdown("".join(html), unsafe_allow_html=True)
 
 
-def _valid_results(results: List[dict]) -> List[dict]:
-    return [r for r in results if not r["skipped"] and r["perp"].size > 0]
+def _section_header(text: str) -> None:
+    st.markdown(f'<span class="section-hdr">{text}</span>', unsafe_allow_html=True)
 
 
-def _example_files() -> List[str]:
-    ex_dir = os.path.join(_ROOT, "example_data")
-    if not os.path.isdir(ex_dir):
-        return []
-    return sorted(
-        [
-            name for name in os.listdir(ex_dir)
-            if name.lower().endswith((".fasta", ".fa", ".fna", ".txt"))
-        ]
-    )
-
-
-def _preview_records(fasta_text: Optional[str]) -> List[Tuple[str, str]]:
-    if not fasta_text:
-        return []
-    try:
-        return parse_fasta(fasta_text)
-    except Exception:
-        return []
-
-
-def _select_result(results: List[dict], key: str, label: str = "Sequence") -> Optional[dict]:
-    valid = _valid_results(results)
-    if not valid:
-        return None
-    labels = [r["header"][:80] for r in valid]
-    if len(valid) == 1:
-        return valid[0]
-    chosen = st.selectbox(label, labels, key=key)
-    return valid[labels.index(chosen)]
-
-
-def _empty_state(title: str, message: str) -> None:
+def _page_header(kicker: str, title: str, subtitle: str) -> None:
     st.markdown(
-        f'<div class="empty-state"><strong>{title}</strong><span>{message}</span></div>',
+        f'<div style="padding:1.6rem 0 0.1rem 0">'
+        f'<span class="page-kicker">{kicker}</span>'
+        f'<h1 style="margin:0 0 0.35rem;font-size:1.9rem">{title}</h1>'
+        f'<p class="page-subtitle">{subtitle}</p>'
+        f'</div>',
         unsafe_allow_html=True,
     )
 
 
-def _page_intro(kicker: str, title: str, subtitle: str) -> None:
-    st.markdown(f'<div class="page-kicker">{kicker}</div>', unsafe_allow_html=True)
-    st.markdown(f"# {title}")
-    st.markdown(f'<div class="page-subtitle">{subtitle}</div>', unsafe_allow_html=True)
-
-
-def _hero_metric_strip(items: List[Tuple[str, str]]) -> None:
-    html = ['<div class="metric-strip">']
-    for label, value in items:
-        html.append(
-            '<div class="feature-card">'
-            f'<span class="label">{label}</span>'
-            f'<span class="value">{value}</span>'
-            '</div>'
-        )
-    html.append("</div>")
-    st.markdown("".join(html), unsafe_allow_html=True)
-
-
-def _story_cards(cards: List[Tuple[str, str, str]]) -> None:
-    html = ['<div class="story-grid">']
-    for meta, title, body in cards:
-        html.append(
-            '<div class="story-card">'
-            f'<span class="feature-meta">{meta}</span>'
-            f'<h4>{title}</h4>'
-            f'<p>{body}</p>'
-            '</div>'
-        )
-    html.append("</div>")
-    st.markdown("".join(html), unsafe_allow_html=True)
-
-
-def _workflow_cards(cards: List[Tuple[str, str, str]]) -> None:
-    html = ['<div class="workflow-ribbon">']
-    for step, title, body in cards:
-        html.append(
-            '<div class="workflow-step">'
-            f'<small>{step}</small>'
-            f'<strong>{title}</strong>'
-            f'<p>{body}</p>'
-            '</div>'
-        )
-    html.append("</div>")
-    st.markdown("".join(html), unsafe_allow_html=True)
-
-
-def _region_rank_options(rv: dict) -> List[str]:
-    return [
-        f"R{reg['rank']} · {reg['start']}-{reg['end']} · {reg['width']} bp"
-        for reg in rv["regions"]
-    ]
-
-
-def _plot_nucleotide_composition(seq: str) -> go.Figure:
-    counts = {base: seq.count(base) for base in ["A", "C", "G", "T", "N"]}
-    colors = ["#00d4ff", "#7dd3fc", "#00ff9d", "#e3b341", "#64748b"]
-    fig = go.Figure(
-        go.Bar(
-            x=list(counts.keys()),
-            y=list(counts.values()),
-            marker_color=colors,
-            hovertemplate="%{x}: %{y} bases<extra></extra>",
-        )
+def _empty_state(title: str, message: str) -> None:
+    st.markdown(
+        f'<div class="empty-state">'
+        f'<strong>{title}</strong>'
+        f'<span>{message}</span>'
+        f'</div>',
+        unsafe_allow_html=True,
     )
-    fig.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(255,255,255,0.03)",
-        font=dict(color="#dce9f8"),
-        title=dict(text="Nucleotide Composition", font=dict(color="#dce9f8")),
-        margin=dict(l=50, r=20, t=60, b=40),
-        height=280,
-        showlegend=False,
-        xaxis=dict(gridcolor="rgba(255,255,255,0.07)"),
-        yaxis=dict(title="Count", gridcolor="rgba(255,255,255,0.07)"),
-    )
+
+
+def _select_result(
+    results: List[dict], key: str, label: str = "Select sequence"
+) -> Optional[dict]:
+    valid = _valid_results(results)
+    if not valid:
+        return None
+    if len(valid) == 1:
+        return valid[0]
+    labels = [r["header"][:80] for r in valid]
+    chosen = st.selectbox(label, labels, key=key)
+    return valid[labels.index(chosen)]
+
+
+def _ltheme(fig: go.Figure, height: int = 420) -> go.Figure:
+    """Apply the light-theme layout to a core/plotting figure."""
+    fig.update_layout(**_LL, height=height)
+    fig.update_xaxes(**_LX)
+    fig.update_yaxes(**_LY)
     return fig
 
 
-def _plot_gc_heatmap(seq: str, bins: int = 36) -> go.Figure:
+# ============================================================================
+# Light-theme plot functions
+# ============================================================================
+
+
+def _plot_perplexity(
+    perp: np.ndarray,
+    baseline: np.ndarray,
+    residual: np.ndarray,
+    regions: List[dict],
+    title: str = "Perplexity Profile",
+) -> go.Figure:
+    pos = np.arange(len(perp))
+    fig = make_subplots(
+        rows=2, cols=1, shared_xaxes=True,
+        vertical_spacing=0.08,
+        subplot_titles=("Perplexity & Baseline", "Residual Signal"),
+        row_heights=[0.55, 0.45],
+    )
+    fig.add_trace(
+        go.Scatter(x=pos, y=perp, mode="lines", name="Perplexity",
+                   line=dict(color=_PC["perp"], width=1.5),
+                   hovertemplate="Pos %{x}<br>Perplexity %{y:.3f}<extra></extra>"),
+        row=1, col=1,
+    )
+    fig.add_trace(
+        go.Scatter(x=pos, y=baseline, mode="lines", name="Baseline",
+                   line=dict(color=_PC["base"], width=1.3, dash="dot"),
+                   hovertemplate="Pos %{x}<br>Baseline %{y:.3f}<extra></extra>"),
+        row=1, col=1,
+    )
+    fig.add_trace(
+        go.Scatter(x=pos, y=residual, mode="lines", name="Residual",
+                   line=dict(color=_PC["res"], width=1.3),
+                   hovertemplate="Pos %{x}<br>Residual %{y:.4f}<extra></extra>"),
+        row=2, col=1,
+    )
+    fig.add_hline(y=0, line_color="#CBD5E1", line_dash="dash",
+                  line_width=0.9, row=2, col=1)
+    for r in regions:
+        for row in (1, 2):
+            fig.add_vrect(
+                x0=r["start"], x1=r["end"],
+                fillcolor=_PC["rfill"], line_color=_PC["rline"], line_width=1.2,
+                annotation_text=f"R{r['rank']}" if row == 1 else "",
+                annotation_position="top left",
+                annotation_font_color="#2563EB", annotation_font_size=9,
+                row=row, col=1,
+            )
+        fig.add_vline(x=r["trough"], line_color=_PC["trough"],
+                      line_dash="dot", line_width=1.0, row=1, col=1)
+    fig.update_layout(
+        **_LL,
+        title=dict(text=title, font=dict(size=13, color="#0F172A")),
+        height=500,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02,
+                    xanchor="right", x=1, bgcolor="rgba(0,0,0,0)"),
+        hovermode="x unified",
+    )
+    fig.update_xaxes(title_text="Position (bp)", row=2, col=1, **_LX)
+    fig.update_yaxes(title_text="Perplexity", row=1, col=1, **_LY)
+    fig.update_yaxes(title_text="Residual", row=2, col=1, **_LY)
+    fig.update_annotations(font=dict(color="#64748B"))
+    return fig
+
+
+def _plot_composition(seq: str) -> go.Figure:
+    bases = ["A", "C", "G", "T", "N"]
+    counts = [seq.count(b) for b in bases]
+    colors = ["#2563EB", "#0EA5E9", "#10B981", "#F59E0B", "#94A3B8"]
+    fig = go.Figure(go.Bar(
+        x=bases, y=counts, marker_color=colors,
+        hovertemplate="%{x}: %{y:,}<extra></extra>",
+    ))
+    fig.update_layout(
+        **_LL,
+        title=dict(text="Nucleotide Composition", font=dict(color="#0F172A")),
+        height=280, showlegend=False,
+    )
+    fig.update_xaxes(**_LX)
+    fig.update_yaxes(title="Count", **_LY)
+    return fig
+
+
+def _plot_gc_heatmap(seq: str, bins: int = 40) -> go.Figure:
     if not seq:
         values = np.array([[0.0]])
     else:
         chunk = max(1, len(seq) // bins)
-        vals = []
-        for i in range(0, len(seq), chunk):
-            piece = seq[i: i + chunk]
-            vals.append(gc_pct(piece))
+        vals = [gc_pct(seq[i: i + chunk]) for i in range(0, len(seq), chunk)]
         values = np.array([vals])
-    fig = go.Figure(
-        go.Heatmap(
-            z=values,
-            colorscale=[
-                [0.0, "#0f172a"],
-                [0.35, "#155e75"],
-                [0.7, "#00d4ff"],
-                [1.0, "#00ff9d"],
-            ],
-            hovertemplate="GC%: %{z:.1f}<extra></extra>",
-            showscale=True,
-            colorbar=dict(title="GC%"),
-        )
-    )
+    fig = go.Figure(go.Heatmap(
+        z=values,
+        colorscale=[[0, "#EFF6FF"], [0.5, "#93C5FD"], [1, "#1D4ED8"]],
+        hovertemplate="GC%: %{z:.1f}<extra></extra>",
+        showscale=True,
+        colorbar=dict(title="GC%", tickfont=dict(color="#64748B")),
+    ))
     fig.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(255,255,255,0.03)",
-        font=dict(color="#dce9f8"),
-        title=dict(text="GC Heatmap", font=dict(color="#dce9f8")),
-        margin=dict(l=30, r=20, t=60, b=30),
+        **_LL,
+        title=dict(text="GC Heatmap", font=dict(color="#0F172A")),
         height=180,
-        xaxis=dict(showgrid=False, title="Sequence bins"),
+        xaxis=dict(showgrid=False, title="Sequence bins", **_LX),
         yaxis=dict(showgrid=False, showticklabels=False),
     )
     return fig
 
 
-def _plot_perplexity_focus(rv: dict) -> go.Figure:
-    positions = np.arange(len(rv["perp"]))
+def _plot_gc_profile(seq: str, regions: List[dict], window: int = 50) -> go.Figure:
+    n = len(seq)
+    if n < window:
+        return go.Figure()
+    arr = np.frombuffer(seq.encode(), dtype=np.uint8)
+    is_gc = ((arr == ord("G")) | (arr == ord("C"))).astype(np.float32)
+    cs = np.concatenate([[0.0], np.cumsum(is_gc)])
+    gc = (cs[window:] - cs[:-window]) / window * 100.0
+    pos = np.arange(window // 2, window // 2 + len(gc))
     fig = go.Figure()
-    fig.add_trace(
-        go.Scatter(
-            x=positions,
-            y=rv["perp"],
-            mode="lines",
-            line=dict(color="#00d4ff", width=1.35),
-            name="Perplexity",
-            hovertemplate="Position %{x}<br>Perplexity %{y:.3f}<extra></extra>",
-        )
-    )
-    for reg in rv["regions"]:
+    fig.add_trace(go.Scatter(
+        x=pos, y=gc, mode="lines", name="GC%",
+        line=dict(color=_PC["gc"], width=1.5),
+        fill="tozeroy", fillcolor="rgba(16,185,129,0.08)",
+        hovertemplate="Position %{x}<br>GC% %{y:.1f}<extra></extra>",
+    ))
+    for r in regions:
         fig.add_vrect(
-            x0=reg["start"],
-            x1=reg["end"],
-            fillcolor="rgba(0,212,255,0.10)",
-            line_color="rgba(0,212,255,0.55)",
-            line_width=1.0,
-            annotation_text=f"R{reg['rank']}",
-            annotation_position="top left",
-            annotation_font_color="#6ee7ff",
+            x0=r["start"], x1=r["end"],
+            fillcolor=_PC["rfill"], line_color=_PC["rline"], line_width=1.0,
         )
     fig.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(255,255,255,0.03)",
-        font=dict(color="#dce9f8"),
-        title=dict(text="Perplexity Profile", font=dict(color="#dce9f8")),
-        margin=dict(l=50, r=20, t=60, b=45),
-        height=360,
-        xaxis=dict(title="Position (bp)", gridcolor="rgba(255,255,255,0.07)"),
-        yaxis=dict(title="Perplexity", gridcolor="rgba(255,255,255,0.07)"),
-        hovermode="x unified",
+        **_LL,
+        title=dict(text="GC Content Profile", font=dict(color="#0F172A")),
+        height=280, hovermode="x unified",
     )
+    fig.update_xaxes(title="Position (bp)", **_LX)
+    fig.update_yaxes(title="GC%", **_LY)
     return fig
 
 
-def _plot_perplexity_distribution(perp: np.ndarray) -> go.Figure:
-    values = pd.Series(perp).dropna()
+def _plot_perp_density(perp: np.ndarray) -> go.Figure:
+    vals = pd.Series(perp).dropna()
     fig = make_subplots(
-        rows=1,
-        cols=2,
-        subplot_titles=("Density Distribution", "Position-wise Summary"),
-        column_widths=[0.58, 0.42],
+        rows=1, cols=2,
+        subplot_titles=("Density Distribution", "Summary"),
+        column_widths=[0.6, 0.4],
     )
     fig.add_trace(
-        go.Histogram(
-            x=values,
-            marker_color="#00d4ff",
-            opacity=0.8,
-            nbinsx=40,
-            hovertemplate="Perplexity %{x:.3f}<br>Count %{y}<extra></extra>",
-        ),
-        row=1,
-        col=1,
+        go.Histogram(x=vals, nbinsx=40, marker_color="#2563EB", opacity=0.82,
+                     hovertemplate="Perplexity %{x:.3f}<extra></extra>"),
+        row=1, col=1,
     )
     fig.add_trace(
-        go.Box(
-            y=values,
-            marker_color="#00ff9d",
-            boxmean=True,
-            hovertemplate="Perplexity %{y:.3f}<extra></extra>",
-            name="Perplexity",
-        ),
-        row=1,
-        col=2,
+        go.Box(y=vals, marker_color="#0EA5E9", boxmean=True,
+               name="Perplexity",
+               hovertemplate="Perplexity %{y:.3f}<extra></extra>"),
+        row=1, col=2,
     )
-    fig.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(255,255,255,0.03)",
-        font=dict(color="#dce9f8"),
-        height=320,
-        margin=dict(l=40, r=20, t=60, b=40),
-        showlegend=False,
-    )
-    fig.update_xaxes(gridcolor="rgba(255,255,255,0.07)", row=1, col=1)
-    fig.update_yaxes(gridcolor="rgba(255,255,255,0.07)", row=1, col=1)
-    fig.update_yaxes(gridcolor="rgba(255,255,255,0.07)", row=1, col=2)
+    fig.update_layout(**_LL, height=300, showlegend=False)
+    fig.update_xaxes(**_LX)
+    fig.update_yaxes(**_LY)
     return fig
 
 
-def _plot_comparative_perplexity(valid: List[dict]) -> go.Figure:
+def _plot_comparative(valid: List[dict]) -> go.Figure:
     if not valid:
         return go.Figure()
     labels = [r["header"][:28] for r in valid]
     means = [float(np.nanmean(r["perp"])) for r in valid]
-    minima = [float(np.nanmin(r["perp"])) for r in valid]
+    mins = [float(np.nanmin(r["perp"])) for r in valid]
     fig = go.Figure()
-    fig.add_trace(
-        go.Bar(
-            x=labels,
-            y=means,
-            name="Mean perplexity",
-            marker_color="#00d4ff",
-            hovertemplate="%{x}<br>Mean %{y:.3f}<extra></extra>",
-        )
-    )
-    fig.add_trace(
-        go.Scatter(
-            x=labels,
-            y=minima,
-            mode="lines+markers",
-            name="Minimum perplexity",
-            line=dict(color="#e3b341", width=2),
-            marker=dict(size=8),
-            hovertemplate="%{x}<br>Min %{y:.3f}<extra></extra>",
-        )
-    )
+    fig.add_trace(go.Bar(
+        x=labels, y=means, name="Mean perplexity",
+        marker_color="#2563EB",
+        hovertemplate="%{x}<br>Mean %{y:.3f}<extra></extra>",
+    ))
+    fig.add_trace(go.Scatter(
+        x=labels, y=mins, mode="lines+markers",
+        name="Minimum perplexity",
+        line=dict(color="#F59E0B", width=2), marker=dict(size=8),
+        hovertemplate="%{x}<br>Min %{y:.3f}<extra></extra>",
+    ))
     fig.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(255,255,255,0.03)",
-        font=dict(color="#dce9f8"),
-        title=dict(text="Comparative Perplexity Across Sequences", font=dict(color="#dce9f8")),
-        height=330,
-        margin=dict(l=50, r=20, t=60, b=80),
-        xaxis=dict(tickangle=-25, gridcolor="rgba(255,255,255,0.07)"),
-        yaxis=dict(title="Perplexity", gridcolor="rgba(255,255,255,0.07)"),
-        hovermode="x unified",
+        **_LL,
+        title=dict(text="Comparative Perplexity Across Sequences", font=dict(color="#0F172A")),
+        height=320, hovermode="x unified",
     )
+    fig.update_xaxes(tickangle=-25, **_LX)
+    fig.update_yaxes(title="Perplexity", **_LY)
     return fig
 
 
 def _plot_signal_triptych(rv: dict) -> go.Figure:
     x = np.arange(len(rv["perp"]))
     fig = make_subplots(
-        rows=3,
-        cols=1,
-        shared_xaxes=True,
-        vertical_spacing=0.05,
+        rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.05,
         subplot_titles=("Perplexity", "Rolling Baseline", "Residual Signal"),
     )
     fig.add_trace(
-        go.Scatter(x=x, y=rv["perp"], mode="lines", line=dict(color="#00d4ff", width=1.2), name="Perplexity"),
-        row=1,
-        col=1,
+        go.Scatter(x=x, y=rv["perp"], mode="lines", name="Perplexity",
+                   line=dict(color=_PC["perp"], width=1.3)),
+        row=1, col=1,
     )
     fig.add_trace(
-        go.Scatter(x=x, y=rv["baseline"], mode="lines", line=dict(color="#9baec8", width=1.2), name="Baseline"),
-        row=2,
-        col=1,
+        go.Scatter(x=x, y=rv["baseline"], mode="lines", name="Baseline",
+                   line=dict(color=_PC["base"], width=1.3)),
+        row=2, col=1,
     )
     fig.add_trace(
-        go.Scatter(x=x, y=rv["residual"], mode="lines", line=dict(color="#e3b341", width=1.2), name="Residual"),
-        row=3,
-        col=1,
+        go.Scatter(x=x, y=rv["residual"], mode="lines", name="Residual",
+                   line=dict(color=_PC["res"], width=1.3)),
+        row=3, col=1,
     )
-    for reg in rv["regions"]:
+    for r in rv["regions"]:
         for row in (1, 2, 3):
             fig.add_vrect(
-                x0=reg["start"],
-                x1=reg["end"],
-                fillcolor="rgba(0,212,255,0.08)",
-                line_color="rgba(0,212,255,0.50)",
-                line_width=1.0,
-                row=row,
-                col=1,
+                x0=r["start"], x1=r["end"],
+                fillcolor=_PC["rfill"], line_color=_PC["rline"], line_width=1.0,
+                row=row, col=1,
             )
-    fig.add_hline(y=0, line_color="#6b7280", line_dash="dash", row=3, col=1)
+    fig.add_hline(y=0, line_color="#CBD5E1", line_dash="dash", row=3, col=1)
     fig.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(255,255,255,0.03)",
-        font=dict(color="#dce9f8"),
-        height=560,
-        margin=dict(l=55, r=20, t=75, b=40),
-        showlegend=False,
-        hovermode="x unified",
+        **_LL, height=560, showlegend=False, hovermode="x unified",
     )
-    fig.update_xaxes(title="Position (bp)", gridcolor="rgba(255,255,255,0.07)", row=3, col=1)
-    fig.update_yaxes(gridcolor="rgba(255,255,255,0.07)")
+    fig.update_xaxes(title_text="Position (bp)", row=3, col=1, **_LX)
+    fig.update_yaxes(**_LY)
+    fig.update_annotations(font=dict(color="#64748B"))
     return fig
 
 
-def _plot_region_depth_width(df: pd.DataFrame) -> go.Figure:
-    fig = go.Figure()
-    if not df.empty:
-        fig.add_trace(
-            go.Scatter(
-                x=df["Width"],
-                y=df["Mean Residual"],
-                mode="markers",
-                marker=dict(
-                    size=11,
-                    color=df["GC%"] if "GC%" in df.columns else df["Width"],
-                    colorscale="Viridis",
-                    showscale=True,
-                    colorbar=dict(title="GC%"),
-                    line=dict(width=1, color="rgba(255,255,255,0.28)"),
-                ),
-                text=df["Sequence"],
-                hovertemplate=(
-                    "%{text}<br>Width %{x} bp"
-                    "<br>Mean residual %{y:.4f}<extra></extra>"
-                ),
-            )
-        )
-    fig.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(255,255,255,0.03)",
-        font=dict(color="#dce9f8"),
-        title=dict(text="Region Width vs Depth", font=dict(color="#dce9f8")),
-        height=340,
-        margin=dict(l=50, r=20, t=60, b=45),
-        xaxis=dict(title="Width (bp)", gridcolor="rgba(255,255,255,0.07)"),
-        yaxis=dict(title="Mean Residual", gridcolor="rgba(255,255,255,0.07)"),
-    )
-    return fig
-
-
-def _plot_region_rank_profile(rv: dict) -> go.Figure:
+def _plot_region_ranking(rv: dict) -> go.Figure:
     regions = rv["regions"]
     fig = go.Figure()
     if regions:
-        fig.add_trace(
-            go.Bar(
-                x=[f"R{r['rank']}" for r in regions],
-                y=[abs(r["mean_residual"]) for r in regions],
-                marker_color="#00d4ff",
-                hovertemplate="Region %{x}<br>Depth %{y:.4f}<extra></extra>",
-            )
-        )
+        fig.add_trace(go.Bar(
+            x=[f"R{r['rank']}" for r in regions],
+            y=[abs(r["mean_residual"]) for r in regions],
+            marker_color="#2563EB",
+            hovertemplate="Region %{x}<br>Depth %{y:.4f}<extra></extra>",
+        ))
     fig.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(255,255,255,0.03)",
-        font=dict(color="#dce9f8"),
-        title=dict(text="Region Depth Ranking", font=dict(color="#dce9f8")),
-        height=260,
-        margin=dict(l=40, r=20, t=55, b=40),
-        xaxis=dict(gridcolor="rgba(255,255,255,0.07)"),
-        yaxis=dict(title="Absolute mean residual", gridcolor="rgba(255,255,255,0.07)"),
-        showlegend=False,
+        **_LL,
+        title=dict(text="Region Depth Ranking", font=dict(color="#0F172A")),
+        height=260, showlegend=False,
     )
+    fig.update_xaxes(**_LX)
+    fig.update_yaxes(title="Absolute mean residual", **_LY)
     return fig
 
 
-def _plot_metric_heatmap(df: pd.DataFrame) -> go.Figure:
-    metric_cols = [col for col in ["Width", "Mean Residual", "GC%"] if col in df.columns]
-    corr = df[metric_cols].corr(numeric_only=True) if metric_cols else pd.DataFrame()
+def _plot_region_scatter(df: pd.DataFrame) -> go.Figure:
     fig = go.Figure()
-    if not corr.empty:
-        fig.add_trace(
-            go.Heatmap(
-                z=corr.values,
-                x=corr.columns,
-                y=corr.columns,
-                zmin=-1,
-                zmax=1,
-                colorscale="Tealgrn",
-                text=np.round(corr.values, 2),
-                texttemplate="%{text}",
-                hovertemplate="%{x} vs %{y}: %{z:.2f}<extra></extra>",
-            )
-        )
+    if not df.empty:
+        fig.add_trace(go.Scatter(
+            x=df["Width"],
+            y=df["Mean Residual"],
+            mode="markers",
+            marker=dict(
+                size=11,
+                color=df["GC%"] if "GC%" in df.columns else df["Width"],
+                colorscale="Blues",
+                showscale=True,
+                colorbar=dict(title="GC%", tickfont=dict(color="#64748B")),
+                line=dict(width=1, color="#FFFFFF"),
+            ),
+            text=df["Sequence"],
+            hovertemplate="%{text}<br>Width %{x} bp<br>Mean residual %{y:.4f}<extra></extra>",
+        ))
     fig.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(255,255,255,0.03)",
-        font=dict(color="#dce9f8"),
-        title=dict(text="Correlation Heatmap", font=dict(color="#dce9f8")),
-        height=320,
-        margin=dict(l=40, r=20, t=60, b=40),
+        **_LL,
+        title=dict(text="Region Width vs Depth", font=dict(color="#0F172A")),
+        height=340,
     )
+    fig.update_xaxes(title="Width (bp)", **_LX)
+    fig.update_yaxes(title="Mean Residual", **_LY)
     return fig
 
 
-def _plot_motif_sequence_heatmap(results: List[dict], active_motifs: set, window: int) -> go.Figure:
+def _plot_motif_heatmap(
+    results: List[dict], active_motifs: set, window: int
+) -> go.Figure:
     valid = _valid_results(results)
     motifs = [m for m in MOTIF_LABELS if m in active_motifs]
-    z = []
-    y_labels = []
+    z: List[list] = []
+    y_labels: List[str] = []
     for r in valid:
         y_labels.append(r["header"][:26])
         row = []
         for motif in motifs:
             total = 0
             for reg in r["regions"]:
-                total += count_motifs(_region_seq(r["seq"], reg, window), {motif}).get(motif, 0)
+                total += count_motifs(
+                    _region_seq(r["seq"], reg, window), {motif}
+                ).get(motif, 0)
             row.append(total)
         z.append(row)
     fig = go.Figure()
     if z and motifs:
-        fig.add_trace(
-            go.Heatmap(
-                z=z,
-                x=[MOTIF_LABELS.get(m, m) for m in motifs],
-                y=y_labels,
-                colorscale="Bluyl",
-                hovertemplate="%{y}<br>%{x}: %{z} hits<extra></extra>",
-            )
-        )
+        fig.add_trace(go.Heatmap(
+            z=z,
+            x=[MOTIF_LABELS.get(m, m) for m in motifs],
+            y=y_labels,
+            colorscale=[[0, "#EFF6FF"], [0.5, "#93C5FD"], [1, "#1D4ED8"]],
+            hovertemplate="%{y}<br>%{x}: %{z} hits<extra></extra>",
+        ))
     fig.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(255,255,255,0.03)",
-        font=dict(color="#dce9f8"),
-        title=dict(text="Motif Signal Across Called Regions", font=dict(color="#dce9f8")),
+        **_LL,
+        title=dict(text="Motif Signal Across Called Regions", font=dict(color="#0F172A")),
         height=max(240, 120 + 36 * max(len(y_labels), 1)),
-        margin=dict(l=100, r=20, t=60, b=40),
+        margin=dict(l=120, r=20, t=60, b=40),
     )
     return fig
 
 
-def _render_navigation() -> str:
-    if "percall_page" not in st.session_state:
-        st.session_state["percall_page"] = PAGE_CONFIG[0][0]
-
-    st.markdown(
-        '<div class="section-header">Navigation Matrix</div>',
-        unsafe_allow_html=True,
-    )
-    for start in range(0, len(PAGE_CONFIG), 4):
-        row = PAGE_CONFIG[start: start + 4]
-        cols = st.columns(4)
-        for idx, col in enumerate(cols):
-            if idx >= len(row):
-                continue
-            page_key, button_label = row[idx]
-            if col.button(button_label, key=f"nav_{page_key}", use_container_width=True):
-                st.session_state["percall_page"] = page_key
-
-    current = st.session_state["percall_page"]
-    st.markdown(
-        '<div class="nav-status">'
-        f'<strong>{current}</strong>'
-        f'<span>{PAGE_DESCRIPTIONS.get(current, "")}</span>'
-        '</div>',
-        unsafe_allow_html=True,
-    )
-    return current
-
-
 # ============================================================================
-# Sidebar controls
+# Page 1 — Home
 # ============================================================================
 
 
-def _sidebar() -> dict:
-    with st.sidebar:
-        st.markdown(
-            '<p style="font-size:1.75rem;font-weight:900;background:linear-gradient('
-            '135deg,#6ee7ff,#00ff9d);-webkit-background-clip:text;'
-            '-webkit-text-fill-color:transparent;letter-spacing:0.18em;'
-            'margin-bottom:0.1rem">PERCALL</p>'
-            '<p style="font-size:0.76rem;color:#93a8c3;letter-spacing:0.14em;'
-            'text-transform:uppercase;margin-top:0">Scientific Command Deck</p>',
-            unsafe_allow_html=True,
-        )
-        st.markdown(_DNA_ANIMATION, unsafe_allow_html=True)
-        st.divider()
-
-        st.markdown("### 🧬 Sequence Intake")
-        upload = st.file_uploader(
-            "Upload FASTA / Multi-FASTA",
-            type=["fasta", "fa", "fna", "txt"],
-            help="PERCALL accepts uploaded FASTA files, pasted sequence text, and curated examples.",
-        )
-        pasted = st.text_area(
-            "Paste Sequence",
-            height=110,
-            placeholder=">sequence_id\nATGCATGCATGC...",
-        )
-        examples = ["None"] + _example_files()
-        example_choice = st.selectbox(
-            "Example Dataset",
-            examples,
-            help="Loaded only when no upload or pasted sequence is provided.",
-        )
-
-        fasta_text: Optional[str] = None
-        if upload is not None:
-            fasta_text = upload.read().decode("utf-8", errors="replace")
-        elif pasted.strip():
-            fasta_text = pasted.strip()
-            if not fasta_text.startswith(">"):
-                fasta_text = f">pasted_sequence\n{fasta_text}"
-        elif example_choice != "None":
-            example_path = os.path.join(_ROOT, "example_data", example_choice)
-            if os.path.isfile(example_path):
-                with open(example_path, encoding="utf-8", errors="replace") as handle:
-                    fasta_text = handle.read()
-
-        st.divider()
-        st.markdown("### ⚙️ Analysis Controls")
-        window = st.slider("Perplexity Window (bp)", 4, 30, 10, 1)
-        min_len = st.slider("Min Region Length (bp)", 10, 200, 50, 5)
-        max_len = st.slider("Max Region Length (bp)", 50, 1000, 300, 10)
-        baseline_win = st.slider("Baseline Window (bp)", 50, 500, 200, 10)
-        top_k = st.slider("Max Ranked Regions", 1, 20, 5, 1)
-        score_cutoff = st.slider(
-            "Residual Score Threshold",
-            -1.0,
-            0.0,
-            -0.05,
-            0.01,
-            format="%.2f",
-        )
-
-        st.markdown("### 🧪 Structure Motifs")
-        motif_sel: Dict[str, bool] = {}
-        for key, label in MOTIF_LABELS.items():
-            motif_sel[key] = st.checkbox(label, value=True, key=f"m_{key}")
-        active_motifs = {k for k, v in motif_sel.items() if v}
-
-        st.divider()
-        run = st.button("▶ Launch Scientific Analysis", type="primary", use_container_width=True)
-
-    return {
-        "fasta_text": fasta_text,
-        "window": window,
-        "min_len": min_len,
-        "max_len": max_len,
-        "baseline_win": baseline_win,
-        "top_k": top_k,
-        "score_cutoff": score_cutoff,
-        "active_motifs": active_motifs,
-        "run": run,
-        "example_choice": example_choice,
-    }
-
-
-# ============================================================================
-# Pages
-# ============================================================================
-
-
-def _page_home(results: List[dict], params: dict) -> None:
+def _page_home(results: List[dict]) -> None:
     valid = _valid_results(results)
     total_regions = sum(len(r["regions"]) for r in valid)
     total_bp = sum(len(r["seq"]) for r in results)
 
+    # Hero
     st.markdown(
         '<div class="percall-hero">'
         '<div class="percall-logo">PERCALL</div>'
         '<div class="percall-full-name">PERplexity-based Regulatory Region CALLer</div>'
+        '<p class="percall-tagline">'
+        'Information-Theoretic Regulatory Domain Calling from DNA Sequence'
+        '</p>'
         '<div class="percall-badges">'
         '<span class="badge badge-blue">Information Theoretic</span>'
-        '<span class="badge badge-emerald">Bounded Minimum-Mean Kadane</span>'
-        '<span class="badge badge-amber">Regulatory Domain Calling</span>'
+        '<span class="badge badge-cyan">Bounded Min-Mean Kadane</span>'
+        '<span class="badge badge-green">Regulatory Domain Calling</span>'
         '<span class="badge badge-blue">Non-B DNA Annotation</span>'
-        '<span class="badge badge-emerald">Publication Grade</span>'
+        '<span class="badge badge-amber">Publication Grade</span>'
+        '<span class="badge badge-green">Open Science</span>'
         '</div>'
         '</div>',
         unsafe_allow_html=True,
     )
-    st.markdown(_DNA_ANIMATION, unsafe_allow_html=True)
+
+    st.markdown(_DNA_SVG, unsafe_allow_html=True)
+
+    # Live session metrics
+    _metric_strip([
+        ("Algorithmic core", "PERCALL"),
+        ("Sequences loaded", str(len(results)) if results else "—"),
+        ("Regions called", str(total_regions) if total_regions else "—"),
+        ("Base pairs analysed", f"{total_bp:,}" if total_bp else "—"),
+    ])
+
+    # Quick-start hint
     st.markdown(
-        '<div class="page-subtitle" style="text-align:center;margin:0 auto 1.1rem auto;">'
-        'PERCALL is presented here as a next-generation scientific environment: '
-        'perplexity signal, residual derivation, region optimisation, structural annotation, '
-        'and publication export unified in one immersive platform.'
+        '<div class="hl-card">'
+        '<h4>🚀 Quick Start</h4>'
+        '<p>Upload or paste a DNA sequence in the '
+        '<strong>Sequence &amp; Perplexity</strong> tab, configure the analysis '
+        'parameters, and click <strong>Run Analysis</strong>. '
+        'Results populate all downstream tabs automatically.</p>'
         '</div>',
         unsafe_allow_html=True,
     )
 
-    _hero_metric_strip(
-        [
-            ("Algorithmic core", "Original PERCALL"),
-            ("Sequences in session", str(len(results))),
-            ("Called regions", f"{total_regions}"),
-            ("Analysed base pairs", f"{total_bp:,}" if total_bp else "—"),
-        ]
+    # Scientific workflow
+    _section_header("Scientific Workflow")
+    st.markdown(
+        '<div class="workflow-grid">'
+        '<div class="workflow-step">'
+        '<div class="step-num">1</div>'
+        '<strong>DNA Sequence</strong>'
+        '<p>FASTA upload, pasted sequence, or curated examples</p>'
+        '</div>'
+        '<div class="workflow-step">'
+        '<div class="step-num">2</div>'
+        '<strong>Perplexity Calculation</strong>'
+        '<p>Dinucleotide entropy → positional perplexity signal</p>'
+        '</div>'
+        '<div class="workflow-step">'
+        '<div class="step-num">3</div>'
+        '<strong>Residual Signal</strong>'
+        '<p>Rolling baseline compensation isolates local troughs</p>'
+        '</div>'
+        '<div class="workflow-step">'
+        '<div class="step-num">4</div>'
+        '<strong>Bounded Min-Mean Kadane</strong>'
+        '<p>O(n) optimal region calling under length constraints</p>'
+        '</div>'
+        '<div class="workflow-step">'
+        '<div class="step-num">5</div>'
+        '<strong>Domain Calling</strong>'
+        '<p>Ranked low-perplexity regulatory domains reported</p>'
+        '</div>'
+        '<div class="workflow-step">'
+        '<div class="step-num">6</div>'
+        '<strong>Non-B DNA Annotation</strong>'
+        '<p>G4, i-Motif, Z-DNA, eGZ-DNA, STR, Triplex overlay</p>'
+        '</div>'
+        '</div>',
+        unsafe_allow_html=True,
     )
 
-    if st.button("⚡ Quick Start in Sequence Workbench", type="primary"):
-        st.session_state["percall_page"] = "Sequence Workbench"
-
-    st.markdown('<div class="section-header">Scientific Workflow</div>', unsafe_allow_html=True)
-    _workflow_cards(
-        [
-            ("Step 01", "Input Sequence", "FASTA upload, multi-sequence ingestion, and curated examples."),
-            ("Step 02", "Perplexity Profile", "Dinucleotide entropy is transformed into a positional perplexity signal."),
-            ("Step 03", "Residual Signal", "Rolling baseline compensation isolates locally unusual sequence behavior."),
-            ("Step 04", "Kadane Optimisation", "Bounded minimum-mean scanning ranks optimal low-perplexity regions."),
-            ("Step 05", "Domain & Motif Interpretation", "Regulatory domains are contextualised with Non-B DNA annotations."),
-        ]
+    # Feature cards
+    _section_header("Platform Highlights")
+    st.markdown(
+        '<div class="feature-grid">'
+        '<div class="feature-card">'
+        '<span class="fc-icon">🧬</span>'
+        '<h4>Sequence Analysis</h4>'
+        '<p>FASTA upload, composition statistics, GC profiling, '
+        'and multi-sequence comparative analytics.</p>'
+        '</div>'
+        '<div class="feature-card">'
+        '<span class="fc-icon">📈</span>'
+        '<h4>Perplexity Explorer</h4>'
+        '<p>Interactive positional perplexity and residual signal '
+        'with zoom, hover, and density distribution views.</p>'
+        '</div>'
+        '<div class="feature-card">'
+        '<span class="fc-icon">📍</span>'
+        '<h4>Region Caller</h4>'
+        '<p>Flagship bounded minimum-mean Kadane optimisation. '
+        'Region architecture maps, ranking, and trough visualisation.</p>'
+        '</div>'
+        '<div class="feature-card">'
+        '<span class="fc-icon">🔬</span>'
+        '<h4>Non-B DNA Structures</h4>'
+        '<p>G4, i-Motif, Z-DNA, eGZ-DNA, STR, PolyA/T, Direct Repeat, '
+        'Triplex enrichment and positional tracks.</p>'
+        '</div>'
+        '<div class="feature-card">'
+        '<span class="fc-icon">📊</span>'
+        '<h4>Reports &amp; Exports</h4>'
+        '<p>One-click CSV, Excel, JSON, PNG, SVG, and PDF '
+        'publication-ready outputs.</p>'
+        '</div>'
+        '<div class="feature-card">'
+        '<span class="fc-icon">⚗️</span>'
+        '<h4>Algorithmic Transparency</h4>'
+        '<p>The original PERCALL algorithm is preserved unchanged. '
+        'No alternative models or replacement callers are introduced.</p>'
+        '</div>'
+        '</div>',
+        unsafe_allow_html=True,
     )
 
-    st.markdown('<div class="section-header">Platform Highlights</div>', unsafe_allow_html=True)
-    _story_cards(
-        [
-            ("Platform", "Scientific Storytelling", "Each analysis stage is separated into focused modules so users can move from sequence intake to publication-grade outputs without losing context."),
-            ("Signal", "Residual-First Reasoning", "PERCALL explains why a region is called by exposing raw perplexity, rolling baseline, and the derived residual signal in tandem."),
-            ("Optimization", "Flagship Region Calling", "The supplied bounded minimum-mean Kadane formulation remains intact and visually central to the experience."),
-            ("Structure", "Non-B DNA Context", "Detected regions can be interpreted alongside motif-centric evidence from the supplied PERCALL motif layer."),
-            ("Export", "Publication Studio", "Figures, tables, session exports, and PDF reporting are assembled for manuscript-ready communication."),
-            ("Identity", "Premium Scientific UI", "Glassmorphism, dark laboratory aesthetics, responsive layouts, and custom navigation replace default Streamlit styling."),
-        ]
-    )
-
+    # Algorithm overview
     col1, col2 = st.columns([1.1, 0.9])
     with col1:
-        st.markdown('<div class="section-header">Core Algorithm Overview</div>', unsafe_allow_html=True)
+        _section_header("Core Algorithm")
         st.markdown(
-            '<div class="glass-card">'
-            '<div class="info-pill">Dinucleotide perplexity</div>'
+            '<div class="sci-card">'
+            '<div class="info-pill">Dinucleotide perplexity  H = −Σ p·log₂p → 2ᴴ</div>'
             '<div class="info-pill">Rolling baseline compensation</div>'
             '<div class="info-pill">Residual trough detection</div>'
             '<div class="info-pill">Bounded minimum-mean region optimisation</div>'
             '<div class="info-pill">Non-B DNA structural annotation</div>'
-            '<p style="margin-top:0.85rem;color:#90a7c2">'
-            'The platform intentionally preserves the supplied algorithmic pathway. '
-            'No alternative prediction engine, machine learning model, or replacement region caller is introduced.'
+            '<p style="margin-top:.85rem;color:#64748B;font-size:.88rem;line-height:1.65">'
+            'The platform preserves the supplied algorithmic pathway exactly. '
+            'No machine learning model, alternative region caller, or replacement predictor '
+            'is introduced at any stage.'
             '</p></div>',
             unsafe_allow_html=True,
         )
-
     with col2:
-        st.markdown('<div class="section-header">Publication Highlights</div>', unsafe_allow_html=True)
-        st.markdown(
-            '<div class="glass-card">'
-            '<div class="info-pill">Premium dark scientific presentation</div>'
-            '<div class="info-pill">Interactive sequence-to-region storytelling</div>'
-            '<div class="info-pill">Exportable Plotly figures</div>'
-            '<div class="info-pill">Session JSON, CSV, Excel, PNG, SVG, PDF pathways</div>'
-            '<div class="info-pill">Methods transparency with equations</div>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
+        _section_header("Algorithm Reference")
+        st.latex(r"H = -\sum_i p_i \log_2 p_i")
+        st.latex(r"\mathrm{Perplexity} = 2^H")
+        st.latex(r"\mathrm{Residual}(x) = \mathrm{Perplexity}(x) - \mathrm{Baseline}(x)")
 
+    # Live session preview
     if valid:
-        st.markdown('<div class="section-header">Live Session Preview</div>', unsafe_allow_html=True)
+        _section_header("Live Session Preview")
         preview = valid[0]
         c1, c2 = st.columns([1.2, 0.8])
         with c1:
             st.plotly_chart(
-                plot_perplexity_profile(
-                    preview["perp"],
-                    preview["baseline"],
-                    preview["residual"],
+                _plot_perplexity(
+                    preview["perp"], preview["baseline"], preview["residual"],
                     preview["regions"],
-                    title=f"Preview — {preview['header'][:60]}",
+                    title=f"Preview — {preview['header'][:55]}",
                 ),
                 use_container_width=True,
             )
         with c2:
             st.plotly_chart(
-                plot_sequence_domain_map(
-                    len(preview["seq"]),
-                    preview["regions"],
-                    title="Region Architecture Snapshot",
+                _ltheme(
+                    plot_sequence_domain_map(
+                        len(preview["seq"]), preview["regions"],
+                        title="Region Architecture",
+                    )
                 ),
                 use_container_width=True,
             )
     else:
         _empty_state(
             "Ready for interactive analysis",
-            "Load or paste a sequence in the Scientific Command Deck, launch the analysis, and the remaining modules will populate with live PERCALL outputs.",
+            "Navigate to the Sequence & Perplexity tab, load a FASTA file "
+            "or paste a DNA sequence, and click Run Analysis to begin.",
         )
 
 
-def _page_sequence_workbench(results: List[dict], params: dict) -> None:
-    _page_intro(
+# ============================================================================
+# Page 2 — Sequence & Perplexity Analysis
+# ============================================================================
+
+
+def _page_sequence_perplexity() -> None:
+    _page_header(
         "Page 02",
-        "Sequence Workbench",
-        "Ingest, validate, and characterise input sequence collections before moving into signal-level analysis.",
+        "Sequence & Perplexity Analysis",
+        "Upload or paste a DNA sequence, configure analysis parameters, and explore "
+        "the full perplexity signal, rolling baseline, and residual architecture.",
     )
-    preview = _preview_records(params.get("fasta_text"))
-    records = preview or [(r["header"], r["seq"]) for r in results]
-    if not records:
-        _empty_state(
-            "No sequence loaded",
-            "Upload FASTA, paste a sequence, or choose an example dataset from the command deck to populate the workbench.",
+
+    # ── Sequence input ──────────────────────────────────────────────────────
+    _section_header("A · Sequence Input")
+    col_up, col_paste = st.columns([1, 1])
+    with col_up:
+        upload = st.file_uploader(
+            "Upload FASTA / Multi-FASTA",
+            type=["fasta", "fa", "fna", "txt"],
+            help="Accepts single or multi-FASTA files.",
         )
+    with col_paste:
+        pasted = st.text_area(
+            "Paste Sequence (FASTA format)",
+            height=120,
+            placeholder=">sequence_id\nATGCATGCATGC...",
+        )
+
+    examples = _example_files()
+    example_choice = "None"
+    if examples:
+        example_choice = st.selectbox(
+            "Or load an example dataset",
+            ["None"] + examples,
+            help="Example datasets bundled with PERCALL.",
+        )
+
+    fasta_text: Optional[str] = None
+    if upload is not None:
+        fasta_text = upload.read().decode("utf-8", errors="replace")
+    elif pasted.strip():
+        fasta_text = pasted.strip()
+        if not fasta_text.startswith(">"):
+            fasta_text = f">pasted_sequence\n{fasta_text}"
+    elif example_choice != "None":
+        example_path = os.path.join(_ROOT, "example_data", example_choice)
+        if os.path.isfile(example_path):
+            with open(example_path, encoding="utf-8", errors="replace") as fh:
+                fasta_text = fh.read()
+
+    # Preview loaded records
+    if fasta_text:
+        preview_records = parse_fasta(fasta_text)
+        if preview_records:
+            st.caption(
+                f"✅ {len(preview_records)} sequence(s) loaded — "
+                f"total {sum(len(s) for _, s in preview_records):,} bp"
+            )
+
+    # ── Analysis parameters ─────────────────────────────────────────────────
+    # Defaults (always defined; overridden by widgets when expander is open)
+    window = 10
+    min_len = 50
+    max_len = 300
+    baseline_win = 200
+    top_k = 5
+    score_cutoff = -0.05
+    active_motifs: set = set(MOTIF_LABELS.keys())
+
+    with st.expander("⚙️  Analysis Parameters", expanded=False):
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            window = st.slider("Perplexity Window (bp)", 4, 30, 10, 1)
+            min_len = st.slider("Min Region Length (bp)", 10, 200, 50, 5)
+        with c2:
+            max_len = st.slider("Max Region Length (bp)", 50, 1000, 300, 10)
+            baseline_win = st.slider("Baseline Window (bp)", 50, 500, 200, 10)
+        with c3:
+            top_k = st.slider("Max Ranked Regions", 1, 20, 5, 1)
+            score_cutoff = st.slider(
+                "Residual Score Threshold", -1.0, 0.0, -0.05, 0.01,
+                format="%.2f",
+            )
+        st.markdown("**Non-B DNA Motif Selection**")
+        mc1, mc2, mc3, mc4 = st.columns(4)
+        motif_sel: Dict[str, bool] = {}
+        motif_keys = list(MOTIF_LABELS.keys())
+        per_col = max(1, (len(motif_keys) + 3) // 4)
+        for idx, key in enumerate(motif_keys):
+            col_idx = idx // per_col
+            col = [mc1, mc2, mc3, mc4][min(col_idx, 3)]
+            motif_sel[key] = col.checkbox(
+                MOTIF_LABELS[key], value=True, key=f"m2_{key}"
+            )
+        active_motifs = {k for k, v in motif_sel.items() if v}
+
+    # ── Run button ──────────────────────────────────────────────────────────
+    run_btn = st.button(
+        "▶  Run PERCALL Analysis", type="primary", use_container_width=True
+    )
+
+    current_params = {
+        "window": window, "min_len": min_len, "max_len": max_len,
+        "baseline_win": baseline_win, "top_k": top_k,
+        "score_cutoff": score_cutoff, "active_motifs": active_motifs,
+        "fasta_text": fasta_text,
+    }
+
+    if run_btn:
+        if not fasta_text:
+            st.warning("Please upload, paste, or select a sequence first.")
+        else:
+            records = parse_fasta(fasta_text)
+            if not records:
+                st.error("No valid sequences found. Check the FASTA format.")
+            else:
+                progress = st.progress(0, text="Analysing sequences…")
+                computed: List[dict] = []
+                for idx, (hdr, seq) in enumerate(records):
+                    if len(seq) < min_len + window:
+                        computed.append({
+                            "header": hdr, "seq": seq,
+                            "perp": np.array([]), "baseline": np.array([]),
+                            "residual": np.array([]),
+                            "regions": [], "skipped": True,
+                        })
+                    else:
+                        computed.append(process_sequence(
+                            hdr, seq,
+                            window=window, baseline_win=baseline_win,
+                            min_len=min_len, max_len=max_len,
+                            top_k=top_k, score_cutoff=score_cutoff,
+                            active_motifs=active_motifs,
+                        ))
+                    progress.progress(
+                        (idx + 1) / len(records),
+                        text=f"Processed {idx + 1}/{len(records)} sequences",
+                    )
+                progress.empty()
+                st.session_state["percall_results"] = computed
+                st.session_state["percall_params"] = current_params
+                st.success(
+                    f"Analysis complete — {len(computed)} sequence(s) processed."
+                )
+
+    # ── Results display ─────────────────────────────────────────────────────
+    results: List[dict] = st.session_state.get("percall_results", [])
+    stored_params: dict = st.session_state.get("percall_params", current_params)
+    valid = _valid_results(results)
+
+    if not results:
         return
 
-    total_bp = sum(len(seq) for _, seq in records)
-    mean_gc = np.mean([gc_pct(seq) for _, seq in records]) if records else 0
-    total_n = sum(seq.count("N") for _, seq in records)
-    _hero_metric_strip(
-        [
-            ("Sequences", str(len(records))),
-            ("Total bp", f"{total_bp:,}"),
-            ("Mean GC%", f"{mean_gc:.1f}%"),
-            ("Ambiguous bases", f"{total_n:,}"),
-        ]
+    # B. Sequence statistics
+    _section_header("B · Sequence Statistics")
+    total_bp = sum(len(r["seq"]) for r in results)
+    mean_gc = float(np.mean([gc_pct(r["seq"]) for r in results])) if results else 0.0
+    total_n = sum(r["seq"].count("N") for r in results)
+    total_reg = sum(len(r["regions"]) for r in valid)
+    _metric_strip([
+        ("Sequences", str(len(results))),
+        ("Total bp", f"{total_bp:,}"),
+        ("Mean GC%", f"{mean_gc:.1f}%"),
+        ("Ambiguous N", f"{total_n:,}"),
+        ("Regions called", str(total_reg)),
+    ])
+
+    seq_labels = [r["header"][:80] for r in results]
+    sel_label = st.selectbox(
+        "Inspect sequence", seq_labels, key="seq_stat_sel"
     )
+    sel_rec = results[seq_labels.index(sel_label)]
+    sel_seq = sel_rec["seq"]
 
-    df_preview = pd.DataFrame(
-        [
-            {
-                "Header": header[:70],
-                "Length (bp)": len(seq),
-                "GC%": gc_pct(seq),
-                "Ambiguous N": seq.count("N"),
-                "Validation": "Ready",
-            }
-            for header, seq in records
-        ]
-    )
-    st.dataframe(df_preview, use_container_width=True, hide_index=True)
+    c1, c2 = st.columns(2)
+    with c1:
+        st.plotly_chart(_plot_composition(sel_seq), use_container_width=True)
+    with c2:
+        st.plotly_chart(_plot_gc_heatmap(sel_seq), use_container_width=True)
 
-    labels = [header[:80] for header, _ in records]
-    selected = st.selectbox("Sequence", labels, key="workbench_seq")
-    seq = records[labels.index(selected)][1]
+    # GC profile if analysis was run
+    if not sel_rec["skipped"] and sel_rec["perp"].size > 0:
+        st.plotly_chart(
+            _plot_gc_profile(
+                sel_seq, sel_rec["regions"],
+                window=max(stored_params.get("window", 10) * 5, 50),
+            ),
+            use_container_width=True,
+        )
 
-    col1, col2 = st.columns(2)
-    with col1:
-        st.plotly_chart(_plot_nucleotide_composition(seq), use_container_width=True)
-    with col2:
-        st.plotly_chart(_plot_gc_heatmap(seq), use_container_width=True)
-
-    if results:
-        rv = next((r for r in _valid_results(results) if r["header"][:80] == selected), None)
-        if rv is not None:
-            col3, col4 = st.columns(2)
-            with col3:
-                st.plotly_chart(
-                    plot_gc_profile(
-                        rv["seq"],
-                        regions=rv["regions"],
-                        window=max(params["window"] * 5, 50),
-                        title="GC Content with Called Domains",
-                    ),
-                    use_container_width=True,
-                )
-            with col4:
-                st.plotly_chart(
-                    plot_sequence_domain_map(
-                        len(rv["seq"]),
-                        rv["regions"],
-                        title="Sequence Architecture Display",
-                    ),
-                    use_container_width=True,
-                )
-
-
-def _page_perplexity_explorer(results: List[dict]) -> None:
-    _page_intro(
-        "Page 03",
-        "Perplexity Explorer",
-        "Interact with the raw dinucleotide perplexity landscape, compare sequences, and inspect where low-complexity signal begins to emerge.",
-    )
-    valid = _valid_results(results)
+    # C. Perplexity Explorer
     if not valid:
         _empty_state(
-            "Perplexity explorer awaiting data",
-            "Run PERCALL once to unlock positional perplexity plots, density summaries, and comparative sequence analytics.",
+            "Perplexity data not available",
+            "All sequences were skipped (too short). "
+            "Reduce Min Region Length or use longer sequences.",
         )
         return
 
-    rv = _select_result(results, "perplexity_seq_sel")
+    _section_header("C · Perplexity Explorer")
+    rv = _select_result(results, "perp_seq_sel", "Sequence for perplexity analysis")
     if rv is None:
         return
-
-    col1, col2 = st.columns([1.3, 0.7])
-    with col1:
-        st.plotly_chart(_plot_perplexity_focus(rv), use_container_width=True)
-    with col2:
-        st.plotly_chart(_plot_perplexity_distribution(rv["perp"]), use_container_width=True)
-
-    _hero_metric_strip(
-        [
-            ("Mean perplexity", f"{np.nanmean(rv['perp']):.3f}"),
-            ("Minimum perplexity", f"{np.nanmin(rv['perp']):.3f}"),
-            ("Signal length", f"{len(rv['perp']):,}"),
-            ("Called regions", str(len(rv["regions"]))),
-        ]
-    )
-    st.plotly_chart(_plot_comparative_perplexity(valid), use_container_width=True)
-
-
-def _page_baseline_residual(results: List[dict]) -> None:
-    _page_intro(
-        "Page 04",
-        "Baseline & Residual Analysis",
-        "See exactly how PERCALL constructs its signal: raw perplexity, rolling baseline, and residual trough architecture in one synchronized analytical view.",
-    )
-    rv = _select_result(results, "baseline_seq_sel")
-    if rv is None:
-        _empty_state(
-            "Residual analysis awaiting data",
-            "Launch an analysis to render synchronized perplexity, baseline, and residual plots.",
-        )
-        return
-
-    st.plotly_chart(_plot_signal_triptych(rv), use_container_width=True)
-    _hero_metric_strip(
-        [
-            ("Baseline mean", f"{np.nanmean(rv['baseline']):.3f}"),
-            ("Residual minimum", f"{np.nanmin(rv['residual']):.4f}"),
-            ("Residual median", f"{np.nanmedian(rv['residual']):.4f}"),
-            ("Trough count", str(len(rv["regions"]))),
-        ]
-    )
-    _story_cards(
-        [
-            ("Interpretation", "Rolling Compensation", "The local baseline suppresses broad compositional drift so that regional departures become interpretable."),
-            ("Interpretation", "Residual Troughs", "Negative residual segments indicate windows whose perplexity falls below local expectation."),
-            ("Interpretation", "Linked Visuals", "Any parameter update in the command deck immediately recalculates all three signal layers."),
-        ]
-    )
-
-
-def _page_region_caller(results: List[dict], params: dict) -> None:
-    _page_intro(
-        "Page 05",
-        "PERCALL Region Caller",
-        "The flagship module: bounded minimum-mean Kadane optimisation, ranked regulatory domains, and direct visual explanation of why each region was called.",
-    )
-    rv = _select_result(results, "caller_seq_sel")
-    if rv is None:
-        _empty_state(
-            "Region caller awaiting analysis",
-            "Run PERCALL to populate ranked regulatory regions and their optimisation-derived architecture.",
-        )
-        return
-
-    _workflow_cards(
-        [
-            ("Phase 01", "Residual Scan", "Residual signal is segmented while NaN intervals remain hard boundaries."),
-            ("Phase 02", "Bounded Optimisation", "The minimum-mean contiguous subarray is found under user-specified length limits."),
-            ("Phase 03", "Iterative Ranking", "Detected spans are masked and the search repeats for non-overlapping ranked regions."),
-            ("Phase 04", "Structural Context", "Each ranked region is annotated with GC% and motif evidence from the supplied motif layer."),
-        ]
-    )
 
     st.plotly_chart(
-        plot_perplexity_profile(
-            rv["perp"],
-            rv["baseline"],
-            rv["residual"],
-            rv["regions"],
-            title=f"PERCALL Region Signal — {rv['header'][:60]}",
+        _plot_perplexity(
+            rv["perp"], rv["baseline"], rv["residual"], rv["regions"],
+            title=f"Perplexity Profile — {rv['header'][:55]}",
+        ),
+        use_container_width=True,
+    )
+    c1, c2 = st.columns([1.3, 0.7])
+    with c1:
+        _metric_strip([
+            ("Mean perplexity", f"{np.nanmean(rv['perp']):.3f}"),
+            ("Min perplexity", f"{np.nanmin(rv['perp']):.3f}"),
+            ("Signal length", f"{len(rv['perp']):,}"),
+            ("Regions called", str(len(rv["regions"]))),
+        ])
+    with c2:
+        st.plotly_chart(_plot_perp_density(rv["perp"]), use_container_width=True)
+
+    if len(valid) > 1:
+        st.plotly_chart(_plot_comparative(valid), use_container_width=True)
+
+    # D. Residual Analysis
+    _section_header("D · Residual Analysis")
+    st.plotly_chart(_plot_signal_triptych(rv), use_container_width=True)
+    _metric_strip([
+        ("Baseline mean", f"{np.nanmean(rv['baseline']):.3f}"),
+        ("Residual minimum", f"{np.nanmin(rv['residual']):.4f}"),
+        ("Residual median", f"{np.nanmedian(rv['residual']):.4f}"),
+        ("Trough count", str(len(rv["regions"]))),
+    ])
+
+
+# ============================================================================
+# Page 3 — PERCALL Region Caller
+# ============================================================================
+
+
+def _page_region_caller() -> None:
+    _page_header(
+        "Page 03",
+        "PERCALL Region Caller",
+        "Flagship bounded minimum-mean Kadane region-calling environment. "
+        "Explore region architecture maps, ranked domains, trough positions, "
+        "and interactive region inspection.",
+    )
+
+    results: List[dict] = st.session_state.get("percall_results", [])
+    valid = _valid_results(results)
+
+    if not valid:
+        _empty_state(
+            "Region caller awaiting analysis",
+            "Run PERCALL from the Sequence & Perplexity tab to populate "
+            "ranked regulatory regions and their optimisation-derived architecture.",
+        )
+        return
+
+    # Highlight innovation
+    st.markdown(
+        '<div class="hl-card">'
+        '<h4>PERplexity-based Regulatory Region CALLer — Core Innovation</h4>'
+        '<p>PERCALL applies a bounded minimum-mean contiguous-subarray algorithm '
+        '(Kadane family, O(n)) to the perplexity-residual signal, identifying the '
+        'statistically optimal low-perplexity regions under user-defined length constraints. '
+        'Called domains are iteratively ranked by trough depth, with each successive '
+        'region found after masking the previous.</p>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    rv = _select_result(results, "caller_seq_sel", "Sequence for region caller")
+    if rv is None:
+        return
+
+    deepest = (
+        f"{min(r['mean_residual'] for r in rv['regions']):.4f}"
+        if rv["regions"] else "—"
+    )
+    # Overview metrics
+    _metric_strip([
+        ("Sequence length", f"{len(rv['seq']):,} bp"),
+        ("Regions called", str(len(rv["regions"]))),
+        ("Deepest trough", deepest),
+        ("GC% overall", f"{gc_pct(rv['seq']):.1f}%"),
+    ])
+
+    # Main perplexity profile
+    _section_header("Region Signal Profile")
+    st.plotly_chart(
+        _plot_perplexity(
+            rv["perp"], rv["baseline"], rv["residual"], rv["regions"],
+            title=f"PERCALL Region Signal — {rv['header'][:55]}",
         ),
         use_container_width=True,
     )
 
-    col1, col2 = st.columns([1.1, 0.9])
-    with col1:
+    # Region architecture
+    c1, c2 = st.columns([1.1, 0.9])
+    with c1:
+        _section_header("Region Architecture Map")
         st.plotly_chart(
-            plot_sequence_domain_map(
-                len(rv["seq"]),
-                rv["regions"],
-                title="Region Architecture Map",
+            _ltheme(
+                plot_sequence_domain_map(
+                    len(rv["seq"]), rv["regions"],
+                    title="Region Architecture Map",
+                )
             ),
             use_container_width=True,
         )
-    with col2:
-        st.plotly_chart(_plot_region_rank_profile(rv), use_container_width=True)
+    with c2:
+        _section_header("Region Depth Ranking")
+        st.plotly_chart(_plot_region_ranking(rv), use_container_width=True)
 
+    # Region explorer
     if rv["regions"]:
-        opts = _region_rank_options(rv)
-        chosen = st.selectbox("Inspect called region", opts, key="region_browser")
+        _section_header("Region Explorer")
+        opts = [
+            f"R{r['rank']} · {r['start']}–{r['end']} bp · {r['width']} bp"
+            for r in rv["regions"]
+        ]
+        chosen = st.selectbox("Inspect region", opts, key="region_inspector")
         reg = rv["regions"][opts.index(chosen)]
-        _hero_metric_strip(
-            [
-                ("Region start", str(reg["start"])),
-                ("Region end", str(reg["end"])),
-                ("Width", f"{reg['width']} bp"),
-                ("Depth", f"{reg['mean_residual']:.4f}"),
-            ]
-        )
+        _metric_strip([
+            ("Start", str(reg["start"])),
+            ("End", str(reg["end"])),
+            ("Width", f"{reg['width']} bp"),
+            ("Trough position", str(reg["trough"])),
+            ("Mean residual", f"{reg['mean_residual']:.4f}"),
+            ("GC%", f"{reg['gc_pct']}%"),
+        ])
         st.markdown(
-            '<div class="glass-card">'
+            '<div class="sci-card">'
             f'<div class="info-pill">Rank R{reg["rank"]}</div>'
-            f'<div class="info-pill">Trough {reg["trough"]}</div>'
+            f'<div class="info-pill">Trough @ {reg["trough"]}</div>'
             f'<div class="info-pill">GC% {reg["gc_pct"]}</div>'
-            f'<div class="info-pill">Motifs {reg["motifs"] or "None detected"}</div>'
+            f'<div class="info-pill">Motifs: {reg["motifs"] or "None detected"}</div>'
             '</div>',
             unsafe_allow_html=True,
         )
 
+    # Full regions table
     df = _regions_df(results)
     if not df.empty:
-        st.markdown('<div class="section-header">Regulatory Region Ranking</div>', unsafe_allow_html=True)
+        _section_header("Regulatory Region Ranking — All Sequences")
         st.dataframe(
             df.style.background_gradient(subset=["Mean Residual"], cmap="Blues_r"),
             use_container_width=True,
             hide_index=True,
         )
-        st.plotly_chart(_plot_region_depth_width(df), use_container_width=True)
 
+        # Search / filter
+        _section_header("Region Filter")
+        cf1, cf2, cf3 = st.columns([1.1, 0.9, 0.8])
+        with cf1:
+            search = st.text_input(
+                "Search sequence label", placeholder="Fragment of sequence name",
+                key="rc_search",
+            )
+        with cf2:
+            seqs = ["All"] + sorted(df["Sequence"].unique().tolist())
+            sf = st.selectbox("Filter by sequence", seqs, key="rc_seq_filter")
+        with cf3:
+            mf = st.text_input(
+                "Filter by motif", placeholder="G4, ZDNA, …", key="rc_motif_filter"
+            )
 
-def _page_domain_explorer(results: List[dict]) -> None:
-    _page_intro(
-        "Page 06",
-        "Regulatory Domain Explorer",
-        "Search, filter, and inspect detected regulatory domains as a dedicated browser for region-level interpretation.",
-    )
-    df = _regions_df(results)
-    if df.empty:
-        _empty_state(
-            "No regulatory domains yet",
-            "Run PERCALL and return here to browse detected regions across all sequences.",
+        filtered = df.copy()
+        if search:
+            filtered = filtered[
+                filtered["Sequence"].str.contains(search, case=False, na=False)
+            ]
+        if sf != "All":
+            filtered = filtered[filtered["Sequence"] == sf]
+        if mf:
+            filtered = filtered[
+                filtered["Motifs"].str.contains(mf, case=False, na=False)
+            ]
+
+        st.caption(f"Showing **{len(filtered)}** of **{len(df)}** regions")
+        if not filtered.empty:
+            st.dataframe(
+                filtered.style.background_gradient(
+                    subset=["Mean Residual"], cmap="Blues_r"
+                ),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+        # Scatter
+        _section_header("Region Width vs Depth")
+        st.plotly_chart(_plot_region_scatter(df), use_container_width=True)
+
+        # Distribution
+        st.plotly_chart(
+            _ltheme(plot_region_distribution(df), height=340),
+            use_container_width=True,
         )
-        return
 
-    col1, col2, col3 = st.columns([1.1, 0.9, 0.8])
-    with col1:
-        search = st.text_input("Search sequence label", placeholder="Sequence name fragment")
-    with col2:
-        sequences = ["All"] + sorted(df["Sequence"].unique().tolist())
-        seq_filter = st.selectbox("Filter sequence", sequences, key="domain_seq_filter")
-    with col3:
-        motif_filter = st.text_input("Filter motif text", placeholder="G4, ZDNA, ...")
-
-    filtered = df.copy()
-    if search:
-        filtered = filtered[filtered["Sequence"].str.contains(search, case=False, na=False)]
-    if seq_filter != "All":
-        filtered = filtered[filtered["Sequence"] == seq_filter]
-    if motif_filter:
-        filtered = filtered[filtered["Motifs"].str.contains(motif_filter, case=False, na=False)]
-
-    st.markdown(f"Showing **{len(filtered)}** domains from **{len(df)}** total calls.")
-    st.dataframe(
-        filtered.style.background_gradient(subset=["Mean Residual"], cmap="Blues_r"),
-        use_container_width=True,
-        hide_index=True,
-    )
-
-    if filtered.empty:
-        return
-
-    options = [
-        f"{row.Sequence} · R{row.Rank} · {row.Start}-{row.End}"
-        for row in filtered.itertuples(index=False)
+    # Algorithmic explanation
+    _section_header("Algorithm Transparency")
+    cols = st.columns(4)
+    steps = [
+        ("Phase 1", "Residual Segmentation",
+         "The residual signal is segmented at NaN boundaries; each finite run is "
+         "searched independently."),
+        ("Phase 2", "Bounded Optimisation",
+         "Minimum-mean subarray search under min_len ≤ length ≤ max_len "
+         "via a monotonic deque — provably O(n)."),
+        ("Phase 3", "Iterative Ranking",
+         "The best-scoring span is recorded, masked to NaN, and the scan "
+         "repeats for up to top_k regions."),
+        ("Phase 4", "Structural Context",
+         "Each region is annotated with GC% and screened against the "
+         "supplied Non-B DNA motif layer."),
     ]
-    chosen = st.selectbox("Click a domain to inspect", options, key="domain_detail_sel")
-    row = filtered.iloc[options.index(chosen)]
-    _hero_metric_strip(
-        [
-            ("Sequence", row["Sequence"]),
-            ("Region rank", f"R{row['Rank']}"),
-            ("Width", f"{row['Width']} bp"),
-            ("GC%", f"{row['GC%']}"),
-        ]
-    )
-    st.markdown(
-        '<div class="glass-card">'
-        f'<div class="info-pill">Start {row["Start"]}</div>'
-        f'<div class="info-pill">End {row["End"]}</div>'
-        f'<div class="info-pill">Mean Residual {row["Mean Residual"]:.4f}</div>'
-        f'<div class="info-pill">Trough {row["Trough"]}</div>'
-        f'<div class="info-pill">Motifs {row["Motifs"] or "None detected"}</div>'
-        '</div>',
-        unsafe_allow_html=True,
-    )
+    for col, (phase, title, body) in zip(cols, steps):
+        col.markdown(
+            f'<div class="sci-card">'
+            f'<span class="page-kicker">{phase}</span>'
+            f'<strong style="display:block;color:#0F172A;margin:.2rem 0 .35rem">'
+            f'{title}</strong>'
+            f'<p style="color:#64748B;font-size:.84rem;line-height:1.55;margin:0">'
+            f'{body}</p>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
 
-def _page_nonb_center(results: List[dict], params: dict) -> None:
-    _page_intro(
-        "Page 07",
-        "Non-B DNA Structure Center",
-        "Structural genomics interpretation for PERCALL-called domains using the supplied motif definitions and region-centered enrichment analytics.",
+# ============================================================================
+# Page 4 — Non-B DNA Structure Analysis
+# ============================================================================
+
+
+def _page_nonb_dna() -> None:
+    _page_header(
+        "Page 04",
+        "Non-B DNA Structure Analysis",
+        "Structural genomics interpretation for PERCALL-called domains. "
+        "Motif enrichment, positional distribution, region overlap maps, "
+        "and interactive non-B DNA explorer.",
     )
+
+    results: List[dict] = st.session_state.get("percall_results", [])
+    stored_params: dict = st.session_state.get("percall_params", {})
     valid = _valid_results(results)
-    ordered = [m for m in MOTIF_LABELS if m in params["active_motifs"]]
-    if not valid or not ordered:
+    default_active = set(MOTIF_LABELS.keys())
+    active_motifs: set = stored_params.get("active_motifs", default_active)
+    window: int = stored_params.get("window", 10)
+
+    if not valid:
         _empty_state(
-            "Structural center awaiting motif-enabled analysis",
-            "Run PERCALL with at least one motif enabled to populate enrichment, distribution, and regional motif summaries.",
+            "Structural analysis awaiting data",
+            "Run PERCALL from the Sequence & Perplexity tab to populate "
+            "enrichment plots, motif tracks, and regional motif summaries.",
         )
         return
 
+    # Motif selector
+    _section_header("Motif Selection")
+    with st.expander("Configure motifs for this page", expanded=False):
+        mc1, mc2, mc3, mc4 = st.columns(4)
+        page_motif_sel: Dict[str, bool] = {}
+        motif_keys = list(MOTIF_LABELS.keys())
+        per_col = max(1, (len(motif_keys) + 3) // 4)
+        for idx, key in enumerate(motif_keys):
+            col_idx = idx // per_col
+            col = [mc1, mc2, mc3, mc4][min(col_idx, 3)]
+            page_motif_sel[key] = col.checkbox(
+                MOTIF_LABELS[key],
+                value=(key in active_motifs),
+                key=f"m4_{key}",
+            )
+        active_motifs = {k for k, v in page_motif_sel.items() if v}
+
+    ordered = [m for m in MOTIF_LABELS if m in active_motifs]
+
+    if not ordered:
+        st.warning("Enable at least one motif above to view structural analysis.")
+        return
+
+    # Compute counts
     total_seq_bp = sum(len(r["seq"]) for r in valid)
-    total_region_bp = sum(reg["width"] for r in valid for reg in r["regions"])
+    total_region_bp = sum(
+        reg["width"] for r in valid for reg in r["regions"]
+    )
     bg_counts: Dict[str, int] = {m: 0 for m in ordered}
     reg_counts: Dict[str, int] = {m: 0 for m in ordered}
-    motif_rows = []
+    motif_rows: List[dict] = []
 
     for r in valid:
         bg = count_motifs(r["seq"], active_motifs=set(ordered))
         for motif in ordered:
             bg_counts[motif] += bg.get(motif, 0)
         for reg in r["regions"]:
-            seq_piece = _region_seq(r["seq"], reg, params["window"])
+            seq_piece = _region_seq(r["seq"], reg, window)
             rc = count_motifs(seq_piece, active_motifs=set(ordered))
             for motif in ordered:
                 reg_counts[motif] += rc.get(motif, 0)
                 if rc.get(motif, 0) > 0:
-                    motif_rows.append(
-                        {
-                            "Sequence": r["header"][:50],
-                            "Region Rank": reg["rank"],
-                            "Motif": MOTIF_LABELS.get(motif, motif),
-                            "Count in Region": rc[motif],
-                        }
-                    )
+                    motif_rows.append({
+                        "Sequence": r["header"][:50],
+                        "Region Rank": reg["rank"],
+                        "Motif": MOTIF_LABELS.get(motif, motif),
+                        "Count in Region": rc[motif],
+                    })
 
-    _story_cards(
-        [
-            ("Supported", "G4", "G-quadruplex signatures derived from the supplied motif set."),
-            ("Supported", "i-Motif", "C-rich structural motif support from the supplied PERCALL layer."),
-            ("Supported", "Z / eGZ-DNA", "Alternating sequence and expanded repeat structures."),
-            ("Supported", "Triplex / STR / Direct Repeat / PolyA-T", "Contextual structural annotations shown without replacing the supplied algorithm."),
-        ]
+    # Supported motifs info
+    st.markdown(
+        '<div class="sci-card">'
+        '<div class="info-pill">🔴 G-Quadruplex (G4)</div>'
+        '<div class="info-pill">🟢 i-Motif</div>'
+        '<div class="info-pill">🔵 Z-DNA</div>'
+        '<div class="info-pill">🟠 eGZ-DNA</div>'
+        '<div class="info-pill">🟣 Triplex</div>'
+        '<div class="info-pill">🩵 STR</div>'
+        '<div class="info-pill">🩷 Direct Repeat</div>'
+        '<div class="info-pill">🟡 PolyA/T</div>'
+        '</div>',
+        unsafe_allow_html=True,
     )
 
-    col1, col2 = st.columns(2)
-    with col1:
+    # Enrichment plots
+    _section_header("Motif Enrichment — Regions vs Background")
+    c1, c2 = st.columns(2)
+    with c1:
         st.plotly_chart(
-            plot_motif_enrichment(reg_counts, bg_counts, total_region_bp, total_seq_bp, ordered),
+            _ltheme(
+                plot_motif_enrichment(
+                    reg_counts, bg_counts,
+                    total_region_bp, total_seq_bp, ordered,
+                ),
+                height=380,
+            ),
             use_container_width=True,
         )
-    with col2:
+    with c2:
         r0 = valid[0]
         st.plotly_chart(
-            plot_motif_distribution(
-                scan_motifs(r0["seq"], active_motifs=set(ordered)),
-                len(r0["seq"]),
-                ordered,
+            _ltheme(
+                plot_motif_distribution(
+                    scan_motifs(r0["seq"], active_motifs=set(ordered)),
+                    len(r0["seq"]), ordered,
+                ),
+                height=380,
             ),
             use_container_width=True,
         )
 
+    # Motif-region heatmap
+    _section_header("Motif Signal Across Called Regions")
     st.plotly_chart(
-        _plot_motif_sequence_heatmap(results, params["active_motifs"], params["window"]),
+        _plot_motif_heatmap(results, active_motifs, window),
         use_container_width=True,
     )
 
-    if motif_rows:
-        st.dataframe(pd.DataFrame(motif_rows), use_container_width=True, hide_index=True)
-
-
-def _page_genome_viewer(results: List[dict], params: dict) -> None:
-    _page_intro(
-        "Page 08",
-        "Interactive Genome Viewer",
-        "Inspect sequence-level architecture as coordinated tracks for sequence span, called regions, motif positions, and linked signal context.",
-    )
-    rv = _select_result(results, "genome_seq_sel")
-    if rv is None:
-        _empty_state(
-            "Genome viewer awaiting data",
-            "Launch an analysis to inspect zoomable region and motif tracks for each sequence.",
-        )
-        return
-
-    ordered = [m for m in MOTIF_LABELS if m in params["active_motifs"]]
-    motif_positions = scan_motifs(rv["seq"], active_motifs=set(ordered))
-
-    st.plotly_chart(
-        plot_genome_browser(
-            seq_len=len(rv["seq"]),
-            regions=rv["regions"],
-            motif_positions=motif_positions,
-            active_motifs=ordered,
-            seq_label=rv["header"][:40],
-        ),
-        use_container_width=True,
-    )
-
-    col1, col2 = st.columns([1.25, 0.75])
-    with col1:
+    # Genome browser
+    _section_header("Interactive Genome Viewer")
+    rv = _select_result(results, "nonb_seq_sel", "Sequence for genome viewer")
+    if rv is not None:
+        motif_positions = scan_motifs(rv["seq"], active_motifs=set(ordered))
         st.plotly_chart(
-            plot_perplexity_profile(
-                rv["perp"],
-                rv["baseline"],
-                rv["residual"],
-                rv["regions"],
-                title="Linked Signal View",
+            _ltheme(
+                plot_genome_browser(
+                    seq_len=len(rv["seq"]),
+                    regions=rv["regions"],
+                    motif_positions=motif_positions,
+                    active_motifs=ordered,
+                    seq_label=rv["header"][:40],
+                ),
+                height=420,
             ),
             use_container_width=True,
         )
-    with col2:
-        if rv["regions"]:
-            st.markdown('<div class="section-header">Region Coordinates</div>', unsafe_allow_html=True)
-            for reg in rv["regions"]:
-                st.markdown(
-                    '<div class="glass-card">'
-                    f'<div class="info-pill">R{reg["rank"]}</div>'
-                    f'<div class="info-pill">{reg["start"]}–{reg["end"]} bp</div>'
-                    f'<div class="info-pill">Width {reg["width"]} bp</div>'
-                    f'<div class="info-pill">Score {reg["mean_residual"]:.4f}</div>'
-                    '</div>',
-                    unsafe_allow_html=True,
-                )
+
+    # Summary table
+    if motif_rows:
+        _section_header("Motif Hits Within Called Regions")
+        st.dataframe(
+            pd.DataFrame(motif_rows), use_container_width=True, hide_index=True
+        )
+
+    # Structural motif overview
+    _section_header("Structural Motif Definitions")
+    defs = [
+        ("G-Quadruplex (G4)",
+         "Four G-tracts of ≥3 Gs with short loops (1–7 nt). "
+         "Balasubramanian lab consensus pattern."),
+        ("i-Motif",
+         "Four C-tracts of ≥3 Cs with short loops. "
+         "Complement of G4; forms in acidic conditions."),
+        ("Z-DNA",
+         "Alternating purine-pyrimidine repeats CG/GC/CA/TG ≥4 units. "
+         "Rich et al. (1984) approximation."),
+        ("eGZ-DNA",
+         "Expanded G/Z-DNA within CGG/GGC trinucleotide repeats ≥4 units. "
+         "Fakharzadeh et al. (2022)."),
+        ("Triplex",
+         "Purine (AG) mirror repeats ≥10 bp; triplex-forming oligonucleotides."),
+        ("STR",
+         "Short Tandem Repeats — 1–6 bp repeat unit with ≥4 copies."),
+        ("Direct Repeat",
+         "Tandem direct repeat pairs — 4–10 bp unit with ≤10 bp gap."),
+        ("PolyA/T",
+         "Homopolymeric A or T runs of ≥7 consecutive bases."),
+    ]
+    cols = st.columns(4)
+    for idx, (name, description) in enumerate(defs):
+        col = cols[idx % 4]
+        col.markdown(
+            f'<div class="sci-card" style="min-height:100px">'
+            f'<strong style="display:block;color:#0F172A;margin-bottom:.3rem;font-size:.9rem">'
+            f'{name}</strong>'
+            f'<p style="color:#64748B;font-size:.82rem;line-height:1.5;margin:0">'
+            f'{description}</p>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
 
-def _page_statistics_center(results: List[dict], params: dict) -> None:
-    _page_intro(
-        "Page 09",
-        "Statistics & Discovery Center",
-        "Aggregate analytics laboratory for region distributions, GC structure, motif activity, and cross-metric relationships.",
+# ============================================================================
+# Page 5 — Reports & Exports
+# ============================================================================
+
+
+def _page_reports() -> None:
+    _page_header(
+        "Page 05",
+        "Reports & Exports",
+        "Publication-quality figure generation, structured data exports, "
+        "and one-click PDF report for the current PERCALL session.",
     )
+
+    results: List[dict] = st.session_state.get("percall_results", [])
+    stored_params: dict = st.session_state.get("percall_params", {})
     valid = _valid_results(results)
+
     if not valid:
         _empty_state(
-            "Discovery center awaiting analysis",
-            "Run PERCALL to populate session-level summary statistics and structural discovery charts.",
+            "Reports & Exports awaiting analysis",
+            "Run PERCALL from the Sequence & Perplexity tab to enable figure export, "
+            "data tables, session packages, and PDF report generation.",
         )
         return
 
-    total_bp = sum(len(r["seq"]) for r in results)
-    mean_len = total_bp / len(results) if results else 0
-    total_regions = sum(len(r["regions"]) for r in valid)
-    motif_hits = sum(1 for r in valid for reg in r["regions"] if reg["motifs"])
-    overall_gc = sum(gc_pct(r["seq"]) * len(r["seq"]) for r in results) / total_bp if total_bp else 0
-    _hero_metric_strip(
-        [
-            ("Sequences", str(len(results))),
-            ("Total bp", f"{total_bp:,}"),
-            ("Mean length", f"{mean_len:,.0f}"),
-            ("Overall GC%", f"{overall_gc:.1f}%"),
-            ("Regions called", str(total_regions)),
-            ("Regions with motifs", str(motif_hits)),
-        ]
-    )
-
-    labels = [r["header"][:40] for r in valid]
-    counts = [len(r["regions"]) for r in valid]
-    fig_bar = go.Figure(
-        go.Bar(
-            x=labels,
-            y=counts,
-            marker_color="#00d4ff",
-            opacity=0.82,
-            hovertemplate="%{x}<br>Regions %{y}<extra></extra>",
-        )
-    )
-    fig_bar.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(255,255,255,0.03)",
-        font=dict(color="#dce9f8"),
-        title=dict(text="Region Count per Sequence", font=dict(color="#dce9f8")),
-        height=300,
-        margin=dict(l=45, r=20, t=60, b=75),
-        xaxis=dict(tickangle=-25, gridcolor="rgba(255,255,255,0.07)"),
-        yaxis=dict(title="Regions", gridcolor="rgba(255,255,255,0.07)"),
-    )
-    st.plotly_chart(fig_bar, use_container_width=True)
-
-    df = _regions_df(results)
-    if not df.empty:
-        col1, col2 = st.columns(2)
-        with col1:
-            st.plotly_chart(plot_region_distribution(df), use_container_width=True)
-        with col2:
-            st.plotly_chart(_plot_metric_heatmap(df), use_container_width=True)
-
-    st.plotly_chart(
-        _plot_motif_sequence_heatmap(results, params["active_motifs"], params["window"]),
-        use_container_width=True,
-    )
-
-
-def _page_publication_studio(results: List[dict], params: dict) -> None:
-    _page_intro(
-        "Page 10",
-        "Publication Studio",
-        "Generate manuscript-ready outputs from the current PERCALL session: tables, structured exports, figures, and a PDF-ready report pathway.",
-    )
-    valid = _valid_results(results)
-    if not valid:
-        _empty_state(
-            "Publication studio awaiting analysis",
-            "Run PERCALL to enable figure export, data tables, session packages, and PDF report generation.",
-        )
-        return
-
-    rv = _select_result(results, "publication_seq_sel")
+    rv = _select_result(results, "reports_seq_sel", "Select sequence for figures")
     if rv is None:
         return
 
     summary_df = _summary_df(results)
     regions_df = _regions_df(results)
-    profile_fig = plot_perplexity_profile(
-        rv["perp"],
-        rv["baseline"],
-        rv["residual"],
-        rv["regions"],
-        title=f"Publication Figure — {rv['header'][:60]}",
+
+    # Publication figure
+    _section_header("Publication-Ready Figure")
+    pub_fig = _plot_perplexity(
+        rv["perp"], rv["baseline"], rv["residual"], rv["regions"],
+        title=f"PERCALL — {rv['header'][:55]}",
     )
-    st.plotly_chart(profile_fig, use_container_width=True)
+    st.plotly_chart(pub_fig, use_container_width=True)
 
-    c1, c2, c3, c4, c5 = st.columns(5)
-    with c1:
-        st.download_button("CSV Summary", _df_to_csv(summary_df), "percall_summary.csv", "text/csv")
-    with c2:
-        st.download_button(
-            "Excel Summary",
-            _df_to_excel(summary_df),
-            "percall_summary.xlsx",
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    # Region architecture figure
+    arch_fig = _ltheme(
+        plot_sequence_domain_map(
+            len(rv["seq"]), rv["regions"],
+            title=f"Region Architecture — {rv['header'][:40]}",
         )
-    with c3:
-        st.download_button("CSV Regions", _df_to_csv(regions_df), "percall_regions.csv", "text/csv")
-    with c4:
-        st.download_button(
-            "Excel Regions",
-            _df_to_excel(regions_df),
-            "percall_regions.xlsx",
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-    with c5:
-        st.download_button("Session JSON", _results_to_json(results, params), "percall_session.json", "application/json")
+    )
+    st.plotly_chart(arch_fig, use_container_width=True)
 
+    # Data tables
+    _section_header("Data Tables")
+    t1, t2 = st.tabs(["Sequence Summary", "Region Details"])
+    with t1:
+        st.dataframe(summary_df, use_container_width=True, hide_index=True)
+    with t2:
+        if not regions_df.empty:
+            st.dataframe(
+                regions_df.style.background_gradient(
+                    subset=["Mean Residual"], cmap="Blues_r"
+                ),
+                use_container_width=True,
+                hide_index=True,
+            )
+        else:
+            st.info("No regions to display.")
+
+    # Data exports
+    _section_header("Data Exports")
+    ec1, ec2, ec3, ec4, ec5 = st.columns(5)
+    with ec1:
+        st.download_button(
+            "📄 CSV Summary",
+            _df_to_csv(summary_df), "percall_summary.csv", "text/csv",
+            use_container_width=True,
+        )
+    with ec2:
+        st.download_button(
+            "📊 Excel Summary",
+            _df_to_excel(summary_df), "percall_summary.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
+    with ec3:
+        st.download_button(
+            "📄 CSV Regions",
+            _df_to_csv(regions_df), "percall_regions.csv", "text/csv",
+            use_container_width=True,
+        )
+    with ec4:
+        st.download_button(
+            "📊 Excel Regions",
+            _df_to_excel(regions_df), "percall_regions.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
+    with ec5:
+        st.download_button(
+            "🗂 Session JSON",
+            _results_to_json(results, stored_params),
+            "percall_session.json", "application/json",
+            use_container_width=True,
+        )
+
+    # Image exports
+    _section_header("Figure Image Exports")
     try:
         import plotly.io as pio
-
-        png_bytes = pio.to_image(profile_fig, format="png", width=1300, height=600, scale=2)
-        svg_bytes = pio.to_image(profile_fig, format="svg", width=1300, height=600, scale=2)
-        x1, x2 = st.columns(2)
-        with x1:
-            st.download_button("⬇ High-Resolution PNG", png_bytes, "percall_profile.png", "image/png")
-        with x2:
-            st.download_button("⬇ Vector SVG", svg_bytes, "percall_profile.svg", "image/svg+xml")
+        png_bytes = pio.to_image(pub_fig, format="png", width=1400, height=620, scale=2)
+        svg_bytes = pio.to_image(pub_fig, format="svg", width=1400, height=620, scale=2)
+        ic1, ic2 = st.columns(2)
+        with ic1:
+            st.download_button(
+                "🖼 High-Resolution PNG",
+                png_bytes, "percall_profile.png", "image/png",
+                use_container_width=True,
+            )
+        with ic2:
+            st.download_button(
+                "🎨 Vector SVG",
+                svg_bytes, "percall_profile.svg", "image/svg+xml",
+                use_container_width=True,
+            )
     except Exception:
-        st.caption("Install kaleido for PNG/SVG export if these options are unavailable.")
+        st.caption(
+            "Install kaleido (pip install kaleido) to enable PNG/SVG export."
+        )
 
-    st.markdown('<div class="section-header">PDF Report Generator</div>', unsafe_allow_html=True)
-    if st.button("📄 Generate Publication PDF", type="primary"):
+    # PDF report
+    _section_header("PDF Publication Report")
+    st.markdown(
+        '<div class="hl-card">'
+        '<h4>One-Click PDF Generation</h4>'
+        '<p>Generates a publication-ready PDF containing the perplexity profile, '
+        'region table, motif enrichment, statistical summary, and full analysis '
+        'metadata for the current PERCALL session.</p>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+    if st.button("📄  Generate Publication PDF", type="primary"):
         try:
             from core.report import generate_pdf
 
-            ordered = [m for m in MOTIF_LABELS if m in params["active_motifs"]]
+            active_motifs_set = stored_params.get("active_motifs", set())
+            ordered = [m for m in MOTIF_LABELS if m in active_motifs_set]
+            window = stored_params.get("window", 10)
             motif_counts: Dict[str, int] = {m: 0 for m in ordered}
             bg_counts: Dict[str, int] = {m: 0 for m in ordered}
             reg_counts: Dict[str, int] = {m: 0 for m in ordered}
             total_region_bp = 0
             total_seq_bp = 0
+
             for r in valid:
                 mc = count_motifs(r["seq"], active_motifs=set(ordered))
                 total_seq_bp += len(r["seq"])
@@ -1990,12 +2067,15 @@ def _page_publication_studio(results: List[dict], params: dict) -> None:
                     bg_counts[motif] += mc.get(motif, 0)
                 for reg in r["regions"]:
                     total_region_bp += reg["width"]
-                    rc = count_motifs(_region_seq(r["seq"], reg, params["window"]), active_motifs=set(ordered))
+                    rc = count_motifs(
+                        _region_seq(r["seq"], reg, window),
+                        active_motifs=set(ordered),
+                    )
                     for motif in ordered:
                         reg_counts[motif] += rc.get(motif, 0)
 
             pdf_bytes = generate_pdf(
-                params=params,
+                params=stored_params,
                 seq_stats=[
                     {
                         "header": r["header"][:60],
@@ -2019,7 +2099,7 @@ def _page_publication_studio(results: List[dict], params: dict) -> None:
                 motif_labels=MOTIF_LABELS,
                 seq_label=rv["header"][:60],
             )
-            st.success("PDF report generated.")
+            st.success("PDF report generated successfully.")
             st.download_button(
                 "⬇ Download PERCALL_Report.pdf",
                 data=pdf_bytes,
@@ -2029,73 +2109,27 @@ def _page_publication_studio(results: List[dict], params: dict) -> None:
         except Exception as exc:
             st.error(f"Report generation failed: {exc}")
 
+    # Statistical summary
+    _section_header("Statistical Summary")
+    if not regions_df.empty:
+        numeric_cols = ["Width", "Mean Residual", "GC%"]
+        stat_cols = [c for c in numeric_cols if c in regions_df.columns]
+        if stat_cols:
+            st.dataframe(
+                regions_df[stat_cols].describe().round(4),
+                use_container_width=True,
+            )
 
-def _page_methods() -> None:
-    _page_intro(
-        "Page 11",
-        "Methods & Algorithm",
-        "Mathematical transparency for the supplied PERCALL method, including perplexity formulation, residual construction, and bounded minimum-mean optimisation.",
-    )
-    _workflow_cards(
-        [
-            ("Method", "Perplexity Formulation", "Sliding windows tally dinucleotide frequencies and transform Shannon entropy to perplexity units."),
-            ("Method", "Residual Construction", "A centred rolling baseline estimates local expectation and is subtracted from the raw signal."),
-            ("Method", "Kadane Family Optimisation", "A bounded minimum-mean scan identifies the optimal region under user-defined length limits."),
-            ("Method", "Structural Annotation", "Called regions are screened against the supplied motif layer for interpretive context."),
-        ]
-    )
-
-    st.latex(r"H = -\sum_i p_i \log_2 p_i")
-    st.latex(r"\mathrm{Perplexity} = 2^H")
-    st.latex(r"\mathrm{Residual}(x) = \mathrm{Perplexity}(x) - \mathrm{Baseline}(x)")
-    st.latex(
-        r"(s^\*, e^\*) = \arg\min_{L_{\min} \le e-s+1 \le L_{\max}} "
-        r"\frac{1}{e-s+1}\sum_{i=s}^{e}\mathrm{Residual}_i"
-    )
-
-    _story_cards(
-        [
-            ("Transparency", "Dinucleotide Signal", "Perplexity is computed directly from the supplied sequence windows; windows with ambiguous bases are masked."),
-            ("Transparency", "Local Baseline", "The centred rolling mean compensates for background drift while preserving local trough structure."),
-            ("Transparency", "No Replacement Algorithms", "The bounded minimum-mean Kadane-family region caller is preserved exactly as the core optimisation strategy."),
-            ("Transparency", "Motif Definitions", "Structural context is restricted to motif classes already present in the supplied PERCALL codebase."),
-        ]
-    )
-
-
-def _page_about() -> None:
-    _page_intro(
-        "Page 12",
-        "About PERCALL",
-        "Tool identity, scientific motivation, citation guidance, versioning, and repository context for the PERCALL platform.",
-    )
-    st.markdown(
-        '<div class="glass-card">'
-        '<div class="info-pill">Scientific focus: regulatory region calling from perplexity signal</div>'
-        '<div class="info-pill">Core innovation: bounded minimum-mean Kadane optimisation</div>'
-        '<div class="info-pill">Structural context: supplied Non-B DNA motif layer</div>'
-        '<div class="info-pill">Interface: premium Streamlit scientific platform</div>'
-        '<div class="info-pill">Version: 2025.2</div>'
-        '</div>',
-        unsafe_allow_html=True,
-    )
+    # Citation
+    _section_header("Citation")
     st.code(
-        textwrap.dedent(
-            """\
+        textwrap.dedent("""\
             Yella VR (2025). PERCALL: PERplexity-based Regulatory Region CALLer.
             An information-theoretic framework for identifying low-perplexity regulatory
             DNA regions using bounded minimum-mean Kadane optimisation.
             GitHub: https://github.com/VRYella/PerCALL
-            """
-        ),
+        """),
         language=None,
-    )
-    _story_cards(
-        [
-            ("Credits", "Scientific Motivation", "PERCALL explores how locally unusual low-perplexity sequence architecture can reveal regulatory DNA regions."),
-            ("Credits", "Documentation", "Methods, exports, and visuals are aligned around the supplied PERCALL manuscript-driven workflow."),
-            ("Credits", "Repository", "The platform runs directly from this repository’s supplied algorithms without introducing replacement predictors."),
-        ]
     )
 
 
@@ -2105,81 +2139,40 @@ def _page_about() -> None:
 
 
 def main() -> None:
-    params = _sidebar()
+    # Brand bar (above tabs)
+    st.markdown(_BRAND_BAR, unsafe_allow_html=True)
 
-    results: List[dict]
-    if params["run"] and params["fasta_text"]:
-        records = parse_fasta(params["fasta_text"])
-        if not records:
-            st.error("No valid sequences found. Please check the FASTA formatting.")
-            return
+    # Five-page horizontal navigation via st.tabs
+    (
+        tab_home,
+        tab_seq,
+        tab_region,
+        tab_nonb,
+        tab_reports,
+    ) = st.tabs([
+        "🏠  Home",
+        "🧬  Sequence & Perplexity",
+        "📍  Region Caller",
+        "🔬  Non-B DNA",
+        "📊  Reports & Exports",
+    ])
 
-        progress = st.progress(0, text="Analysing sequences…")
-        results = []
-        for idx, (header, seq) in enumerate(records):
-            if len(seq) < params["min_len"] + params["window"]:
-                results.append(
-                    {
-                        "header": header,
-                        "seq": seq,
-                        "perp": np.array([]),
-                        "baseline": np.array([]),
-                        "residual": np.array([]),
-                        "regions": [],
-                        "skipped": True,
-                    }
-                )
-            else:
-                results.append(
-                    process_sequence(
-                        header,
-                        seq,
-                        window=params["window"],
-                        baseline_win=params["baseline_win"],
-                        min_len=params["min_len"],
-                        max_len=params["max_len"],
-                        top_k=params["top_k"],
-                        score_cutoff=params["score_cutoff"],
-                        active_motifs=params["active_motifs"],
-                    )
-                )
-            progress.progress((idx + 1) / len(records), text=f"Processed {idx + 1}/{len(records)} sequences")
-        progress.empty()
-        st.session_state["percall_results"] = results
-        st.session_state["percall_params"] = params
-    elif "percall_results" in st.session_state:
-        results = st.session_state["percall_results"]
-        stored_params = st.session_state.get("percall_params", {})
-        params = {**stored_params, **params}
-    else:
-        results = []
+    results: List[dict] = st.session_state.get("percall_results", [])
 
-    current_page = _render_navigation()
+    with tab_home:
+        _page_home(results)
 
-    if current_page == "Home":
-        _page_home(results, params)
-    elif current_page == "Sequence Workbench":
-        _page_sequence_workbench(results, params)
-    elif current_page == "Perplexity Explorer":
-        _page_perplexity_explorer(results)
-    elif current_page == "Baseline & Residual Analysis":
-        _page_baseline_residual(results)
-    elif current_page == "PERCALL Region Caller":
-        _page_region_caller(results, params)
-    elif current_page == "Regulatory Domain Explorer":
-        _page_domain_explorer(results)
-    elif current_page == "Non-B DNA Structure Center":
-        _page_nonb_center(results, params)
-    elif current_page == "Interactive Genome Viewer":
-        _page_genome_viewer(results, params)
-    elif current_page == "Statistics & Discovery Center":
-        _page_statistics_center(results, params)
-    elif current_page == "Publication Studio":
-        _page_publication_studio(results, params)
-    elif current_page == "Methods & Algorithm":
-        _page_methods()
-    elif current_page == "About PERCALL":
-        _page_about()
+    with tab_seq:
+        _page_sequence_perplexity()
+
+    with tab_region:
+        _page_region_caller()
+
+    with tab_nonb:
+        _page_nonb_dna()
+
+    with tab_reports:
+        _page_reports()
 
 
 if __name__ == "__main__":
