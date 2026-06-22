@@ -1,0 +1,6 @@
+motif,observed,obs_pct,background_count,background_pct,fold_enrichment,fisher_p
+G4,878,10.25,0,0.0,inf,2.5276891822898323e-275
+iMotif,866,10.11,0,0.0,inf,2.0054058782480844e-271
+ZDNA,383,4.47,13,0.152,29.5,8.399438098273018e-98
+eGZDNA,87,1.02,0,0.0,inf,5.1887597062616266e-27
+Triplex,1780,20.78,241,2.814,7.4,5e-324
