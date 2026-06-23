@@ -49,6 +49,8 @@ over positions.  Suitable for chromosome-scale analysis.
 
 from __future__ import annotations
 
+from typing import List
+
 import numpy as np
 
 
@@ -323,7 +325,7 @@ def compute_rdi(
             return float(d)
         return float("nan")
 
-    raw_rdi: list[float] = []
+    raw_rdi: List[float] = []
 
     for reg in regions:
         gs, ge = reg["start"], reg["end"]

@@ -666,10 +666,10 @@ def process_sequence(
     RDI     – Regulatory Depression Index scoring and domain classification
     """
     p1 = compute_perplexity(seq, window=window)
-    empty_array = np.array([], dtype=np.float32)
+    empty_float32_array = np.array([], dtype=np.float32)
     if p1.size == 0 or np.all(np.isnan(p1)):
-        empty_depression_dict: dict = {
-            k: empty_array for k in (
+        empty_depression_profile: dict = {
+            k: empty_float32_array for k in (
                 "p1_dep", "p2_dep", "composite",
                 "p1_domain_mean", "p2_domain_mean",
                 "p1_flank_mean", "p2_flank_mean",
@@ -677,11 +677,11 @@ def process_sequence(
         }
         return {
             "header": header, "seq": seq,
-            "perp": p1, "p2": empty_array,
-            "baseline": empty_array, "p2_baseline": empty_array,
-            "residual": empty_array, "p2_residual": empty_array,
-            "composite": empty_array, "dep": empty_depression_dict,
-            "kadane_signal": empty_array, "using_depression": False,
+            "perp": p1, "p2": empty_float32_array,
+            "baseline": empty_float32_array, "p2_baseline": empty_float32_array,
+            "residual": empty_float32_array, "p2_residual": empty_float32_array,
+            "composite": empty_float32_array, "dep": empty_depression_profile,
+            "kadane_signal": empty_float32_array, "using_depression": False,
             "regions": [], "skipped": True,
         }
 
@@ -1910,7 +1910,7 @@ def _page_sequence_perplexity() -> None:
     max_len = 300
     baseline_win = 200
     top_k = 5
-    score_cutoff = -1.1
+    score_cutoff = -1.1  # Depression ratios > 1 → -depression < -1; -1.1 keeps moderate depressions
     active_motifs: set = set(MOTIF_LABELS.keys())
     p2_window = 100
     p1_weight = 0.5
