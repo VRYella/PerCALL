@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 import os
 import re
 import sys
@@ -21,6 +22,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
+
+_LOG = logging.getLogger(__name__)
 
 _ROOT = os.path.dirname(os.path.abspath(__file__))
 if _ROOT not in sys.path:
@@ -899,17 +902,22 @@ def _ltheme(fig: go.Figure, height: int = 420) -> go.Figure:
     return fig
 
 
-def _styled_dataframe(
+def _show_dataframe(
     df: pd.DataFrame, gradient_column: Optional[str] = None
-) -> object:
+) -> None:
+    data = df
     if gradient_column and gradient_column in df.columns:
         try:
-            return df.style.background_gradient(
+            data = df.style.background_gradient(
                 subset=[gradient_column], cmap="Blues"
             )
         except (AttributeError, ImportError, ModuleNotFoundError):
-            pass
-    return df
+            _LOG.debug(
+                "Falling back to unstyled dataframe for column %s",
+                gradient_column,
+                exc_info=True,
+            )
+    st.dataframe(data, use_container_width=True, hide_index=True)
 
 
 # ============================================================================
@@ -2049,11 +2057,7 @@ def _page_region_caller() -> None:
     if not df.empty:
         _section_header("Regulatory Domain Table — All Sequences")
         grad_col = "RAI" if "RAI" in df.columns else "Mean_Residual"
-        st.dataframe(
-            _styled_dataframe(df, grad_col),
-            use_container_width=True,
-            hide_index=True,
-        )
+        _show_dataframe(df, grad_col)
 
         # Search / filter
         _section_header("Region Filter")
@@ -2086,11 +2090,7 @@ def _page_region_caller() -> None:
         st.caption(f"Showing **{len(filtered)}** of **{len(df)}** regions")
         if not filtered.empty:
             fgrad = "RAI" if "RAI" in filtered.columns else "Mean_Residual"
-            st.dataframe(
-                _styled_dataframe(filtered, fgrad),
-                use_container_width=True,
-                hide_index=True,
-            )
+            _show_dataframe(filtered, fgrad)
 
         # Scatter
         _section_header("Region Width vs Depth")
@@ -2244,10 +2244,7 @@ def _page_hierarchical() -> None:
             })
         rai_df = pd.DataFrame(rows)
         rai_col = "RAI" if "RAI" in rai_df.columns else "Mean_Residual"
-        st.dataframe(
-            _styled_dataframe(rai_df, rai_col),
-            use_container_width=True, hide_index=True,
-        )
+        _show_dataframe(rai_df, rai_col)
 
     # Scientific explanation
     _section_header("RAI — Regulatory Architecture Index")
@@ -2547,11 +2544,7 @@ def _page_reports() -> None:
     with t2:
         if not regions_df.empty:
             rai_col = "RAI" if "RAI" in regions_df.columns else "Mean_Residual"
-            st.dataframe(
-                _styled_dataframe(regions_df, rai_col),
-                use_container_width=True,
-                hide_index=True,
-            )
+            _show_dataframe(regions_df, rai_col)
         else:
             st.info("No regions to display.")
 
