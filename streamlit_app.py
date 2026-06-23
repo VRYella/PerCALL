@@ -666,10 +666,10 @@ def process_sequence(
     RDI     – Regulatory Depression Index scoring and domain classification
     """
     p1 = compute_perplexity(seq, window=window)
-    empty = np.array([], dtype=np.float32)
+    empty_array = np.array([], dtype=np.float32)
     if p1.size == 0 or np.all(np.isnan(p1)):
-        dep_empty: dict = {
-            k: empty for k in (
+        empty_depression_dict: dict = {
+            k: empty_array for k in (
                 "p1_dep", "p2_dep", "composite",
                 "p1_domain_mean", "p2_domain_mean",
                 "p1_flank_mean", "p2_flank_mean",
@@ -677,11 +677,11 @@ def process_sequence(
         }
         return {
             "header": header, "seq": seq,
-            "perp": p1, "p2": empty,
-            "baseline": empty, "p2_baseline": empty,
-            "residual": empty, "p2_residual": empty,
-            "composite": empty, "dep": dep_empty,
-            "kadane_signal": empty, "using_depression": False,
+            "perp": p1, "p2": empty_array,
+            "baseline": empty_array, "p2_baseline": empty_array,
+            "residual": empty_array, "p2_residual": empty_array,
+            "composite": empty_array, "dep": empty_depression_dict,
+            "kadane_signal": empty_array, "using_depression": False,
             "regions": [], "skipped": True,
         }
 
@@ -1216,8 +1216,12 @@ _RDI_CLASS_COLORS = {
     "III": "#F59E0B",
     "IV":  "#94A3B8",
 }
-# Keep old name as alias for any remaining references
+# Keep old names as aliases for any remaining references
 _RAI_CLASS_COLORS = _RDI_CLASS_COLORS
+
+
+def _rai_legend() -> None:
+    _rdi_legend()
 
 
 # ---------------------------------------------------------------------------
@@ -1278,7 +1282,12 @@ def _plot_depression_profile(rv: dict) -> go.Figure:
     return fig
 
 
-def _plot_three_window_model(rv: dict, region_idx: int = 0) -> go.Figure:
+def _plot_three_window_model(
+    rv: dict,
+    region_idx: int = 0,
+    spacer: int = 50,
+    flank_win: int = 100,
+) -> go.Figure:
     """
     Interactive three-window depression illustration for a specific domain.
 
@@ -1299,9 +1308,6 @@ def _plot_three_window_model(rv: dict, region_idx: int = 0) -> go.Figure:
         v = arr[a:b]
         v = v[np.isfinite(v)]
         return float(np.mean(v)) if len(v) else float("nan")
-
-    spacer = 50
-    flank_win = 100
 
     window_labels = ["Upstream Flank", "Domain", "Downstream Flank"]
     p1_vals, p2_vals = [], []
@@ -2463,7 +2469,11 @@ def _page_hierarchical() -> None:
             key="hier_3win_sel",
         )
         st.plotly_chart(
-            _plot_three_window_model(rv, chosen_idx),
+            _plot_three_window_model(
+                rv, chosen_idx,
+                spacer=stored_params.get("spacer", 50),
+                flank_win=stored_params.get("flank_win", 100),
+            ),
             use_container_width=True,
         )
         st.caption(
@@ -2644,11 +2654,6 @@ def _rdi_legend() -> None:
         '</div>',
         unsafe_allow_html=True,
     )
-
-
-# keep old name as alias
-def _rai_legend() -> None:
-    _rdi_legend()
 
 
 # ============================================================================
