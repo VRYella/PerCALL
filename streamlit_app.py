@@ -1635,7 +1635,7 @@ def _page_region_caller() -> None:
         _section_header("Regulatory Region Ranking — All Sequences")
         try:
             styled = df.style.background_gradient(subset=["Mean Residual"], cmap="Blues_r")
-        except Exception:
+        except (ImportError, TypeError, AttributeError):
             styled = df
         st.dataframe(styled, use_container_width=True, hide_index=True)
 
@@ -1673,7 +1673,7 @@ def _page_region_caller() -> None:
                 filtered_styled = filtered.style.background_gradient(
                     subset=["Mean Residual"], cmap="Blues_r"
                 )
-            except Exception:
+            except (ImportError, TypeError, AttributeError):
                 filtered_styled = filtered
             st.dataframe(filtered_styled, use_container_width=True, hide_index=True)
 
@@ -1968,7 +1968,7 @@ def _page_reports() -> None:
                 regions_styled = regions_df.style.background_gradient(
                     subset=["Mean Residual"], cmap="Blues_r"
                 )
-            except Exception:
+            except (ImportError, TypeError, AttributeError):
                 regions_styled = regions_df
             st.dataframe(regions_styled, use_container_width=True, hide_index=True)
         else:
