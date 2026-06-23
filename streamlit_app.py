@@ -1451,10 +1451,9 @@ def _plot_motif_heatmap(
             hovertemplate="%{y}<br>%{x}: %{z} hits<extra></extra>",
         ))
     fig.update_layout(
-        **_LL,
+        **{**_LL, "margin": dict(l=120, r=20, t=60, b=40)},
         title=dict(text="Motif Signal Across Called Regions", font=dict(color="#0F172A")),
         height=max(240, 120 + 36 * max(len(y_labels), 1)),
-        margin=dict(l=120, r=20, t=60, b=40),
     )
     return fig
 
