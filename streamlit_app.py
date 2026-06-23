@@ -1,7 +1,7 @@
 """
 streamlit_app.py
 ────────────────
-PERCALL — PERplexity-based Regulatory Region CALLer
+REGPLEX — Regulatory Domain Discovery Using DNA Sequence Perplexity
 Premium Scientific Platform · White Theme · 5-Page Horizontal Navbar
 """
 
@@ -42,7 +42,7 @@ from core.region_caller import find_regions
 # ============================================================================
 
 st.set_page_config(
-    page_title="PERCALL — Scientific Platform",
+    page_title="REGPLEX — Scientific Platform",
     page_icon="🧬",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -173,11 +173,11 @@ h3 { color: #1E293B !important; font-weight: 600 !important; }
 .badge-amber { background: #FEF3C7; color: #92400E; border: 1px solid #FCD34D; }
 
 /* ── Hero section ── */
-.percall-hero {
+.regplex-hero {
     text-align: center;
     padding: 3.8rem 1rem 1.8rem 1rem;
 }
-.percall-logo {
+.regplex-logo {
     font-size: 5.2rem;
     font-weight: 900;
     letter-spacing: 0.24em;
@@ -188,7 +188,7 @@ h3 { color: #1E293B !important; font-weight: 600 !important; }
     -webkit-text-fill-color: transparent;
     background-clip: text;
 }
-.percall-full-name {
+.regplex-full-name {
     color: #64748B;
     letter-spacing: 0.2em;
     text-transform: uppercase;
@@ -196,7 +196,7 @@ h3 { color: #1E293B !important; font-weight: 600 !important; }
     font-weight: 500;
     margin-bottom: 0.8rem;
 }
-.percall-tagline {
+.regplex-tagline {
     color: #0F172A;
     font-size: 1.6rem;
     font-weight: 700;
@@ -205,7 +205,7 @@ h3 { color: #1E293B !important; font-weight: 600 !important; }
     margin: 0 auto 1.4rem auto;
     line-height: 1.35;
 }
-.percall-badges {
+.regplex-badges {
     display: flex;
     justify-content: center;
     gap: 0.4rem;
@@ -483,7 +483,7 @@ div[data-testid="metric-container"] label {
 
 /* ── Responsive ── */
 @media (max-width: 900px) {
-    .percall-logo { font-size: 3.5rem; letter-spacing: 0.14em; }
+    .regplex-logo { font-size: 3.5rem; letter-spacing: 0.14em; }
     .workflow-grid { grid-template-columns: 1fr 1fr 1fr; }
     .feature-grid  { grid-template-columns: 1fr; }
     [data-baseweb="tab"] { padding: 0.75rem 0.7rem !important; font-size: 0.72rem !important; }
@@ -500,9 +500,9 @@ st.markdown(_CSS, unsafe_allow_html=True)
 
 _BRAND_BAR = """
 <div class="brand-bar">
-  <span class="brand-logo-text">PERCALL</span>
+  <span class="brand-logo-text">REGPLEX</span>
   <span class="brand-sep">·</span>
-  <span class="brand-desc">PERplexity-based Regulatory Region CALLer</span>
+  <span class="brand-desc">Regulatory Domain Discovery Using DNA Sequence Perplexity</span>
 </div>"""
 
 _DNA_SVG = """
@@ -623,7 +623,7 @@ def process_sequence(
     score_cutoff: float,
     active_motifs: set,
 ) -> dict:
-    """Run the full PERCALL pipeline on a single sequence."""
+    """Run the full REGPLEX pipeline on a single sequence."""
     perp = compute_perplexity(seq, window=window)
     if perp.size == 0 or np.all(np.isnan(perp)):
         return {
@@ -668,7 +668,7 @@ def _results_to_json(results: List[dict], params: dict) -> bytes:
     }
     safe_params["active_motifs"] = sorted(params.get("active_motifs", []))
     session = {
-        "percall_version": "2025.2",
+        "regplex_version": "2025.2",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "parameters": safe_params,
         "sequences": [
@@ -1106,13 +1106,13 @@ def _page_home(results: List[dict]) -> None:
 
     # Hero
     st.markdown(
-        '<div class="percall-hero">'
-        '<div class="percall-logo">PERCALL</div>'
-        '<div class="percall-full-name">PERplexity-based Regulatory Region CALLer</div>'
-        '<p class="percall-tagline">'
+        '<div class="regplex-hero">'
+        '<div class="regplex-logo">REGPLEX</div>'
+        '<div class="regplex-full-name">Regulatory Domain Discovery Using DNA Sequence Perplexity</div>'
+        '<p class="regplex-tagline">'
         'Information-Theoretic Regulatory Domain Calling from DNA Sequence'
         '</p>'
-        '<div class="percall-badges">'
+        '<div class="regplex-badges">'
         '<span class="badge badge-blue">Information Theoretic</span>'
         '<span class="badge badge-cyan">Bounded Min-Mean Kadane</span>'
         '<span class="badge badge-green">Regulatory Domain Calling</span>'
@@ -1128,7 +1128,7 @@ def _page_home(results: List[dict]) -> None:
 
     # Live session metrics
     _metric_strip([
-        ("Algorithmic core", "PERCALL"),
+        ("Algorithmic core", "REGPLEX"),
         ("Sequences loaded", str(len(results)) if results else "—"),
         ("Regions called", str(total_regions) if total_regions else "—"),
         ("Base pairs analysed", f"{total_bp:,}" if total_bp else "—"),
@@ -1221,7 +1221,7 @@ def _page_home(results: List[dict]) -> None:
         '<div class="feature-card">'
         '<span class="fc-icon">⚗️</span>'
         '<h4>Algorithmic Transparency</h4>'
-        '<p>The original PERCALL algorithm is preserved unchanged. '
+        '<p>The original REGPLEX algorithm is preserved unchanged. '
         'No alternative models or replacement callers are introduced.</p>'
         '</div>'
         '</div>',
@@ -1319,7 +1319,7 @@ def _page_sequence_perplexity() -> None:
         example_choice = st.selectbox(
             "Or load an example dataset",
             ["None"] + examples,
-            help="Example datasets bundled with PERCALL.",
+            help="Example datasets bundled with REGPLEX.",
         )
 
     fasta_text: Optional[str] = None
@@ -1383,7 +1383,7 @@ def _page_sequence_perplexity() -> None:
 
     # ── Run button ──────────────────────────────────────────────────────────
     run_btn = st.button(
-        "▶  Run PERCALL Analysis", type="primary", use_container_width=True
+        "▶  Run REGPLEX Analysis", type="primary", use_container_width=True
     )
 
     current_params = {
@@ -1424,15 +1424,15 @@ def _page_sequence_perplexity() -> None:
                         text=f"Processed {idx + 1}/{len(records)} sequences",
                     )
                 progress.empty()
-                st.session_state["percall_results"] = computed
-                st.session_state["percall_params"] = current_params
+                st.session_state["regplex_results"] = computed
+                st.session_state["regplex_params"] = current_params
                 st.success(
                     f"Analysis complete — {len(computed)} sequence(s) processed."
                 )
 
     # ── Results display ─────────────────────────────────────────────────────
-    results: List[dict] = st.session_state.get("percall_results", [])
-    stored_params: dict = st.session_state.get("percall_params", current_params)
+    results: List[dict] = st.session_state.get("regplex_results", [])
+    stored_params: dict = st.session_state.get("regplex_params", current_params)
     valid = _valid_results(results)
 
     if not results:
@@ -1522,26 +1522,26 @@ def _page_sequence_perplexity() -> None:
 
 
 # ============================================================================
-# Page 3 — PERCALL Region Caller
+# Page 3 — REGPLEX Region Caller
 # ============================================================================
 
 
 def _page_region_caller() -> None:
     _page_header(
         "Page 03",
-        "PERCALL Region Caller",
+        "REGPLEX Region Caller",
         "Flagship bounded minimum-mean Kadane region-calling environment. "
         "Explore region architecture maps, ranked domains, trough positions, "
         "and interactive region inspection.",
     )
 
-    results: List[dict] = st.session_state.get("percall_results", [])
+    results: List[dict] = st.session_state.get("regplex_results", [])
     valid = _valid_results(results)
 
     if not valid:
         _empty_state(
             "Region caller awaiting analysis",
-            "Run PERCALL from the Sequence & Perplexity tab to populate "
+            "Run REGPLEX from the Sequence & Perplexity tab to populate "
             "ranked regulatory regions and their optimisation-derived architecture.",
         )
         return
@@ -1549,8 +1549,8 @@ def _page_region_caller() -> None:
     # Highlight innovation
     st.markdown(
         '<div class="hl-card">'
-        '<h4>PERplexity-based Regulatory Region CALLer — Core Innovation</h4>'
-        '<p>PERCALL applies a bounded minimum-mean contiguous-subarray algorithm '
+        '<h4>Regulatory Domain Discovery Using DNA Sequence Perplexity — Core Innovation</h4>'
+        '<p>REGPLEX applies a bounded minimum-mean contiguous-subarray algorithm '
         '(Kadane family, O(n)) to the perplexity-residual signal, identifying the '
         'statistically optimal low-perplexity regions under user-defined length constraints. '
         'Called domains are iteratively ranked by trough depth, with each successive '
@@ -1580,7 +1580,7 @@ def _page_region_caller() -> None:
     st.plotly_chart(
         _plot_perplexity(
             rv["perp"], rv["baseline"], rv["residual"], rv["regions"],
-            title=f"PERCALL Region Signal — {rv['header'][:55]}",
+            title=f"REGPLEX Region Signal — {rv['header'][:55]}",
         ),
         use_container_width=True,
     )
@@ -1726,13 +1726,13 @@ def _page_nonb_dna() -> None:
     _page_header(
         "Page 04",
         "Non-B DNA Structure Analysis",
-        "Structural genomics interpretation for PERCALL-called domains. "
+        "Structural genomics interpretation for REGPLEX-called domains. "
         "Motif enrichment, positional distribution, region overlap maps, "
         "and interactive non-B DNA explorer.",
     )
 
-    results: List[dict] = st.session_state.get("percall_results", [])
-    stored_params: dict = st.session_state.get("percall_params", {})
+    results: List[dict] = st.session_state.get("regplex_results", [])
+    stored_params: dict = st.session_state.get("regplex_params", {})
     valid = _valid_results(results)
     default_active = set(MOTIF_LABELS.keys())
     active_motifs: set = stored_params.get("active_motifs", default_active)
@@ -1741,7 +1741,7 @@ def _page_nonb_dna() -> None:
     if not valid:
         _empty_state(
             "Structural analysis awaiting data",
-            "Run PERCALL from the Sequence & Perplexity tab to populate "
+            "Run REGPLEX from the Sequence & Perplexity tab to populate "
             "enrichment plots, motif tracks, and regional motif summaries.",
         )
         return
@@ -1918,17 +1918,17 @@ def _page_reports() -> None:
         "Page 05",
         "Reports & Exports",
         "Publication-quality figure generation, structured data exports, "
-        "and one-click PDF report for the current PERCALL session.",
+        "and one-click PDF report for the current REGPLEX session.",
     )
 
-    results: List[dict] = st.session_state.get("percall_results", [])
-    stored_params: dict = st.session_state.get("percall_params", {})
+    results: List[dict] = st.session_state.get("regplex_results", [])
+    stored_params: dict = st.session_state.get("regplex_params", {})
     valid = _valid_results(results)
 
     if not valid:
         _empty_state(
             "Reports & Exports awaiting analysis",
-            "Run PERCALL from the Sequence & Perplexity tab to enable figure export, "
+            "Run REGPLEX from the Sequence & Perplexity tab to enable figure export, "
             "data tables, session packages, and PDF report generation.",
         )
         return
@@ -1944,7 +1944,7 @@ def _page_reports() -> None:
     _section_header("Publication-Ready Figure")
     pub_fig = _plot_perplexity(
         rv["perp"], rv["baseline"], rv["residual"], rv["regions"],
-        title=f"PERCALL — {rv['header'][:55]}",
+        title=f"REGPLEX — {rv['header'][:55]}",
     )
     st.plotly_chart(pub_fig, use_container_width=True)
 
@@ -1980,26 +1980,26 @@ def _page_reports() -> None:
     with ec1:
         st.download_button(
             "📄 CSV Summary",
-            _df_to_csv(summary_df), "percall_summary.csv", "text/csv",
+            _df_to_csv(summary_df), "regplex_summary.csv", "text/csv",
             use_container_width=True,
         )
     with ec2:
         st.download_button(
             "📊 Excel Summary",
-            _df_to_excel(summary_df), "percall_summary.xlsx",
+            _df_to_excel(summary_df), "regplex_summary.xlsx",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True,
         )
     with ec3:
         st.download_button(
             "📄 CSV Regions",
-            _df_to_csv(regions_df), "percall_regions.csv", "text/csv",
+            _df_to_csv(regions_df), "regplex_regions.csv", "text/csv",
             use_container_width=True,
         )
     with ec4:
         st.download_button(
             "📊 Excel Regions",
-            _df_to_excel(regions_df), "percall_regions.xlsx",
+            _df_to_excel(regions_df), "regplex_regions.xlsx",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True,
         )
@@ -2007,7 +2007,7 @@ def _page_reports() -> None:
         st.download_button(
             "🗂 Session JSON",
             _results_to_json(results, stored_params),
-            "percall_session.json", "application/json",
+            "regplex_session.json", "application/json",
             use_container_width=True,
         )
 
@@ -2021,13 +2021,13 @@ def _page_reports() -> None:
         with ic1:
             st.download_button(
                 "🖼 High-Resolution PNG",
-                png_bytes, "percall_profile.png", "image/png",
+                png_bytes, "regplex_profile.png", "image/png",
                 use_container_width=True,
             )
         with ic2:
             st.download_button(
                 "🎨 Vector SVG",
-                svg_bytes, "percall_profile.svg", "image/svg+xml",
+                svg_bytes, "regplex_profile.svg", "image/svg+xml",
                 use_container_width=True,
             )
     except Exception:
@@ -2042,7 +2042,7 @@ def _page_reports() -> None:
         '<h4>One-Click PDF Generation</h4>'
         '<p>Generates a publication-ready PDF containing the perplexity profile, '
         'region table, motif enrichment, statistical summary, and full analysis '
-        'metadata for the current PERCALL session.</p>'
+        'metadata for the current REGPLEX session.</p>'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -2101,9 +2101,9 @@ def _page_reports() -> None:
             )
             st.success("PDF report generated successfully.")
             st.download_button(
-                "⬇ Download PERCALL_Report.pdf",
+                "⬇ Download REGPLEX_Report.pdf",
                 data=pdf_bytes,
-                file_name="PERCALL_Report.pdf",
+                file_name="REGPLEX_Report.pdf",
                 mime="application/pdf",
             )
         except Exception as exc:
@@ -2124,7 +2124,7 @@ def _page_reports() -> None:
     _section_header("Citation")
     st.code(
         textwrap.dedent("""\
-            Yella VR (2025). PERCALL: PERplexity-based Regulatory Region CALLer.
+            Yella VR (2025). REGPLEX: Regulatory Domain Discovery Using DNA Sequence Perplexity.
             An information-theoretic framework for identifying low-perplexity regulatory
             DNA regions using bounded minimum-mean Kadane optimisation.
             GitHub: https://github.com/VRYella/PerCALL
@@ -2157,7 +2157,7 @@ def main() -> None:
         "📊  Reports & Exports",
     ])
 
-    results: List[dict] = st.session_state.get("percall_results", [])
+    results: List[dict] = st.session_state.get("regplex_results", [])
 
     with tab_home:
         _page_home(results)

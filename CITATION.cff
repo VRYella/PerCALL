@@ -1,23 +1,23 @@
 cff-version: 1.2.0
-title: "CisPerplexity: Advanced Promoter Prediction Tool"
+title: "REGPLEX: Regulatory Domain Discovery Using DNA Sequence Perplexity"
 message: "If you use this software, please cite it as below."
 type: software
 authors:
-  - family-names: "VRYella"
-    given-names: "CisPerplexity Team"
+  - family-names: "Yella"
+    given-names: "Venkata Rajesh"
     orcid: "https://orcid.org/0000-0000-0000-0000"
-repository-code: "https://github.com/VRYella/CisPerplexity"
-url: "https://github.com/VRYella/CisPerplexity"
+repository-code: "https://github.com/VRYella/PerCALL"
+url: "https://github.com/VRYella/PerCALL"
 abstract: >-
-  CisPerplexity is an advanced bioinformatics tool for predicting 
-  promoter regions in DNA sequences using an integrated approach that 
-  combines dinucleotide perplexity analysis, structural features, and 
-  promoter motif detection. The tool employs Kadane's Algorithm for 
-  optimal low-perplexity region detection and provides a professional 
-  web interface for analysis and visualization.
+  REGPLEX is an advanced bioinformatics tool for discovering regulatory
+  domains in DNA sequences using an integrated approach that combines
+  dinucleotide perplexity analysis, structural features, and Non-B DNA
+  motif detection. The tool employs Kadane's algorithm for optimal
+  low-perplexity region detection and provides a professional web
+  interface for analysis and visualization.
 keywords:
   - bioinformatics
-  - promoter prediction
+  - regulatory domain discovery
   - DNA analysis
   - perplexity analysis
   - Kadane's algorithm
@@ -26,4 +26,4 @@ keywords:
   - streamlit
 license: MIT
 version: "1.0.0"
-date-released: "2024-01-01"
+date-released: "2025-01-01"

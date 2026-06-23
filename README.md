@@ -1,10 +1,10 @@
 <div align="center">
 
-# 🧬 PERCALL
+# 🧬 REGPLEX
 
-**PERplexity-based Regulatory Region CALLer**
+**Regulatory Domain Discovery Using DNA Sequence Perplexity**
 
-*Predict promoter regions in DNA sequences using information theory, Kadane's algorithm, and Non-B DNA structure detection — all from a sleek scientific web interface.*
+*Predict regulatory domains in DNA sequences using information theory, Kadane's algorithm, and Non-B DNA structure detection — all from a sleek scientific web interface.*
 
 [![Python](https://img.shields.io/badge/Python-3.8%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.28%2B-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)](https://streamlit.io)
@@ -15,9 +15,9 @@
 
 ---
 
-## ✨ What is PERCALL?
+## ✨ What is REGPLEX?
 
-PERCALL analyses DNA sequences and **calls candidate regulatory / promoter regions** by combining three complementary signals:
+REGPLEX analyses DNA sequences and **discovers regulatory domains** by combining three complementary signals:
 
 | Signal | Method | Rationale |
 |--------|--------|-----------|
@@ -25,14 +25,14 @@ PERCALL analyses DNA sequences and **calls candidate regulatory / promoter regio
 | 🔍 **Non-B DNA motifs** | Regex scanning (8 classes) | Structural motifs are enriched at regulatory loci |
 | 🏆 **Kadane's algorithm** | Modified minimum-subarray | Globally optimal low-perplexity region extraction |
 
-The result is a ranked list of predicted regulatory windows with confidence scores, interactive visualisations, and one-click data export.
+The result is a ranked list of predicted regulatory domains with confidence scores, interactive visualisations, and one-click data export.
 
 ---
 
 ## 🗂 Repository Layout
 
 ```
-PerCALL/
+REGPLEX/
 ├── streamlit_app.py        ← main web application (single entry-point)
 ├── core/
 │   ├── motifs.py           ← Non-B DNA regex patterns & scanning
@@ -75,7 +75,7 @@ streamlit run streamlit_app.py
 
 ## 🖥 Interface Overview
 
-PERCALL is a **five-page horizontal-navbar app** — no sidebar, no clutter.
+REGPLEX is a **five-page horizontal-navbar app** — no sidebar, no clutter.
 
 | Tab | Purpose |
 |-----|---------|
@@ -91,7 +91,7 @@ PERCALL is a **five-page horizontal-navbar app** — no sidebar, no clutter.
 
 ### 1 · Dinucleotide Perplexity
 
-For a window of length *w* centred at position *i*, PERCALL calculates the **Shannon perplexity** over the 16 possible dinucleotide frequencies:
+For a window of length *w* centred at position *i*, REGPLEX calculates the **Shannon perplexity** over the 16 possible dinucleotide frequencies:
 
 ```
 H  = -Σ p(xy) · log₂ p(xy)
@@ -102,7 +102,7 @@ Low perplexity → skewed dinucleotide usage → promoter-like composition.
 
 ### 2 · Kadane-based Region Caller
 
-Rather than applying a fixed threshold, PERCALL uses a **modified minimum-subarray (Kadane's) algorithm** on the perplexity signal to find the contiguous windows with the globally lowest cumulative perplexity — delivering results that adapt to each sequence.
+Rather than applying a fixed threshold, REGPLEX uses a **modified minimum-subarray (Kadane's) algorithm** on the perplexity signal to find the contiguous windows with the globally lowest cumulative perplexity — delivering results that adapt to each sequence.
 
 ### 3 · Non-B DNA Motif Scanning
 
@@ -177,11 +177,11 @@ CI runs on Python 3.8 · 3.9 · 3.10 · 3.11 via GitHub Actions (see `.github/wo
 
 ## 📚 Citation
 
-If PERCALL contributes to your research, please cite:
+If REGPLEX contributes to your research, please cite:
 
 ```bibtex
-@software{percall2024,
-  title   = {{PERCALL}: PERplexity-based Regulatory Region CALLer},
+@software{regplex2025,
+  title   = {{REGPLEX}: Regulatory Domain Discovery Using DNA Sequence Perplexity},
   author  = {Yella, Venkata Rajesh},
   year    = {2024},
   url     = {https://github.com/VRYella/PerCALL},
