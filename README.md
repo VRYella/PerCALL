@@ -183,7 +183,7 @@ If REGPLEX contributes to your research, please cite:
 @software{regplex2025,
   title   = {{REGPLEX}: Regulatory Domain Discovery Using DNA Sequence Perplexity},
   author  = {Yella, Venkata Rajesh},
-  year    = {2024},
+  year    = {2025},
   url     = {https://github.com/VRYella/PerCALL},
   license = {MIT}
 }
