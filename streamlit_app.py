@@ -867,11 +867,11 @@ def _plot_composition(seq: str) -> go.Figure:
 
 def _plot_gc_heatmap(seq: str, bins: int = 40) -> go.Figure:
     if not seq:
-        values = np.array([[0.0]])
+        values = [[0.0]]
     else:
         chunk = max(1, len(seq) // bins)
         vals = [gc_pct(seq[i: i + chunk]) for i in range(0, len(seq), chunk)]
-        values = np.array([vals])
+        values = [vals]
     fig = go.Figure(go.Heatmap(
         z=values,
         colorscale=[[0, "#EFF6FF"], [0.5, "#93C5FD"], [1, "#1D4ED8"]],
@@ -1633,11 +1633,11 @@ def _page_region_caller() -> None:
     df = _regions_df(results)
     if not df.empty:
         _section_header("Regulatory Region Ranking — All Sequences")
-        st.dataframe(
-            df.style.background_gradient(subset=["Mean Residual"], cmap="Blues_r"),
-            use_container_width=True,
-            hide_index=True,
-        )
+        try:
+            styled = df.style.background_gradient(subset=["Mean Residual"], cmap="Blues_r")
+        except Exception:
+            styled = df
+        st.dataframe(styled, use_container_width=True, hide_index=True)
 
         # Search / filter
         _section_header("Region Filter")
@@ -1669,13 +1669,13 @@ def _page_region_caller() -> None:
 
         st.caption(f"Showing **{len(filtered)}** of **{len(df)}** regions")
         if not filtered.empty:
-            st.dataframe(
-                filtered.style.background_gradient(
+            try:
+                filtered_styled = filtered.style.background_gradient(
                     subset=["Mean Residual"], cmap="Blues_r"
-                ),
-                use_container_width=True,
-                hide_index=True,
-            )
+                )
+            except Exception:
+                filtered_styled = filtered
+            st.dataframe(filtered_styled, use_container_width=True, hide_index=True)
 
         # Scatter
         _section_header("Region Width vs Depth")
@@ -1964,13 +1964,13 @@ def _page_reports() -> None:
         st.dataframe(summary_df, use_container_width=True, hide_index=True)
     with t2:
         if not regions_df.empty:
-            st.dataframe(
-                regions_df.style.background_gradient(
+            try:
+                regions_styled = regions_df.style.background_gradient(
                     subset=["Mean Residual"], cmap="Blues_r"
-                ),
-                use_container_width=True,
-                hide_index=True,
-            )
+                )
+            except Exception:
+                regions_styled = regions_df
+            st.dataframe(regions_styled, use_container_width=True, hide_index=True)
         else:
             st.info("No regions to display.")
 
