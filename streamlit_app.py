@@ -1391,7 +1391,7 @@ def _plot_domain_ranking_rai(regions: List[dict]) -> go.Figure:
             textposition="top center",
             textfont=dict(size=9, color="#0F172A"),
             hovertemplate=(
-                "R%{text}<br>"
+                "%{text}<br>"
                 "Width %{x} bp<br>"
                 "RAI %{y:.4f}<br>"
                 f"Class {cls_name}<extra></extra>"

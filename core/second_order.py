@@ -35,7 +35,6 @@ element operations — well within NumPy's vectorised throughput.
 from __future__ import annotations
 
 import numpy as np
-from numpy.lib.stride_tricks import sliding_window_view  # noqa: F401 – kept for API symmetry
 
 
 def compute_second_order_perplexity(
