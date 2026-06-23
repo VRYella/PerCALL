@@ -899,6 +899,19 @@ def _ltheme(fig: go.Figure, height: int = 420) -> go.Figure:
     return fig
 
 
+def _styled_dataframe(
+    df: pd.DataFrame, gradient_column: Optional[str] = None
+) -> object:
+    if gradient_column and gradient_column in df.columns:
+        try:
+            return df.style.background_gradient(
+                subset=[gradient_column], cmap="Blues"
+            )
+        except (AttributeError, ImportError, ModuleNotFoundError):
+            pass
+    return df
+
+
 # ============================================================================
 # Light-theme plot functions
 # ============================================================================
@@ -2038,9 +2051,7 @@ def _page_region_caller() -> None:
         _section_header("Regulatory Domain Table — All Sequences")
         grad_col = "RAI" if "RAI" in df.columns else "Mean_Residual"
         st.dataframe(
-            df.style.background_gradient(
-                subset=[grad_col], cmap="Blues"
-            ),
+            _styled_dataframe(df, grad_col),
             use_container_width=True,
             hide_index=True,
         )
@@ -2077,9 +2088,7 @@ def _page_region_caller() -> None:
         if not filtered.empty:
             fgrad = "RAI" if "RAI" in filtered.columns else "Mean_Residual"
             st.dataframe(
-                filtered.style.background_gradient(
-                    subset=[fgrad], cmap="Blues"
-                ),
+                _styled_dataframe(filtered, fgrad),
                 use_container_width=True,
                 hide_index=True,
             )
@@ -2237,7 +2246,7 @@ def _page_hierarchical() -> None:
         rai_df = pd.DataFrame(rows)
         rai_col = "RAI" if "RAI" in rai_df.columns else "Mean_Residual"
         st.dataframe(
-            rai_df.style.background_gradient(subset=[rai_col], cmap="Blues"),
+            _styled_dataframe(rai_df, rai_col),
             use_container_width=True, hide_index=True,
         )
 
@@ -2540,9 +2549,7 @@ def _page_reports() -> None:
         if not regions_df.empty:
             rai_col = "RAI" if "RAI" in regions_df.columns else "Mean_Residual"
             st.dataframe(
-                regions_df.style.background_gradient(
-                    subset=[rai_col], cmap="Blues"
-                ),
+                _styled_dataframe(regions_df, rai_col),
                 use_container_width=True,
                 hide_index=True,
             )
