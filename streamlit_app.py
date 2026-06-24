@@ -1000,11 +1000,11 @@ def _plot_composition(seq: str) -> go.Figure:
 
 def _plot_gc_heatmap(seq: str, bins: int = 40) -> go.Figure:
     if not seq:
-        values = np.array([[0.0]])
+        values = [[0.0]]
     else:
         chunk = max(1, len(seq) // bins)
         vals = [gc_pct(seq[i: i + chunk]) for i in range(0, len(seq), chunk)]
-        values = np.array([vals])
+        values = [vals]
     fig = go.Figure(go.Heatmap(
         z=values,
         colorscale=[[0, "#EFF6FF"], [0.5, "#93C5FD"], [1, "#1D4ED8"]],
