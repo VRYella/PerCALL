@@ -43,7 +43,7 @@ SCIENTIFIC_THEME_CSS = """
     --bg2:       #0a1830;
     --bg3:       #0d1f3a;
     --text:      #e7edf7;
-    --muted:     #7a9bbf;
+    --muted:     #9fb3cc;
     --line:      rgba(120,157,201,0.2);
     --cyan:      #35d0ff;
     --purple:    #8a7dff;

@@ -44,7 +44,7 @@ _BASE_LAYOUT = dict(
     ),
     legend=dict(bgcolor="rgba(7,17,38,0.6)", bordercolor=_GRID, borderwidth=1),
     hoverlabel=dict(
-        bgcolor="#0d1f3a", bordercolor=_CYAN,
+        bgcolor=_BG2, bordercolor=_CYAN,
         font=dict(color=_TEXT, size=12),
     ),
 )
@@ -253,11 +253,11 @@ def plot_domain_statistics(domains: list[dict]) -> go.Figure:
         ([d.get("Variance_P1", 0) for d in domains], _GOLD, "Variance P1", 2, 1),
         ([d.get("RCS", 0) for d in domains], _GREEN, "RCS", 2, 2),
     ]
-    for vals, col, name, row, col_num in datasets:
+    for vals, color, name, row, col_num in datasets:
         fig.add_trace(
             go.Histogram(
                 x=vals, name=name,
-                marker=dict(color=col, **hist_cfg),
+                marker=dict(color=color, **hist_cfg),
                 hovertemplate=f"{name}: %{{x}}<br>Count: %{{y}}<extra></extra>",
             ),
             row=row, col=col_num,
