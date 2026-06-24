@@ -216,10 +216,12 @@ def domain_statistics(start: int, end: int, p1: np.ndarray, pdi: np.ndarray, seq
     var_p1 = float(np.nanvar(finite_p1)) if finite_p1.size else float("nan")
     sd_p1 = float(np.sqrt(var_p1)) if np.isfinite(var_p1) else float("nan")
     cv_p1 = float(sd_p1 / (mean_p1 + EPSILON)) if np.isfinite(sd_p1) and np.isfinite(mean_p1) else float("nan")
-    persistence = float(np.mean(finite_pdi > 0)) if finite_pdi.size else 0.0
+    # Persistence is the fraction of positions with positive PDI inside the domain.
+    persistence = (float(np.sum(finite_pdi > 0) / len(finite_pdi)) if finite_pdi.size else 0.0)
     mean_pdi = float(np.nanmean(finite_pdi)) if finite_pdi.size else float("nan")
     length = max(1, end - start + 1)
     stability = 1.0 / (var_p1 + EPSILON) if np.isfinite(var_p1) else 0.0
+    # RCS = Contrast(mean_pdi) × Persistence × LengthFactor(log L) × Stability(1/variance).
     rcs_raw = (mean_pdi if np.isfinite(mean_pdi) else 0.0) * persistence * math.log(length + 1) * stability
     gc = (s.count("G") + s.count("C")) / max(len(s), 1)
     return {
@@ -245,11 +247,11 @@ def score_and_classify(domains: list[dict]) -> list[dict]:
     raw = np.where(np.isfinite(raw), raw, 0.0)
     lo, hi = float(raw.min()), float(raw.max())
     span = hi - lo
-    for i, d in enumerate(domains, start=1):
-        rcs = 0.0 if span < EPSILON else float((raw[i - 1] - lo) / span)
+    for i, d in enumerate(domains):
+        rcs = 0.0 if span < EPSILON else float((raw[i] - lo) / span)
         d["RCS"] = rcs
         d["Class"] = "I" if rcs > 0.80 else "II" if rcs >= 0.60 else "III" if rcs >= 0.40 else "IV"
-        d["Domain_ID"] = f"REGPLEX_{i:04d}"
+        d["Domain_ID"] = f"REGPLEX_{i + 1:04d}"
         d.pop("RCS_raw", None)
     return domains
 

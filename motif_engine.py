@@ -45,9 +45,15 @@ def annotate_domains(domains: list[dict], compiled_motifs: list[tuple[str, re.Pa
         seq = d.get("Sequence", "")
         hits = []
         for raw, pat in compiled_motifs:
-            count = len(list(pat.finditer(seq)))
+            count = sum(1 for _ in pat.finditer(seq))
             if count:
                 hits.append(f"{raw}:{count}")
-        d["Motif_Count"] = sum(int(h.split(":", 1)[1]) for h in hits) if hits else 0
+        total = 0
+        for h in hits:
+            try:
+                total += int(h.rsplit(":", 1)[1])
+            except (IndexError, ValueError):
+                continue
+        d["Motif_Count"] = total
         d["Motifs"] = ";".join(hits)
     return domains

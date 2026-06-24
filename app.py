@@ -74,7 +74,13 @@ def main() -> None:
             spacer = st.number_input("Spacer", 0, 500, SPACER)
             min_domain = st.number_input("Minimum Domain Length", 20, 2000, MIN_DOMAIN)
         with c3:
-            max_domain = st.number_input("Maximum Domain Length", int(min_domain), 5000, MAX_DOMAIN)
+            max_default = max(int(min_domain), MAX_DOMAIN)
+            max_domain = st.number_input(
+                "Maximum Domain Length",
+                int(min_domain),
+                5000,
+                max_default,
+            )
             top_domains = st.number_input("Top Domains", 1, 5000, TOP_DOMAINS)
         motif_text = st.text_area("Optional motifs (one per line; IUPAC or regex)", height=120)
 
