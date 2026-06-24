@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from motif_engine import annotate_domains, compile_motifs
+from motif_engine import NON_B_MOTIFS, annotate_domains, compile_motifs
 from regplex_core import (
     DOWNSTREAM_WINDOW,
     DOMAIN_WINDOW,
@@ -82,7 +82,7 @@ def main() -> None:
                 max_default,
             )
             top_domains = st.number_input("Top Domains", 1, 5000, TOP_DOMAINS)
-        motif_text = st.text_area("Optional motifs (one per line; IUPAC or regex)", height=120)
+        motif_text = st.text_area("Additional motifs (one per line; IUPAC or regex)", height=120)
 
         if st.button("Run Analysis", type="primary"):
             pasted_text = pasted.strip()
@@ -128,7 +128,13 @@ def main() -> None:
         if df.empty:
             st.info("Run analysis first.")
         else:
-            st.code(st.session_state.get("motif_text", "") or "No motifs provided")
+            st.subheader("Built-in Non-B DNA Motifs (always applied)")
+            st.table(
+                [{"Name": name, "Pattern": pattern} for name, pattern in NON_B_MOTIFS.items()]
+            )
+            user_motifs = st.session_state.get("motif_text", "").strip()
+            st.subheader("User-provided Motifs")
+            st.code(user_motifs or "None")
             st.plotly_chart(plot_motif_architecture(df.to_dict("records")), use_container_width=True)
 
     with tabs[4]:
