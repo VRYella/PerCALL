@@ -129,9 +129,7 @@ def main() -> None:
             st.info("Run analysis first.")
         else:
             st.subheader("Built-in Non-B DNA Motifs (always applied)")
-            st.table(
-                [{"Name": name, "Pattern": pattern} for name, pattern in NON_B_MOTIFS.items()]
-            )
+            st.table(pd.DataFrame(list(NON_B_MOTIFS.items()), columns=["Name", "Pattern"]))
             user_motifs = st.session_state.get("motif_text", "").strip()
             st.subheader("User-provided Motifs")
             st.code(user_motifs or "None")

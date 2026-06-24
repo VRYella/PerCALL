@@ -5,7 +5,7 @@ import re
 # Built-in non-B DNA structural motif patterns (always applied during annotation).
 NON_B_MOTIFS: dict[str, str] = {
     "G_Quadruplex": r"G{3,}[ACGT]{1,7}G{3,}[ACGT]{1,7}G{3,}[ACGT]{1,7}G{3,}",
-    "i_Motif": r"C{3,}[ACGT]{1,7}C{3,}[ACGT]{1,7}C{3,}[ACGT]{1,7}C{3,}",
+    "I_Motif": r"C{3,}[ACGT]{1,7}C{3,}[ACGT]{1,7}C{3,}[ACGT]{1,7}C{3,}",
     "Z_DNA": r"(?:[GC][AT]){3,}",
     "A_Phased": r"AAAA[ACGT]{4,8}AAAA",
     "H_DNA_Purine": r"[AG]{10,}",
