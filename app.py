@@ -74,7 +74,7 @@ def main() -> None:
             spacer = st.number_input("Spacer", 0, 500, SPACER)
             min_domain = st.number_input("Minimum Domain Length", 20, 2000, MIN_DOMAIN)
         with c3:
-            max_default = max(int(min_domain), MAX_DOMAIN)
+            max_default = min(max(int(min_domain), MAX_DOMAIN), 5000)
             max_domain = st.number_input(
                 "Maximum Domain Length",
                 int(min_domain),
@@ -85,11 +85,12 @@ def main() -> None:
         motif_text = st.text_area("Optional motifs (one per line; IUPAC or regex)", height=120)
 
         if st.button("Run Analysis", type="primary"):
+            pasted_text = pasted.strip()
             fasta_text = ""
             if upload is not None:
                 fasta_text = upload.read().decode("utf-8", errors="replace")
-            elif pasted.strip():
-                fasta_text = pasted.strip() if pasted.strip().startswith(">") else f">query\n{pasted.strip()}"
+            elif pasted_text:
+                fasta_text = pasted_text if pasted_text.startswith(">") else f">query\n{pasted_text}"
             if not fasta_text:
                 st.warning("Please upload or paste FASTA.")
             else:

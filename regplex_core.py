@@ -126,11 +126,11 @@ def compute_pdi(
         up_start = up_end - upstream_window
         dn_start = dom_end + spacer
         dn_end = dn_start + downstream_window
-        u = _window_mean(csum, ccount, up_start, up_end)
-        dm = _window_mean(csum, ccount, dom_start, dom_end)
-        v = _window_mean(csum, ccount, dn_start, dn_end)
-        if np.isfinite(u) and np.isfinite(dm) and np.isfinite(v):
-            out[d] = np.float32(((u + v) / 2.0) - dm)
+        upstream_mean = _window_mean(csum, ccount, up_start, up_end)
+        domain_mean = _window_mean(csum, ccount, dom_start, dom_end)
+        downstream_mean = _window_mean(csum, ccount, dn_start, dn_end)
+        if np.isfinite(upstream_mean) and np.isfinite(domain_mean) and np.isfinite(downstream_mean):
+            out[d] = np.float32(((upstream_mean + downstream_mean) / 2.0) - domain_mean)
     return out
 
 
@@ -149,9 +149,11 @@ def bounded_min_mean(arr: np.ndarray, min_len: int, max_len: int) -> tuple[int |
         i_max = j - min_len + 1
         if i_max < 0:
             continue
+        # Maintain monotonic deque of candidate starts with increasing prefix sums.
         while dq and pref[dq[-1]] >= pref[i_max]:
             dq.pop()
         dq.append(i_max)
+        # Remove starts that violate current max_len bound.
         while dq and dq[0] < i_min:
             dq.popleft()
         if dq:
@@ -207,6 +209,7 @@ def find_domains(
 
 
 def domain_statistics(start: int, end: int, p1: np.ndarray, pdi: np.ndarray, seq: str) -> dict:
+    """Compute domain metrics including RCS components and base statistics."""
     win_p1 = p1[start:end + 1]
     win_pdi = pdi[start:end + 1]
     s = seq[start:end + 1] if end < len(seq) else seq[start:]
@@ -217,7 +220,7 @@ def domain_statistics(start: int, end: int, p1: np.ndarray, pdi: np.ndarray, seq
     sd_p1 = float(np.sqrt(var_p1)) if np.isfinite(var_p1) else float("nan")
     cv_p1 = float(sd_p1 / (mean_p1 + EPSILON)) if np.isfinite(sd_p1) and np.isfinite(mean_p1) else float("nan")
     # Persistence is the fraction of positions with positive PDI inside the domain.
-    persistence = (float(np.sum(finite_pdi > 0) / len(finite_pdi)) if finite_pdi.size else 0.0)
+    persistence = (float(np.sum(finite_pdi > 0) / finite_pdi.size) if finite_pdi.size else 0.0)
     mean_pdi = float(np.nanmean(finite_pdi)) if finite_pdi.size else float("nan")
     length = max(1, end - start + 1)
     stability = 1.0 / (var_p1 + EPSILON) if np.isfinite(var_p1) else 0.0
@@ -250,7 +253,14 @@ def score_and_classify(domains: list[dict]) -> list[dict]:
     for i, d in enumerate(domains):
         rcs = 0.0 if span < EPSILON else float((raw[i] - lo) / span)
         d["RCS"] = rcs
-        d["Class"] = "I" if rcs > 0.80 else "II" if rcs >= 0.60 else "III" if rcs >= 0.40 else "IV"
+        if rcs > 0.80:
+            d["Class"] = "I"
+        elif rcs >= 0.60:
+            d["Class"] = "II"
+        elif rcs >= 0.40:
+            d["Class"] = "III"
+        else:
+            d["Class"] = "IV"
         d["Domain_ID"] = f"REGPLEX_{i + 1:04d}"
         d.pop("RCS_raw", None)
     return domains
