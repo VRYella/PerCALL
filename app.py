@@ -37,56 +37,283 @@ st.set_page_config(page_title="REGPLEX", layout="wide")
 
 SCIENTIFIC_THEME_CSS = """
 <style>
+/* ── Design tokens ─────────────────────────────────────────────── */
 :root {
-    --bg: #071126;
-    --bg-accent: #0d1f3a;
-    --text: #e7edf7;
-    --muted: #9fb3cc;
-    --line: rgba(120, 157, 201, 0.25);
-    --primary: #35d0ff;
-    --secondary: #8a7dff;
+    --bg:        #071126;
+    --bg2:       #0a1830;
+    --bg3:       #0d1f3a;
+    --text:      #e7edf7;
+    --muted:     #9fb3cc;
+    --line:      rgba(120,157,201,0.2);
+    --cyan:      #35d0ff;
+    --purple:    #8a7dff;
+    --gold:      #ffc857;
+    --green:     #36f7b0;
+    --pink:      #ff6b9d;
+    --glow-c:    rgba(53,208,255,0.35);
+    --glow-p:    rgba(138,125,255,0.25);
 }
+
+/* ── Base ──────────────────────────────────────────────────────── */
 .stApp {
     background:
-        radial-gradient(circle at 15% 15%, rgba(53, 208, 255, 0.16), transparent 45%),
-        radial-gradient(circle at 85% 5%, rgba(138, 125, 255, 0.12), transparent 35%),
-        linear-gradient(180deg, var(--bg) 0%, #050b19 100%);
+        radial-gradient(ellipse at 10% 5%,  rgba(53,208,255,0.13) 0%, transparent 40%),
+        radial-gradient(ellipse at 90% 8%,  rgba(138,125,255,0.10) 0%, transparent 38%),
+        radial-gradient(ellipse at 50% 95%, rgba(54,247,176,0.07) 0%, transparent 40%),
+        linear-gradient(175deg, #071126 0%, #050c1d 100%);
     color: var(--text);
+    font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
 }
-.stApp :is(h1, h2, h3, h4, p, li, label), .stCaption {
-    color: var(--text) !important;
+.stApp :is(h1,h2,h3,h4,p,li,label,span),
+.stMarkdown, .stCaption { color: var(--text) !important; }
+
+/* ── Hero ──────────────────────────────────────────────────────── */
+.sci-hero {
+    position: relative;
+    padding: 2rem 2.2rem 1.6rem;
+    border: 1px solid rgba(53,208,255,0.3);
+    border-radius: 18px;
+    background:
+        linear-gradient(130deg, rgba(13,31,58,0.95), rgba(7,17,38,0.9));
+    box-shadow:
+        0 0 40px rgba(53,208,255,0.10),
+        inset 0 0 60px rgba(53,208,255,0.03);
+    margin-bottom: 1.2rem;
+    overflow: hidden;
 }
-.scientific-hero {
-    padding: 1.25rem;
+.sci-hero::before {
+    content: '';
+    position: absolute;
+    top: -40%; left: -10%;
+    width: 60%; height: 200%;
+    background: radial-gradient(ellipse, rgba(53,208,255,0.07) 0%, transparent 70%);
+    pointer-events: none;
+}
+.sci-hero-title {
+    margin: 0;
+    font-size: 2.4rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    background: linear-gradient(110deg, var(--cyan) 0%, var(--purple) 55%, var(--gold) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1.15;
+}
+.sci-hero-sub {
+    margin: 0.5rem 0 0;
+    font-size: 0.95rem;
+    color: var(--muted) !important;
+    letter-spacing: 0.01em;
+}
+.sci-badge {
+    display: inline-block;
+    padding: 0.18rem 0.7rem;
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-right: 0.4rem;
+    margin-top: 0.75rem;
+}
+.badge-cyan  { background: rgba(53,208,255,0.15);  color: var(--cyan);   border: 1px solid rgba(53,208,255,0.35); }
+.badge-purple{ background: rgba(138,125,255,0.15); color: var(--purple); border: 1px solid rgba(138,125,255,0.35); }
+.badge-gold  { background: rgba(255,200,87,0.15);  color: var(--gold);   border: 1px solid rgba(255,200,87,0.35); }
+.badge-green { background: rgba(54,247,176,0.15);  color: var(--green);  border: 1px solid rgba(54,247,176,0.35); }
+
+/* ── Cards ─────────────────────────────────────────────────────── */
+.sci-card {
+    padding: 1.1rem 1.3rem;
     border: 1px solid var(--line);
     border-radius: 14px;
-    background: linear-gradient(120deg, rgba(13,31,58,0.9), rgba(7,17,38,0.85));
-    margin-bottom: 1rem;
+    background:
+        linear-gradient(135deg, rgba(13,31,58,0.75), rgba(7,17,38,0.7));
+    backdrop-filter: blur(6px);
+    margin-bottom: 0.85rem;
+    transition: border-color .25s, box-shadow .25s;
 }
-.scientific-card {
-    padding: 1rem;
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    background: rgba(10, 24, 48, 0.68);
-    margin-bottom: 0.75rem;
+.sci-card:hover {
+    border-color: rgba(53,208,255,0.4);
+    box-shadow: 0 0 20px rgba(53,208,255,0.10);
 }
+.sci-card strong { color: var(--cyan) !important; }
+
+.sci-card-accent {
+    border-left: 3px solid var(--cyan);
+}
+.sci-card-purple {
+    border-left: 3px solid var(--purple);
+}
+
+/* ── Pipeline flow label ───────────────────────────────────────── */
+.pipeline-flow {
+    font-size: 0.88rem;
+    color: var(--muted);
+    line-height: 2;
+    letter-spacing: 0.01em;
+}
+.pipeline-flow span { color: var(--cyan); font-weight: 600; }
+.pipeline-arrow { color: var(--purple); margin: 0 0.3rem; }
+
+/* ── Tabs ───────────────────────────────────────────────────────── */
 [data-baseweb="tab-list"] {
-    gap: 0.4rem;
+    gap: 0.35rem !important;
+    background: transparent !important;
+    border-bottom: 1px solid var(--line) !important;
+    padding-bottom: 0 !important;
 }
 [data-baseweb="tab"] {
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    background: rgba(8, 21, 44, 0.8);
+    border: 1px solid var(--line) !important;
+    border-bottom: none !important;
+    border-radius: 10px 10px 0 0 !important;
+    background: rgba(8,21,44,0.85) !important;
+    color: var(--muted) !important;
+    font-size: 0.88rem !important;
+    font-weight: 500 !important;
+    transition: color .2s, background .2s, border-color .2s !important;
+    padding: 0.45rem 1rem !important;
+}
+[data-baseweb="tab"]:hover {
+    background: rgba(53,208,255,0.08) !important;
+    border-color: rgba(53,208,255,0.35) !important;
+    color: var(--cyan) !important;
+}
+[aria-selected="true"][data-baseweb="tab"] {
+    background: linear-gradient(180deg, rgba(53,208,255,0.14), rgba(8,21,44,0.9)) !important;
+    border-color: rgba(53,208,255,0.45) !important;
+    color: var(--cyan) !important;
 }
 [data-baseweb="tab-highlight"] {
-    background: linear-gradient(90deg, var(--primary), var(--secondary));
+    background: linear-gradient(90deg, var(--cyan), var(--purple)) !important;
+    height: 2px !important;
 }
-.stMetric {
+[data-baseweb="tab-panel"] {
+    padding-top: 1.2rem !important;
+}
+
+/* ── Metrics ────────────────────────────────────────────────────── */
+[data-testid="stMetric"] {
     border: 1px solid var(--line);
-    border-radius: 12px;
-    padding: 0.4rem;
-    background: rgba(9, 23, 46, 0.7);
+    border-radius: 14px;
+    padding: 0.7rem 1rem !important;
+    background: linear-gradient(135deg, rgba(10,24,48,0.75), rgba(7,17,38,0.65));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+    transition: border-color .25s, box-shadow .25s;
 }
+[data-testid="stMetric"]:hover {
+    border-color: rgba(53,208,255,0.4);
+    box-shadow: 0 0 16px rgba(53,208,255,0.08);
+}
+[data-testid="stMetricValue"] {
+    color: var(--cyan) !important;
+    font-size: 1.7rem !important;
+    font-weight: 700 !important;
+}
+[data-testid="stMetricLabel"] {
+    color: var(--muted) !important;
+    font-size: 0.8rem !important;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+}
+
+/* ── Buttons ────────────────────────────────────────────────────── */
+[data-testid="stButton"] > button[kind="primary"] {
+    background: linear-gradient(135deg, rgba(53,208,255,0.9), rgba(138,125,255,0.85)) !important;
+    border: none !important;
+    border-radius: 10px !important;
+    color: #07112a !important;
+    font-weight: 700 !important;
+    font-size: 0.92rem !important;
+    letter-spacing: 0.03em !important;
+    padding: 0.55rem 1.8rem !important;
+    box-shadow: 0 4px 18px rgba(53,208,255,0.30) !important;
+    transition: box-shadow .25s, transform .15s !important;
+}
+[data-testid="stButton"] > button[kind="primary"]:hover {
+    box-shadow: 0 6px 28px rgba(53,208,255,0.45) !important;
+    transform: translateY(-1px) !important;
+}
+[data-testid="stDownloadButton"] > button {
+    background: rgba(10,24,48,0.8) !important;
+    border: 1px solid var(--line) !important;
+    border-radius: 9px !important;
+    color: var(--cyan) !important;
+    font-size: 0.86rem !important;
+    font-weight: 500 !important;
+    transition: border-color .2s, background .2s, box-shadow .2s !important;
+}
+[data-testid="stDownloadButton"] > button:hover {
+    border-color: rgba(53,208,255,0.5) !important;
+    background: rgba(53,208,255,0.08) !important;
+    box-shadow: 0 0 12px rgba(53,208,255,0.12) !important;
+}
+
+/* ── Inputs ─────────────────────────────────────────────────────── */
+[data-baseweb="input"], [data-baseweb="textarea"],
+[data-testid="stNumberInput"] input,
+[data-testid="stTextArea"] textarea {
+    background: rgba(9,23,46,0.75) !important;
+    border: 1px solid var(--line) !important;
+    border-radius: 9px !important;
+    color: var(--text) !important;
+    transition: border-color .2s, box-shadow .2s !important;
+}
+[data-baseweb="input"]:focus-within,
+[data-testid="stTextArea"] textarea:focus {
+    border-color: rgba(53,208,255,0.5) !important;
+    box-shadow: 0 0 0 3px rgba(53,208,255,0.10) !important;
+}
+
+/* ── File uploader ──────────────────────────────────────────────── */
+[data-testid="stFileUploader"] {
+    border: 1px dashed rgba(53,208,255,0.3) !important;
+    border-radius: 12px !important;
+    background: rgba(9,23,46,0.5) !important;
+    transition: border-color .2s !important;
+}
+[data-testid="stFileUploader"]:hover {
+    border-color: rgba(53,208,255,0.55) !important;
+}
+
+/* ── Selectbox ──────────────────────────────────────────────────── */
+[data-baseweb="select"] > div {
+    background: rgba(9,23,46,0.75) !important;
+    border: 1px solid var(--line) !important;
+    border-radius: 9px !important;
+    color: var(--text) !important;
+}
+
+/* ── Dataframe ──────────────────────────────────────────────────── */
+[data-testid="stDataFrame"] {
+    border: 1px solid var(--line) !important;
+    border-radius: 12px !important;
+    overflow: hidden !important;
+}
+
+/* ── Alerts / info ──────────────────────────────────────────────── */
+[data-testid="stAlert"] {
+    border-radius: 12px !important;
+    border: 1px solid var(--line) !important;
+    background: rgba(9,23,46,0.6) !important;
+}
+
+/* ── Section divider ────────────────────────────────────────────── */
+.sci-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+    opacity: 0.25;
+    margin: 1.2rem 0;
+}
+
+/* ── Scrollbar ──────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb {
+    background: rgba(53,208,255,0.25);
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(53,208,255,0.45); }
 </style>
 """
 
@@ -111,11 +338,17 @@ def main() -> None:
     apply_custom_css_theme()
     st.markdown(
         """
-        <div class="scientific-hero">
-            <h1 style="margin:0;">REGPLEX</h1>
-            <p style="margin:0.35rem 0 0 0; color:var(--muted);">
-            Regulatory Architecture Discovery Through Perplexity Depression
+        <div class="sci-hero">
+            <h1 class="sci-hero-title">REGPLEX</h1>
+            <p class="sci-hero-sub">
+                Regulatory Architecture Discovery Through Perplexity Depression
             </p>
+            <div>
+                <span class="sci-badge badge-cyan">Statistical</span>
+                <span class="sci-badge badge-purple">Annotation-free</span>
+                <span class="sci-badge badge-gold">Non-B DNA</span>
+                <span class="sci-badge badge-green">Open Source</span>
+            </div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -123,21 +356,37 @@ def main() -> None:
     tabs = st.tabs(["Home", "Analysis", "Results", "Motifs", "Downloads"])
 
     with tabs[0]:
-        st.markdown("""
-        ### Scientific Motivation
-        REGPLEX quantifies local uncertainty-collapse signatures in DNA using a reproducible, annotation-free statistical framework.
-        """)
+        st.markdown(
+            "### Scientific Motivation\n"
+            "REGPLEX quantifies local uncertainty-collapse signatures in DNA "
+            "using a reproducible, annotation-free statistical framework."
+        )
         st.markdown(
             """
-            <div class="scientific-card">
-                <strong>Pipeline</strong><br>
-                DNA → 10-mer Perplexity → Perplexity Depression Index (PDI) →
-                Bounded Minimum-Mean Kadane → Ranked Regulatory Domains → Motif Architecture
+            <div class="sci-card sci-card-accent">
+                <strong>Pipeline</strong>
+                <div class="pipeline-flow" style="margin-top:0.5rem;">
+                    <span>DNA</span>
+                    <span class="pipeline-arrow">→</span>
+                    <span>10-mer Perplexity (P1)</span>
+                    <span class="pipeline-arrow">→</span>
+                    <span>Perplexity Depression Index (PDI)</span>
+                    <span class="pipeline-arrow">→</span>
+                    <span>Bounded Min-Mean Kadane</span>
+                    <span class="pipeline-arrow">→</span>
+                    <span>Ranked Regulatory Domains</span>
+                    <span class="pipeline-arrow">→</span>
+                    <span>Motif Architecture</span>
+                </div>
             </div>
-            <div class="scientific-card">
+            <div class="sci-card sci-card-purple">
                 <strong>Interpretation Principle</strong><br>
-                Higher domain RCS and sustained PDI elevation indicate stronger evidence of putative regulatory architecture.
+                <span style="color:var(--muted); font-size:0.93rem;">
+                Higher domain RCS and sustained PDI elevation indicate stronger evidence
+                of putative regulatory architecture.
+                </span>
             </div>
+            <div class="sci-divider"></div>
             """,
             unsafe_allow_html=True,
         )
@@ -146,8 +395,9 @@ def main() -> None:
     with tabs[1]:
         st.markdown(
             """
-            <div class="scientific-card">
-                Configure statistically controlled windows, then run a full uncertainty-collapse scan across all FASTA records.
+            <div class="sci-card sci-card-accent">
+                Configure statistically controlled windows, then run a full
+                uncertainty-collapse scan across all FASTA records.
             </div>
             """,
             unsafe_allow_html=True,
