@@ -1,8 +1,0 @@
-# Output directory for PERCALL results
-# Generated files will be placed here:
-#   regions.csv          - regulatory region predictions
-#   summary.csv          - per-sequence summary statistics
-#   motifs.csv           - motif annotation table
-#   PERCALL_Report.pdf   - publication-quality PDF report
-#   perplexity_profile.png
-#   motif_enrichment.png
