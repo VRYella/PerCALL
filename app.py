@@ -91,7 +91,7 @@ h1, h2, h3, h4, p, li, label, .stCaption {
 """
 
 
-def inject_scientific_theme() -> None:
+def apply_custom_css_theme() -> None:
     st.markdown(SCIENTIFIC_THEME_CSS, unsafe_allow_html=True)
 
 
@@ -107,7 +107,7 @@ def run_analysis(fasta_text: str, params: dict, motif_text: str) -> list[Analysi
 
 
 def main() -> None:
-    inject_scientific_theme()
+    apply_custom_css_theme()
     st.markdown(
         """
         <div class="scientific-hero">
@@ -209,7 +209,7 @@ def main() -> None:
             selected_df = df[df["Sequence_ID"] == selected]
             m1, m2, m3 = st.columns(3)
             with m1:
-                st.metric("Detected Domains", int(len(res.domains)))
+                st.metric("Detected Domains", len(res.domains))
             with m2:
                 st.metric("Mean RCS", f"{selected_df['RCS'].mean():.4f}")
             with m3:
