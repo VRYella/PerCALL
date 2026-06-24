@@ -92,6 +92,7 @@ h1, h2, h3, h4, p, li, label, .stCaption {
 
 
 def apply_custom_css_theme() -> None:
+    """Apply a custom scientific theme to the Streamlit interface."""
     st.markdown(SCIENTIFIC_THEME_CSS, unsafe_allow_html=True)
 
 
@@ -207,13 +208,15 @@ def main() -> None:
             selected = st.selectbox("Sequence", [r.sequence_id for r in results])
             res = next(r for r in results if r.sequence_id == selected)
             selected_df = df[df["Sequence_ID"] == selected]
+            mean_rcs = selected_df["RCS"].mean()
+            mean_gc = selected_df["GC_Content"].mean()
             m1, m2, m3 = st.columns(3)
             with m1:
                 st.metric("Detected Domains", len(res.domains))
             with m2:
-                st.metric("Mean RCS", f"{selected_df['RCS'].mean():.4f}")
+                st.metric("Mean RCS", f"{mean_rcs:.4f}")
             with m3:
-                st.metric("Mean GC Content", f"{selected_df['GC_Content'].mean() * 100:.2f}%")
+                st.metric("Mean GC Content", f"{mean_gc * 100:.2f}%")
             st.plotly_chart(plot_p1_profile(res.p1), use_container_width=True)
             st.plotly_chart(plot_pdi_profile(res.pdi, res.domains), use_container_width=True)
             st.plotly_chart(plot_domain_map(res.length, res.domains), use_container_width=True)
