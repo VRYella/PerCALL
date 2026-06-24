@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 import os
 import re
 import sys
@@ -22,10 +23,13 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
+_LOG = logging.getLogger(__name__)
+
 _ROOT = os.path.dirname(os.path.abspath(__file__))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
+from core.depression import compute_depression_profile, compute_rdi
 from core.motifs import MOTIF_LABELS, count_motifs, scan_motifs
 from core.perplexity import compute_perplexity, local_residual
 from core.plotting import (
@@ -36,6 +40,10 @@ from core.plotting import (
     plot_sequence_domain_map,
 )
 from core.region_caller import find_regions
+from core.second_order import (
+    compute_second_order_perplexity,
+    second_order_residual,
+)
 
 # ============================================================================
 # Page configuration — sidebar fully collapsed / hidden
@@ -502,7 +510,7 @@ _BRAND_BAR = """
 <div class="brand-bar">
   <span class="brand-logo-text">REGPLEX</span>
   <span class="brand-sep">·</span>
-  <span class="brand-desc">Regulatory Domain Discovery Using DNA Sequence Perplexity</span>
+  <span class="brand-desc">Hierarchical Complexity Framework for Regulatory Architecture Discovery</span>
 </div>"""
 
 _DNA_SVG = """
@@ -611,6 +619,24 @@ def _region_seq(seq: str, region: dict, window: int) -> str:
     return seq[region["start"]: min(region["end"] + window, len(seq))]
 
 
+def _enrich_regions_with_rdi(
+    regions: List[dict],
+    p1: np.ndarray,
+    p2: np.ndarray,
+    spacer: int = 50,
+    flank_win: int = 100,
+) -> List[dict]:
+    """
+    Compute the Regulatory Depression Index (RDI) for every detected domain.
+
+    Delegates to ``core.depression.compute_rdi`` which applies the three-window
+    contrast formula:
+        RDI_raw = P1_Contrast × P2_Contrast × LengthFactor × MotifFactor
+    and normalises to [0, 1].  Domain classes I–IV are assigned by RDI threshold.
+    """
+    return compute_rdi(regions, p1, p2, spacer=spacer, flank_win=flank_win)
+
+
 def process_sequence(
     header: str,
     seq: str,
@@ -622,30 +648,111 @@ def process_sequence(
     top_k: int,
     score_cutoff: float,
     active_motifs: set,
+    p2_window: int = 100,
+    p1_weight: float = 0.5,
+    p2_weight: float = 0.5,
+    spacer: int = 50,
+    flank_win: int = 100,
 ) -> dict:
-    """Run the full REGPLEX pipeline on a single sequence."""
-    perp = compute_perplexity(seq, window=window)
-    if perp.size == 0 or np.all(np.isnan(perp)):
+    """Run the full REGPLEX v3 hierarchical pipeline on a single sequence.
+
+    Pipeline
+    --------
+    P1  – First-order dinucleotide perplexity
+    P2  – Second-order perplexity of the P1 landscape
+    Depression Analysis – Three-window local depression model (PRIMARY NOVELTY)
+        Composite_Depression = p1_weight × P1_Depression + p2_weight × P2_Depression
+    Kadane  – Bounded min-mean domain calling on -Composite_Depression
+    RDI     – Regulatory Depression Index scoring and domain classification
+    """
+    p1 = compute_perplexity(seq, window=window)
+    empty_float32_array = np.array([], dtype=np.float32)
+    if p1.size == 0 or np.all(np.isnan(p1)):
+        empty_depression_profile: dict = {
+            k: empty_float32_array for k in (
+                "p1_dep", "p2_dep", "composite",
+                "p1_domain_mean", "p2_domain_mean",
+                "p1_flank_mean", "p2_flank_mean",
+            )
+        }
         return {
-            "header": header, "seq": seq, "perp": perp,
-            "baseline": perp.copy(), "residual": perp.copy(),
+            "header": header, "seq": seq,
+            "perp": p1, "p2": empty_float32_array,
+            "baseline": empty_float32_array, "p2_baseline": empty_float32_array,
+            "residual": empty_float32_array, "p2_residual": empty_float32_array,
+            "composite": empty_float32_array, "dep": empty_depression_profile,
+            "kadane_signal": empty_float32_array, "using_depression": False,
             "regions": [], "skipped": True,
         }
-    res = local_residual(perp, baseline_win=baseline_win)
+
+    # ── Layer 1: P1 residual & baseline (kept for visualisation) ─────────
+    p1_res = local_residual(p1, baseline_win=baseline_win)
     baseline = (
-        pd.Series(perp)
+        pd.Series(p1)
         .rolling(baseline_win, center=True, min_periods=baseline_win)
         .mean()
         .values
     )
-    regions = find_regions(
-        res, seq,
-        min_len=min_len, max_len=max_len, top_k=top_k,
-        score_cutoff=score_cutoff, window=window, active_motifs=active_motifs,
+
+    # ── Layer 2: P2 second-order perplexity ───────────────────────────────
+    p2 = compute_second_order_perplexity(p1, window=p2_window)
+    p2_res = second_order_residual(p2, baseline_win=baseline_win)
+    p2_baseline = (
+        pd.Series(p2)
+        .rolling(baseline_win, center=True, min_periods=baseline_win)
+        .mean()
+        .values
     )
+
+    # ── Layer 3: Local Depression Analysis (Primary Novelty) ─────────────
+    dep = compute_depression_profile(
+        p1, p2,
+        flank_win=flank_win,
+        spacer=spacer,
+        domain_win=100,
+        p1_weight=p1_weight,
+        p2_weight=p2_weight,
+    )
+
+    # Kadane signal = -Composite_Depression (depressions become deep valleys)
+    comp_dep = dep["composite"]
+    using_depression = np.any(np.isfinite(comp_dep))
+
+    if using_depression:
+        kadane_signal = (-comp_dep).astype(np.float32)
+    else:
+        # Fallback for very short sequences: residual-based composite
+        kadane_signal = (p1_weight * p1_res + p2_weight * p2_res).astype(
+            np.float32
+        )
+
+    # Residual composite kept for display on hierarchical page
+    composite_res = (p1_weight * p1_res + p2_weight * p2_res).astype(
+        np.float32
+    )
+
+    # ── Layer 4: Kadane domain calling ────────────────────────────────────
+    regions = find_regions(
+        kadane_signal, seq,
+        min_len=min_len, max_len=max_len, top_k=top_k,
+        score_cutoff=score_cutoff, window=window,
+        active_motifs=active_motifs,
+    )
+
+    # ── Layer 5: RDI scoring ──────────────────────────────────────────────
+    regions = _enrich_regions_with_rdi(
+        regions, p1, p2, spacer=spacer, flank_win=flank_win
+    )
+
     return {
-        "header": header, "seq": seq, "perp": perp,
-        "baseline": baseline, "residual": res,
+        "header": header, "seq": seq,
+        "perp": p1, "p2": p2,
+        "baseline": baseline, "p2_baseline": p2_baseline,
+        "residual": p1_res, "p2_residual": p2_res,
+        "composite": composite_res,
+        "dep": dep,
+        "kadane_signal": kadane_signal,
+        "using_depression": using_depression,
         "regions": regions, "skipped": False,
     }
 
@@ -668,7 +775,7 @@ def _results_to_json(results: List[dict], params: dict) -> bytes:
     }
     safe_params["active_motifs"] = sorted(params.get("active_motifs", []))
     session = {
-        "regplex_version": "2025.2",
+        "regplex_version": "3.0",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "parameters": safe_params,
         "sequences": [
@@ -696,9 +803,17 @@ def _regions_df(results: List[dict]) -> pd.DataFrame:
                 "Start": reg["start"],
                 "End": reg["end"],
                 "Width": reg["width"],
-                "Trough": reg["trough"],
-                "Mean Residual": reg["mean_residual"],
+                "Mean_P1": reg.get("mean_p1"),
+                "Mean_P2": reg.get("mean_p2"),
+                "Mean_P1_Flanks": reg.get("mean_p1_flanks"),
+                "Mean_P2_Flanks": reg.get("mean_p2_flanks"),
+                "P1_Contrast": reg.get("p1_contrast"),
+                "P2_Contrast": reg.get("p2_contrast"),
+                "Mean_Residual": reg["mean_residual"],
+                "RDI": reg.get("rdi"),
+                "Class": reg.get("rdi_class"),
                 "GC%": reg["gc_pct"],
+                "Motif_Count": reg.get("motif_count", 0),
                 "Motifs": reg["motifs"],
             })
     return pd.DataFrame(rows)
@@ -779,6 +894,24 @@ def _ltheme(fig: go.Figure, height: int = 420) -> go.Figure:
     fig.update_xaxes(**_LX)
     fig.update_yaxes(**_LY)
     return fig
+
+
+def _show_dataframe(
+    df: pd.DataFrame, gradient_column: Optional[str] = None
+) -> None:
+    data = df
+    if gradient_column and gradient_column in df.columns:
+        try:
+            data = df.style.background_gradient(
+                subset=[gradient_column], cmap="Blues"
+            )
+        except (AttributeError, ImportError, ModuleNotFoundError):
+            _LOG.debug(
+                "Falling back to unstyled dataframe for column %s",
+                gradient_column,
+                exc_info=True,
+            )
+    st.dataframe(data, use_container_width=True, hide_index=True)
 
 
 # ============================================================================
@@ -1032,10 +1165,11 @@ def _plot_region_ranking(rv: dict) -> go.Figure:
 
 def _plot_region_scatter(df: pd.DataFrame) -> go.Figure:
     fig = go.Figure()
-    if not df.empty:
+    res_col = "Mean_Residual" if "Mean_Residual" in df.columns else "Mean Residual"
+    if not df.empty and res_col in df.columns:
         fig.add_trace(go.Scatter(
             x=df["Width"],
-            y=df["Mean Residual"],
+            y=df[res_col],
             mode="markers",
             marker=dict(
                 size=11,
@@ -1046,7 +1180,10 @@ def _plot_region_scatter(df: pd.DataFrame) -> go.Figure:
                 line=dict(width=1, color="#FFFFFF"),
             ),
             text=df["Sequence"],
-            hovertemplate="%{text}<br>Width %{x} bp<br>Mean residual %{y:.4f}<extra></extra>",
+            hovertemplate=(
+                "%{text}<br>Width %{x} bp<br>"
+                "Mean residual %{y:.4f}<extra></extra>"
+            ),
         ))
     fig.update_layout(
         **_LL,
@@ -1056,6 +1193,416 @@ def _plot_region_scatter(df: pd.DataFrame) -> go.Figure:
     fig.update_xaxes(title="Width (bp)", **_LX)
     fig.update_yaxes(title="Mean Residual", **_LY)
     return fig
+
+
+# ============================================================================
+# Hierarchical REGPLEX plot helpers (P2 / composite / RAI)
+# ============================================================================
+
+# Colour additions for hierarchical layer
+_PC2: dict = {
+    "p2":      "#7C3AED",   # violet
+    "p2res":   "#EC4899",   # pink
+    "comp":    "#0891B2",   # teal
+    "dep":     "#059669",   # emerald (depression signal)
+    "dep_p1":  "#2563EB",   # blue  (P1 depression)
+    "dep_p2":  "#7C3AED",   # violet (P2 depression)
+    "dep_comp": "#0891B2",  # teal   (composite depression)
+}
+
+_RDI_CLASS_COLORS = {
+    "I":   "#1D4ED8",
+    "II":  "#0891B2",
+    "III": "#F59E0B",
+    "IV":  "#94A3B8",
+}
+# Keep old names as aliases for any remaining references
+_RAI_CLASS_COLORS = _RDI_CLASS_COLORS
+
+
+def _rai_legend() -> None:
+    _rdi_legend()
+
+
+# ---------------------------------------------------------------------------
+# Depression-analysis plot helpers
+# ---------------------------------------------------------------------------
+
+
+def _plot_depression_profile(rv: dict) -> go.Figure:
+    """Three-panel: P1 Depression, P2 Depression, Composite Depression signal."""
+    dep = rv.get("dep", {})
+    x = np.arange(len(rv["perp"]))
+
+    p1_dep  = dep.get("p1_dep",  np.full_like(rv["perp"], np.nan))
+    p2_dep  = dep.get("p2_dep",  np.full_like(rv["perp"], np.nan))
+    comp    = dep.get("composite", np.full_like(rv["perp"], np.nan))
+
+    fig = make_subplots(
+        rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.06,
+        subplot_titles=(
+            "P1 Depression  (mean P1_flanks / mean P1_domain)",
+            "P2 Depression  (mean P2_flanks / mean P2_domain)",
+            "Composite Depression  (w₁·P1_dep + w₂·P2_dep)",
+        ),
+    )
+
+    for row, (arr, col, name) in enumerate([
+        (p1_dep, _PC2["dep_p1"],  "P1 Depression"),
+        (p2_dep, _PC2["dep_p2"],  "P2 Depression"),
+        (comp,   _PC2["dep_comp"], "Composite Depression"),
+    ], start=1):
+        fig.add_trace(
+            go.Scatter(x=x, y=arr, mode="lines", name=name,
+                       line=dict(color=col, width=1.2),
+                       hovertemplate=f"Pos %{{x}}<br>{name} %{{y:.3f}}<extra></extra>"),
+            row=row, col=1,
+        )
+        # Reference line at 1.0 (no depression)
+        fig.add_hline(y=1.0, line_color="#CBD5E1", line_dash="dash",
+                      line_width=0.9, row=row, col=1)
+
+    for r in rv["regions"]:
+        for row in (1, 2, 3):
+            fig.add_vrect(
+                x0=r["start"], x1=r["end"],
+                fillcolor=_PC["rfill"], line_color=_PC["rline"],
+                line_width=1.0, row=row, col=1,
+            )
+
+    fig.update_layout(
+        **_LL, height=660, showlegend=False,
+        title=dict(text="Local Depression Analysis — P1 · P2 · Composite",
+                   font=dict(size=13, color="#0F172A")),
+        hovermode="x unified",
+    )
+    fig.update_xaxes(title_text="Position (bp)", row=3, col=1, **_LX)
+    fig.update_yaxes(title_text="Depression Ratio", **_LY)
+    fig.update_annotations(font=dict(color="#64748B"))
+    return fig
+
+
+def _plot_three_window_model(
+    rv: dict,
+    region_idx: int = 0,
+    spacer: int = 50,
+    flank_win: int = 100,
+) -> go.Figure:
+    """
+    Interactive three-window depression illustration for a specific domain.
+
+    Shows upstream / domain / downstream mean P1 and P2 values as a grouped
+    bar chart, annotated with the P1_Contrast and P2_Contrast ratios.
+    """
+    regions = rv.get("regions", [])
+    dep = rv.get("dep", {})
+
+    p1 = rv["perp"]
+    p2 = rv.get("p2", np.full_like(p1, np.nan))
+
+    def _safe_mean(arr, a, b):
+        n = len(arr)
+        a, b = max(int(a), 0), min(int(b), n)
+        if b <= a:
+            return float("nan")
+        v = arr[a:b]
+        v = v[np.isfinite(v)]
+        return float(np.mean(v)) if len(v) else float("nan")
+
+    window_labels = ["Upstream Flank", "Domain", "Downstream Flank"]
+    p1_vals, p2_vals = [], []
+
+    fig = go.Figure()
+
+    if regions and 0 <= region_idx < len(regions):
+        reg = regions[region_idx]
+        gs, ge = reg["start"], reg["end"]
+
+        up_end   = gs - spacer
+        up_start = up_end - flank_win
+        dn_start = ge + 1 + spacer
+        dn_end   = dn_start + flank_win
+
+        p1_vals = [
+            _safe_mean(p1, up_start, up_end),
+            _safe_mean(p1, gs, ge + 1),
+            _safe_mean(p1, dn_start, dn_end),
+        ]
+        p2_vals = [
+            _safe_mean(p2, up_start, up_end),
+            _safe_mean(p2, gs, ge + 1),
+            _safe_mean(p2, dn_start, dn_end),
+        ]
+
+        p1c = reg.get("p1_contrast", float("nan"))
+        p2c = reg.get("p2_contrast", float("nan"))
+        title = (
+            f"Three-Window Depression Model — R{reg['rank']} "
+            f"[{gs}–{ge} bp]  |  "
+            f"P1_Contrast={p1c:.3f}  P2_Contrast={p2c:.3f}"
+        )
+    else:
+        p1_vals = [float("nan")] * 3
+        p2_vals = [float("nan")] * 3
+        title = "Three-Window Depression Model — (no region selected)"
+
+    fig.add_trace(go.Bar(
+        name="P1 (First-Order)",
+        x=window_labels,
+        y=p1_vals,
+        marker_color=[_PC["perp"], "#EF4444", _PC["perp"]],
+        opacity=0.85,
+        hovertemplate="%{x}<br>Mean P1: %{y:.3f}<extra></extra>",
+    ))
+    fig.add_trace(go.Bar(
+        name="P2 (Second-Order)",
+        x=window_labels,
+        y=p2_vals,
+        marker_color=[_PC2["p2"], "#EC4899", _PC2["p2"]],
+        opacity=0.85,
+        hovertemplate="%{x}<br>Mean P2: %{y:.3f}<extra></extra>",
+    ))
+
+    # Annotate the domain bar as lower (depression)
+    if all(np.isfinite(v) for v in p1_vals):
+        fig.add_annotation(
+            x="Domain", y=max(p1_vals) * 1.05,
+            text="← DOMAIN (lower = depression)",
+            showarrow=True, arrowhead=2, arrowcolor="#EF4444",
+            font=dict(size=10, color="#EF4444"),
+            ax=0, ay=-30,
+        )
+
+    fig.update_layout(
+        **_LL,
+        title=dict(text=title, font=dict(size=12, color="#0F172A")),
+        barmode="group",
+        height=380,
+        legend=dict(orientation="h", yanchor="bottom", y=1.01,
+                    xanchor="right", x=1, bgcolor="rgba(0,0,0,0)"),
+    )
+    fig.update_xaxes(**_LX)
+    fig.update_yaxes(title="Mean Perplexity", **_LY)
+    return fig
+
+
+def _plot_rdi_distribution(regions: List[dict]) -> go.Figure:
+    """RDI bar chart coloured by domain class."""
+    fig = go.Figure()
+    if not regions:
+        fig.update_layout(**_LL, height=280,
+                          title=dict(text="RDI Distribution",
+                                     font=dict(color="#0F172A")))
+        return fig
+
+    labels = [f"R{r['rank']}" for r in regions]
+    rdi_vals = [r.get("rdi", 0.0) or 0.0 for r in regions]
+    colors = [
+        _RDI_CLASS_COLORS.get(r.get("rdi_class", "IV"), "#94A3B8")
+        for r in regions
+    ]
+    classes = [r.get("rdi_class", "IV") for r in regions]
+
+    fig.add_trace(go.Bar(
+        x=labels, y=rdi_vals,
+        marker_color=colors,
+        text=[f"Class {c}" for c in classes],
+        textposition="outside",
+        hovertemplate=(
+            "Region %{x}<br>"
+            "RDI %{y:.4f}<br>"
+            "%{text}<extra></extra>"
+        ),
+    ))
+    for thresh, label, col in [
+        (0.80, "Class I/II",  _RDI_CLASS_COLORS["I"]),
+        (0.60, "Class II/III", _RDI_CLASS_COLORS["II"]),
+        (0.40, "Class III/IV", _RDI_CLASS_COLORS["III"]),
+    ]:
+        fig.add_hline(
+            y=thresh, line_color=col, line_dash="dot", line_width=1.0,
+            annotation_text=label,
+            annotation_position="right",
+            annotation_font_size=9,
+            annotation_font_color=col,
+        )
+    fig.update_layout(
+        **_LL,
+        title=dict(text="Regulatory Depression Index (RDI) by Domain",
+                   font=dict(size=13, color="#0F172A")),
+        height=320, showlegend=False,
+    )
+    fig.update_xaxes(**_LX)
+    fig.update_yaxes(title="RDI Score (0–1)", range=[0, 1.15], **_LY)
+    return fig
+
+
+def _plot_domain_ranking_rdi(regions: List[dict]) -> go.Figure:
+    """Scatter: width vs RDI, sized by P1_Contrast, coloured by class."""
+    fig = go.Figure()
+    if not regions:
+        fig.update_layout(**_LL, height=320,
+                          title=dict(text="Domain Ranking",
+                                     font=dict(color="#0F172A")))
+        return fig
+
+    for cls_name, cls_col in _RDI_CLASS_COLORS.items():
+        cls_regions = [r for r in regions
+                       if r.get("rdi_class", "IV") == cls_name]
+        if not cls_regions:
+            continue
+        fig.add_trace(go.Scatter(
+            x=[r["width"] for r in cls_regions],
+            y=[r.get("rdi", 0.0) or 0.0 for r in cls_regions],
+            mode="markers+text",
+            name=f"Class {cls_name}",
+            marker=dict(
+                color=cls_col,
+                size=[max(10, (r.get("p1_contrast", 1.0) or 1.0) * 15)
+                      for r in cls_regions],
+                line=dict(width=1.5, color="#FFFFFF"),
+                opacity=0.85,
+            ),
+            text=[f"R{r['rank']}" for r in cls_regions],
+            textposition="top center",
+            textfont=dict(size=9, color="#0F172A"),
+            hovertemplate=(
+                "%{text}<br>"
+                "Width %{x} bp<br>"
+                "RDI %{y:.4f}<br>"
+                f"Class {cls_name}<extra></extra>"
+            ),
+        ))
+    fig.update_layout(
+        **_LL,
+        title=dict(text="Domain Ranking — Width × RDI  (size ∝ P1_Contrast)",
+                   font=dict(size=13, color="#0F172A")),
+        height=360,
+        legend=dict(orientation="h", yanchor="bottom", y=1.01,
+                    xanchor="right", x=1, bgcolor="rgba(0,0,0,0)"),
+    )
+    fig.update_xaxes(title="Domain Width (bp)", **_LX)
+    fig.update_yaxes(title="RDI Score (0–1)", **_LY)
+    return fig
+
+
+def _plot_p1_p2_profile(rv: dict) -> go.Figure:
+    """Side-by-side P1 and P2 perplexity profiles with domain shading."""
+    x = np.arange(len(rv["perp"]))
+    x2 = np.arange(len(rv.get("p2", rv["perp"])))
+    p2 = rv.get("p2", np.full_like(rv["perp"], np.nan))
+
+    fig = make_subplots(
+        rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.08,
+        subplot_titles=("P1 — First-Order Perplexity",
+                        "P2 — Second-Order Perplexity"),
+    )
+    fig.add_trace(
+        go.Scatter(x=x, y=rv["perp"], mode="lines", name="P1",
+                   line=dict(color=_PC["perp"], width=1.3),
+                   hovertemplate="Pos %{x}<br>P1 %{y:.3f}<extra></extra>"),
+        row=1, col=1,
+    )
+    fig.add_trace(
+        go.Scatter(x=x, y=rv["baseline"], mode="lines", name="P1 baseline",
+                   line=dict(color=_PC["base"], width=1.2, dash="dot"),
+                   hovertemplate="Pos %{x}<br>Baseline %{y:.3f}<extra></extra>"),
+        row=1, col=1,
+    )
+    fig.add_trace(
+        go.Scatter(x=x2, y=p2, mode="lines", name="P2",
+                   line=dict(color=_PC2["p2"], width=1.3),
+                   hovertemplate="Pos %{x}<br>P2 %{y:.3f}<extra></extra>"),
+        row=2, col=1,
+    )
+    p2_bl = rv.get("p2_baseline", np.full_like(p2, np.nan))
+    fig.add_trace(
+        go.Scatter(x=x2, y=p2_bl, mode="lines", name="P2 baseline",
+                   line=dict(color=_PC["base"], width=1.2, dash="dot"),
+                   hovertemplate="Pos %{x}<br>P2 baseline %{y:.3f}<extra></extra>"),
+        row=2, col=1,
+    )
+    for r in rv["regions"]:
+        for row in (1, 2):
+            fig.add_vrect(
+                x0=r["start"], x1=r["end"],
+                fillcolor=_PC["rfill"], line_color=_PC["rline"],
+                line_width=1.0,
+                annotation_text=f"R{r['rank']}" if row == 1 else "",
+                annotation_position="top left",
+                annotation_font_color="#2563EB", annotation_font_size=9,
+                row=row, col=1,
+            )
+    fig.update_layout(
+        **_LL, height=520,
+        title=dict(text="Hierarchical Perplexity — P1 & P2",
+                   font=dict(size=13, color="#0F172A")),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02,
+                    xanchor="right", x=1, bgcolor="rgba(0,0,0,0)"),
+        hovermode="x unified",
+    )
+    fig.update_xaxes(title_text="Position (bp)", row=2, col=1, **_LX)
+    fig.update_yaxes(title_text="P1 Perplexity", row=1, col=1, **_LY)
+    fig.update_yaxes(title_text="P2 Perplexity", row=2, col=1, **_LY)
+    fig.update_annotations(font=dict(color="#64748B"))
+    return fig
+
+
+def _plot_residual_composite(rv: dict) -> go.Figure:
+    """Three-panel: P1 residual, P2 residual, composite signal."""
+    x = np.arange(len(rv["residual"]))
+    p2_res = rv.get("p2_residual", np.full_like(rv["residual"], np.nan))
+    composite = rv.get("composite", rv["residual"])
+
+    fig = make_subplots(
+        rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.06,
+        subplot_titles=(
+            "P1 Residual",
+            "P2 Residual",
+            "Composite Signal  (P1_res × w₁ + P2_res × w₂)",
+        ),
+    )
+    for row, (arr, col, name) in enumerate([
+        (rv["residual"], _PC["res"], "P1 Residual"),
+        (p2_res,         _PC2["p2res"], "P2 Residual"),
+        (composite,      _PC2["comp"], "Composite"),
+    ], start=1):
+        fig.add_trace(
+            go.Scatter(x=x, y=arr, mode="lines", name=name,
+                       line=dict(color=col, width=1.2),
+                       hovertemplate=f"Pos %{{x}}<br>{name} %{{y:.4f}}<extra></extra>"),
+            row=row, col=1,
+        )
+        fig.add_hline(y=0, line_color="#CBD5E1", line_dash="dash",
+                      line_width=0.8, row=row, col=1)
+
+    for r in rv["regions"]:
+        for row in (1, 2, 3):
+            fig.add_vrect(
+                x0=r["start"], x1=r["end"],
+                fillcolor=_PC["rfill"], line_color=_PC["rline"],
+                line_width=1.0, row=row, col=1,
+            )
+    fig.update_layout(
+        **_LL, height=620, showlegend=False,
+        title=dict(text="Residual Analysis — P1 · P2 · Composite",
+                   font=dict(size=13, color="#0F172A")),
+        hovermode="x unified",
+    )
+    fig.update_xaxes(title_text="Position (bp)", row=3, col=1, **_LX)
+    fig.update_yaxes(**_LY)
+    fig.update_annotations(font=dict(color="#64748B"))
+    return fig
+
+
+def _plot_rai_distribution(regions: List[dict]) -> go.Figure:
+    """Backwards-compatible alias — delegates to ``_plot_rdi_distribution``."""
+    return _plot_rdi_distribution(regions)
+
+
+def _plot_domain_ranking_rai(regions: List[dict]) -> go.Figure:
+    """Backwards-compatible alias — delegates to ``_plot_domain_ranking_rdi``."""
+    return _plot_domain_ranking_rdi(regions)
 
 
 def _plot_motif_heatmap(
@@ -1086,10 +1633,9 @@ def _plot_motif_heatmap(
             hovertemplate="%{y}<br>%{x}: %{z} hits<extra></extra>",
         ))
     fig.update_layout(
-        **_LL,
+        **{**_LL, "margin": dict(l=120, r=20, t=60, b=40)},
         title=dict(text="Motif Signal Across Called Regions", font=dict(color="#0F172A")),
         height=max(240, 120 + 36 * max(len(y_labels), 1)),
-        margin=dict(l=120, r=20, t=60, b=40),
     )
     return fig
 
@@ -1108,16 +1654,18 @@ def _page_home(results: List[dict]) -> None:
     st.markdown(
         '<div class="regplex-hero">'
         '<div class="regplex-logo">REGPLEX</div>'
-        '<div class="regplex-full-name">Regulatory Domain Discovery Using DNA Sequence Perplexity</div>'
+        '<div class="regplex-full-name">'
+        'Hierarchical Complexity Framework for Regulatory Architecture Discovery'
+        '</div>'
         '<p class="regplex-tagline">'
-        'Information-Theoretic Regulatory Domain Calling from DNA Sequence'
+        'Second-Order Perplexity · Composite Signal · RAI Domain Scoring'
         '</p>'
         '<div class="regplex-badges">'
-        '<span class="badge badge-blue">Information Theoretic</span>'
-        '<span class="badge badge-cyan">Bounded Min-Mean Kadane</span>'
-        '<span class="badge badge-green">Regulatory Domain Calling</span>'
-        '<span class="badge badge-blue">Non-B DNA Annotation</span>'
-        '<span class="badge badge-amber">Publication Grade</span>'
+        '<span class="badge badge-blue">P1 Sequence Diversity</span>'
+        '<span class="badge badge-cyan">P2 Landscape Stability</span>'
+        '<span class="badge badge-green">Local Depression Analysis</span>'
+        '<span class="badge badge-blue">Bounded Min-Mean Kadane</span>'
+        '<span class="badge badge-amber">RDI Domain Scoring</span>'
         '<span class="badge badge-green">Open Science</span>'
         '</div>'
         '</div>',
@@ -1157,28 +1705,28 @@ def _page_home(results: List[dict]) -> None:
         '</div>'
         '<div class="workflow-step">'
         '<div class="step-num">2</div>'
-        '<strong>Perplexity Calculation</strong>'
-        '<p>Dinucleotide entropy → positional perplexity signal</p>'
+        '<strong>P1 — Perplexity</strong>'
+        '<p>Dinucleotide entropy → first-order perplexity signal (range 1–9)</p>'
         '</div>'
         '<div class="workflow-step">'
         '<div class="step-num">3</div>'
-        '<strong>Residual Signal</strong>'
-        '<p>Rolling baseline compensation isolates local troughs</p>'
+        '<strong>P2 — Stability</strong>'
+        '<p>Sliding window over P1 → second-order perplexity landscape</p>'
         '</div>'
         '<div class="workflow-step">'
         '<div class="step-num">4</div>'
-        '<strong>Bounded Min-Mean Kadane</strong>'
-        '<p>O(n) optimal region calling under length constraints</p>'
+        '<strong>Depression Analysis</strong>'
+        '<p>Three-window model: P1_dep & P2_dep ratio of flanks to domain</p>'
         '</div>'
         '<div class="workflow-step">'
         '<div class="step-num">5</div>'
-        '<strong>Domain Calling</strong>'
-        '<p>Ranked low-perplexity regulatory domains reported</p>'
+        '<strong>Kadane Domains</strong>'
+        '<p>O(n) bounded min-mean on −Composite_Depression signal</p>'
         '</div>'
         '<div class="workflow-step">'
         '<div class="step-num">6</div>'
-        '<strong>Non-B DNA Annotation</strong>'
-        '<p>G4, i-Motif, Z-DNA, eGZ-DNA, STR, Triplex overlay</p>'
+        '<strong>RDI &amp; Annotation</strong>'
+        '<p>Regulatory Depression Index, classification I–IV, Non-B DNA overlay</p>'
         '</div>'
         '</div>',
         unsafe_allow_html=True,
@@ -1190,39 +1738,39 @@ def _page_home(results: List[dict]) -> None:
         '<div class="feature-grid">'
         '<div class="feature-card">'
         '<span class="fc-icon">🧬</span>'
-        '<h4>Sequence Analysis</h4>'
-        '<p>FASTA upload, composition statistics, GC profiling, '
-        'and multi-sequence comparative analytics.</p>'
+        '<h4>P1 — Sequence Diversity</h4>'
+        '<p>Dinucleotide perplexity measures local sequence diversity. '
+        'FASTA upload, composition statistics, GC profiling.</p>'
         '</div>'
         '<div class="feature-card">'
         '<span class="fc-icon">📈</span>'
-        '<h4>Perplexity Explorer</h4>'
-        '<p>Interactive positional perplexity and residual signal '
-        'with zoom, hover, and density distribution views.</p>'
+        '<h4>P2 — Landscape Stability</h4>'
+        '<p>Second-order perplexity quantifies how stable or chaotic the '
+        'P1 landscape is across a sliding window. Low P2 = stable architecture.</p>'
         '</div>'
         '<div class="feature-card">'
         '<span class="fc-icon">📍</span>'
-        '<h4>Region Caller</h4>'
-        '<p>Flagship bounded minimum-mean Kadane optimisation. '
-        'Region architecture maps, ranking, and trough visualisation.</p>'
+        '<h4>Local Depression Analysis</h4>'
+        '<p>Three-window model (upstream / domain / downstream) computes '
+        'P1 and P2 depression ratios. The composite depression drives Kadane.</p>'
+        '</div>'
+        '<div class="feature-card">'
+        '<span class="fc-icon">🏅</span>'
+        '<h4>RDI Domain Scoring</h4>'
+        '<p>Regulatory Depression Index: P1_Contrast × P2_Contrast × '
+        'LengthFactor × MotifFactor. Domains classified I–IV.</p>'
         '</div>'
         '<div class="feature-card">'
         '<span class="fc-icon">🔬</span>'
         '<h4>Non-B DNA Structures</h4>'
         '<p>G4, i-Motif, Z-DNA, eGZ-DNA, STR, PolyA/T, Direct Repeat, '
-        'Triplex enrichment and positional tracks.</p>'
+        'Triplex enrichment scanned only on called domains.</p>'
         '</div>'
         '<div class="feature-card">'
         '<span class="fc-icon">📊</span>'
         '<h4>Reports &amp; Exports</h4>'
         '<p>One-click CSV, Excel, JSON, PNG, SVG, and PDF '
-        'publication-ready outputs.</p>'
-        '</div>'
-        '<div class="feature-card">'
-        '<span class="fc-icon">⚗️</span>'
-        '<h4>Algorithmic Transparency</h4>'
-        '<p>The original REGPLEX algorithm is preserved unchanged. '
-        'No alternative models or replacement callers are introduced.</p>'
+        'publication-ready outputs including RAI and P2 data.</p>'
         '</div>'
         '</div>',
         unsafe_allow_html=True,
@@ -1234,10 +1782,13 @@ def _page_home(results: List[dict]) -> None:
         _section_header("Core Algorithm")
         st.markdown(
             '<div class="sci-card">'
-            '<div class="info-pill">Dinucleotide perplexity  H = −Σ p·log₂p → 2ᴴ</div>'
-            '<div class="info-pill">Rolling baseline compensation</div>'
-            '<div class="info-pill">Residual trough detection</div>'
-            '<div class="info-pill">Bounded minimum-mean region optimisation</div>'
+            '<div class="info-pill">P1: Dinucleotide perplexity  H = −Σ p·log₂p → 2ᴴ</div>'
+            '<div class="info-pill">P2: Second-order perplexity of the P1 landscape</div>'
+            '<div class="info-pill">P1_Depression = mean(P1_flanks) / mean(P1_domain)</div>'
+            '<div class="info-pill">P2_Depression = mean(P2_flanks) / mean(P2_domain)</div>'
+            '<div class="info-pill">Composite = w₁·P1_dep + w₂·P2_dep</div>'
+            '<div class="info-pill">Kadane on −Composite_Depression</div>'
+            '<div class="info-pill">RDI = P1_Contrast × P2_Contrast × log(L) × (1+Nm)</div>'
             '<div class="info-pill">Non-B DNA structural annotation</div>'
             '<p style="margin-top:.85rem;color:#64748B;font-size:.88rem;line-height:1.65">'
             'The platform preserves the supplied algorithmic pathway exactly. '
@@ -1248,9 +1799,17 @@ def _page_home(results: List[dict]) -> None:
         )
     with col2:
         _section_header("Algorithm Reference")
-        st.latex(r"H = -\sum_i p_i \log_2 p_i")
-        st.latex(r"\mathrm{Perplexity} = 2^H")
-        st.latex(r"\mathrm{Residual}(x) = \mathrm{Perplexity}(x) - \mathrm{Baseline}(x)")
+        st.latex(r"P1 = 2^{H_1},\quad H_1 = -\sum_i p_i \log_2 p_i")
+        st.latex(r"P2 = 2^{H_2},\quad H_2 = -\sum_b q_b \log_2 q_b")
+        st.latex(
+            r"\Delta P1_{dep} = \frac{\overline{P1}_{flanks}}{\overline{P1}_{dom}}"
+            r",\quad"
+            r"\Delta P2_{dep} = \frac{\overline{P2}_{flanks}}{\overline{P2}_{dom}}"
+        )
+        st.latex(
+            r"\mathrm{RDI_{raw}} = \Delta P1_{dep} \times \Delta P2_{dep}"
+            r"\times \ln(L) \times (1 + N_m)"
+        )
 
     # Live session preview
     if valid:
@@ -1351,22 +1910,65 @@ def _page_sequence_perplexity() -> None:
     max_len = 300
     baseline_win = 200
     top_k = 5
-    score_cutoff = -0.05
+    score_cutoff = -1.1  # Depression ratios > 1 → -depression < -1; -1.1 keeps moderate depressions
     active_motifs: set = set(MOTIF_LABELS.keys())
+    p2_window = 100
+    p1_weight = 0.5
+    p2_weight = 0.5
+    spacer = 50
+    flank_win = 100
 
     with st.expander("⚙️  Analysis Parameters", expanded=False):
         c1, c2, c3 = st.columns(3)
         with c1:
-            window = st.slider("Perplexity Window (bp)", 4, 30, 10, 1)
+            window = st.slider("P1 Window (bp)", 4, 30, 10, 1)
             min_len = st.slider("Min Region Length (bp)", 10, 200, 50, 5)
+            p2_window = st.slider(
+                "P2 Window (P1 positions)", 20, 500, 100, 10,
+                help=(
+                    "Sliding window applied to P1 profile to compute "
+                    "second-order perplexity (stability)."
+                ),
+            )
         with c2:
             max_len = st.slider("Max Region Length (bp)", 50, 1000, 300, 10)
             baseline_win = st.slider("Baseline Window (bp)", 50, 500, 200, 10)
+            spacer = st.slider(
+                "Depression Spacer (bp)", 0, 200, 50, 5,
+                help=(
+                    "Gap between the domain edge and each flanking window "
+                    "in the three-window depression model. "
+                    "Larger values compare more distant context."
+                ),
+            )
         with c3:
             top_k = st.slider("Max Ranked Regions", 1, 20, 5, 1)
             score_cutoff = st.slider(
-                "Residual Score Threshold", -1.0, 0.0, -0.05, 0.01,
+                "Kadane Score Threshold", -10.0, 0.0, -1.1, 0.05,
                 format="%.2f",
+                help=(
+                    "Regions with mean Kadane signal ≥ this value are not "
+                    "reported. For the depression signal, values below -1.0 "
+                    "indicate genuine local depressions (ratio > 1.0)."
+                ),
+            )
+            flank_win = st.slider(
+                "Flank Window (bp)", 20, 300, 100, 10,
+                help="Width of each flanking window in the depression model.",
+            )
+        st.markdown("**Composite Depression Weights**")
+        wc1, wc2 = st.columns(2)
+        with wc1:
+            p1_weight = st.slider(
+                "P1 depression weight (w₁)", 0.0, 1.0, 0.5, 0.05,
+                format="%.2f",
+                help="Weight of P1_Depression in the composite depression signal.",
+            )
+        with wc2:
+            p2_weight = st.slider(
+                "P2 depression weight (w₂)", 0.0, 1.0, 0.5, 0.05,
+                format="%.2f",
+                help="Weight of P2_Depression in the composite depression signal.",
             )
         st.markdown("**Non-B DNA Motif Selection**")
         mc1, mc2, mc3, mc4 = st.columns(4)
@@ -1390,6 +1992,9 @@ def _page_sequence_perplexity() -> None:
         "window": window, "min_len": min_len, "max_len": max_len,
         "baseline_win": baseline_win, "top_k": top_k,
         "score_cutoff": score_cutoff, "active_motifs": active_motifs,
+        "p2_window": p2_window,
+        "p1_weight": p1_weight, "p2_weight": p2_weight,
+        "spacer": spacer, "flank_win": flank_win,
         "fasta_text": fasta_text,
     }
 
@@ -1407,8 +2012,13 @@ def _page_sequence_perplexity() -> None:
                     if len(seq) < min_len + window:
                         computed.append({
                             "header": hdr, "seq": seq,
-                            "perp": np.array([]), "baseline": np.array([]),
+                            "perp": np.array([]),
+                            "p2": np.array([]),
+                            "baseline": np.array([]),
+                            "p2_baseline": np.array([]),
                             "residual": np.array([]),
+                            "p2_residual": np.array([]),
+                            "composite": np.array([]),
                             "regions": [], "skipped": True,
                         })
                     else:
@@ -1418,6 +2028,9 @@ def _page_sequence_perplexity() -> None:
                             min_len=min_len, max_len=max_len,
                             top_k=top_k, score_cutoff=score_cutoff,
                             active_motifs=active_motifs,
+                            p2_window=p2_window,
+                            p1_weight=p1_weight, p2_weight=p2_weight,
+                            spacer=spacer, flank_win=flank_win,
                         ))
                     progress.progress(
                         (idx + 1) / len(records),
@@ -1611,20 +2224,31 @@ def _page_region_caller() -> None:
         ]
         chosen = st.selectbox("Inspect region", opts, key="region_inspector")
         reg = rv["regions"][opts.index(chosen)]
+        rdi_str = f"{reg['rdi']:.4f}" if reg.get("rdi") is not None else "—"
+        mp1_str = (
+            f"{reg['mean_p1']:.3f}" if reg.get("mean_p1") is not None else "—"
+        )
+        mp2_str = (
+            f"{reg['mean_p2']:.3f}" if reg.get("mean_p2") is not None else "—"
+        )
         _metric_strip([
             ("Start", str(reg["start"])),
             ("End", str(reg["end"])),
             ("Width", f"{reg['width']} bp"),
-            ("Trough position", str(reg["trough"])),
-            ("Mean residual", f"{reg['mean_residual']:.4f}"),
+            ("Mean P1", mp1_str),
+            ("Mean P2", mp2_str),
+            ("RDI", rdi_str),
+            ("Class", reg.get("rdi_class", "—")),
             ("GC%", f"{reg['gc_pct']}%"),
         ])
         st.markdown(
             '<div class="sci-card">'
             f'<div class="info-pill">Rank R{reg["rank"]}</div>'
-            f'<div class="info-pill">Trough @ {reg["trough"]}</div>'
+            f'<div class="info-pill">RDI {rdi_str}</div>'
+            f'<div class="info-pill">Class {reg.get("rdi_class", "—")}</div>'
             f'<div class="info-pill">GC% {reg["gc_pct"]}</div>'
-            f'<div class="info-pill">Motifs: {reg["motifs"] or "None detected"}</div>'
+            f'<div class="info-pill">'
+            f'Motifs: {reg["motifs"] or "None detected"}</div>'
             '</div>',
             unsafe_allow_html=True,
         )
@@ -1632,12 +2256,9 @@ def _page_region_caller() -> None:
     # Full regions table
     df = _regions_df(results)
     if not df.empty:
-        _section_header("Regulatory Region Ranking — All Sequences")
-        try:
-            styled = df.style.background_gradient(subset=["Mean Residual"], cmap="Blues_r")
-        except (ImportError, TypeError, AttributeError):
-            styled = df
-        st.dataframe(styled, use_container_width=True, hide_index=True)
+        _section_header("Regulatory Domain Table — All Sequences")
+        grad_col = "RDI" if "RDI" in df.columns else "Mean_Residual"
+        _show_dataframe(df, grad_col)
 
         # Search / filter
         _section_header("Region Filter")
@@ -1669,21 +2290,17 @@ def _page_region_caller() -> None:
 
         st.caption(f"Showing **{len(filtered)}** of **{len(df)}** regions")
         if not filtered.empty:
-            try:
-                filtered_styled = filtered.style.background_gradient(
-                    subset=["Mean Residual"], cmap="Blues_r"
-                )
-            except (ImportError, TypeError, AttributeError):
-                filtered_styled = filtered
-            st.dataframe(filtered_styled, use_container_width=True, hide_index=True)
+            fgrad = "RDI" if "RDI" in filtered.columns else "Mean_Residual"
+            _show_dataframe(filtered, fgrad)
 
         # Scatter
         _section_header("Region Width vs Depth")
         st.plotly_chart(_plot_region_scatter(df), use_container_width=True)
 
-        # Distribution
+        # Distribution (plot_region_distribution expects "Mean Residual" col)
+        _dist_df = df.rename(columns={"Mean_Residual": "Mean Residual"})
         st.plotly_chart(
-            _ltheme(plot_region_distribution(df), height=340),
+            _ltheme(plot_region_distribution(_dist_df), height=340),
             use_container_width=True,
         )
 
@@ -1718,13 +2335,335 @@ def _page_region_caller() -> None:
 
 
 # ============================================================================
-# Page 4 — Non-B DNA Structure Analysis
+# Page 4 — REGPLEX Hierarchical Analysis
+# ============================================================================
+
+
+
+def _page_hierarchical() -> None:
+    _page_header(
+        "Page 04",
+        "REGPLEX Hierarchical Analysis",
+        "Second-order perplexity (P2), local depression analysis, "
+        "Kadane domain architecture, RDI scoring, and domain classification. "
+        "The complete hierarchical framework — all seven scientific illustrations.",
+    )
+
+    results: List[dict] = st.session_state.get("regplex_results", [])
+    stored_params: dict = st.session_state.get("regplex_params", {})
+    valid = _valid_results(results)
+
+    if not valid:
+        _empty_state(
+            "Hierarchical analysis awaiting data",
+            "Run REGPLEX from the Sequence & Perplexity tab to populate "
+            "P2 profiles, depression analysis, RDI scores, and domain maps.",
+        )
+        return
+
+    rv = _select_result(results, "hier_seq_sel", "Sequence for hierarchical view")
+    if rv is None:
+        return
+
+    p2 = rv.get("p2", np.full_like(rv["perp"], np.nan))
+    dep = rv.get("dep", {})
+    using_dep = rv.get("using_depression", False)
+
+    # Metrics
+    mean_p2 = float(np.nanmean(p2)) if np.any(np.isfinite(p2)) else float("nan")
+    p2_str = f"{mean_p2:.3f}" if np.isfinite(mean_p2) else "—"
+    w1 = stored_params.get("p1_weight", 0.5)
+    w2 = stored_params.get("p2_weight", 0.5)
+    spacer_val = stored_params.get("spacer", 50)
+    flank_val  = stored_params.get("flank_win", 100)
+
+    signal_mode = "Depression" if using_dep else "Residual (fallback)"
+    _metric_strip([
+        ("Sequence length", f"{len(rv['seq']):,} bp"),
+        ("Domains called", str(len(rv["regions"]))),
+        ("Mean P1", f"{np.nanmean(rv['perp']):.3f}"),
+        ("Mean P2", p2_str),
+        ("w₁ (P1 dep)", f"{w1:.2f}"),
+        ("w₂ (P2 dep)", f"{w2:.2f}"),
+        ("Spacer", f"{spacer_val} bp"),
+        ("Kadane signal", signal_mode),
+    ])
+
+    # ── Illustration 1: Hierarchical Framework ─────────────────────────
+    _section_header("Illustration 1 · Hierarchical Framework")
+    st.markdown(
+        '<div class="sci-card" style="font-family:monospace;font-size:.82rem;'
+        'line-height:2;color:#0F172A">'
+        '<strong style="color:#2563EB;font-size:.92rem">REGPLEX v3 — Hierarchical Pipeline</strong>'
+        '<br>'
+        '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;DNA Sequence<br>'
+        '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↓<br>'
+        '&nbsp;&nbsp;&nbsp;&nbsp;First-Order Perplexity (P1)<br>'
+        '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Dinucleotide entropy → 2ᴴ<br>'
+        '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↓<br>'
+        '&nbsp;&nbsp;&nbsp;&nbsp;Second-Order Perplexity (P2)<br>'
+        '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Entropy of P1 distribution → 2ᴴ²<br>'
+        '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↓<br>'
+        '&nbsp;&nbsp;<strong style="color:#059669">Local Depression Analysis</strong>'
+        '&nbsp;&nbsp;← <em>Primary Novelty</em><br>'
+        '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;P1_dep = mean(P1_flanks) / mean(P1_domain)<br>'
+        '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;P2_dep = mean(P2_flanks) / mean(P2_domain)<br>'
+        '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Composite = w₁·P1_dep + w₂·P2_dep<br>'
+        '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↓<br>'
+        '&nbsp;&nbsp;&nbsp;&nbsp;Bounded Min-Mean Kadane on −Composite<br>'
+        '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↓<br>'
+        '&nbsp;&nbsp;&nbsp;&nbsp;Domain Ranking (top-k non-overlapping)<br>'
+        '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↓<br>'
+        '&nbsp;&nbsp;&nbsp;&nbsp;RDI Scoring  +  Non-B DNA Annotation<br>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── Illustration 2: Three-Window Depression Model ──────────────────
+    _section_header("Illustration 2 · Three-Window Depression Model")
+    dep_model_html = (
+        '<div class="sci-card">'
+        '<p style="color:#64748B;font-size:.88rem;margin:0 0 .75rem">'
+        'For every genomic position the algorithm evaluates three equal windows '
+        f'(flank={flank_val} bp, spacer={spacer_val} bp, domain=100 bp) and computes '
+        'the ratio of flanking to domain perplexity. Values &gt; 1 indicate a '
+        'locally depressed complexity architecture.</p>'
+        '<div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;'
+        'font-size:.82rem;font-family:monospace">'
+        '<div style="background:#EFF6FF;border:2px solid #93C5FD;border-radius:8px;'
+        f'padding:.6rem 1rem;text-align:center">'
+        f'<strong style="color:#1D4ED8">Upstream Flank</strong><br>{flank_val} bp</div>'
+        '<div style="color:#94A3B8;font-size:1.2rem">··</div>'
+        f'<div style="background:#F1F5F9;border:1px solid #E2E8F0;border-radius:8px;'
+        f'padding:.4rem .8rem;text-align:center;color:#64748B;font-size:.75rem">'
+        f'spacer<br>{spacer_val} bp</div>'
+        '<div style="color:#94A3B8;font-size:1.2rem">··</div>'
+        '<div style="background:#FEF2F2;border:2px solid #FCA5A5;border-radius:8px;'
+        'padding:.6rem 1rem;text-align:center">'
+        '<strong style="color:#EF4444">Domain</strong><br>100 bp</div>'
+        '<div style="color:#94A3B8;font-size:1.2rem">··</div>'
+        f'<div style="background:#F1F5F9;border:1px solid #E2E8F0;border-radius:8px;'
+        f'padding:.4rem .8rem;text-align:center;color:#64748B;font-size:.75rem">'
+        f'spacer<br>{spacer_val} bp</div>'
+        '<div style="color:#94A3B8;font-size:1.2rem">··</div>'
+        '<div style="background:#EFF6FF;border:2px solid #93C5FD;border-radius:8px;'
+        f'padding:.6rem 1rem;text-align:center">'
+        f'<strong style="color:#1D4ED8">Downstream Flank</strong><br>{flank_val} bp</div>'
+        '</div>'
+        '<p style="margin:.8rem 0 0;color:#64748B;font-size:.84rem">'
+        '<strong>P1_Depression</strong> = Mean(P1_flanks) ÷ Mean(P1_domain) &nbsp;|&nbsp; '
+        '<strong>P2_Depression</strong> = Mean(P2_flanks) ÷ Mean(P2_domain) &nbsp;|&nbsp; '
+        f'<strong>Composite</strong> = {w1:.2f}·P1_dep + {w2:.2f}·P2_dep</p>'
+        '</div>'
+    )
+    st.markdown(dep_model_html, unsafe_allow_html=True)
+
+    if rv["regions"]:
+        reg_opts = [
+            f"R{r['rank']} [{r['start']}–{r['end']}]  P1_Contrast={r.get('p1_contrast', 'n/a')}"
+            for r in rv["regions"]
+        ]
+        chosen_idx = st.selectbox(
+            "Region for three-window illustration", range(len(reg_opts)),
+            format_func=lambda i: reg_opts[i],
+            key="hier_3win_sel",
+        )
+        st.plotly_chart(
+            _plot_three_window_model(
+                rv, chosen_idx,
+                spacer=stored_params.get("spacer", 50),
+                flank_win=stored_params.get("flank_win", 100),
+            ),
+            use_container_width=True,
+        )
+        st.caption(
+            "Domain bar (red) should be LOWER than the flank bars (blue) for a "
+            "genuine local depression.  P1_Contrast = flanks / domain > 1 is the "
+            "depression signature."
+        )
+
+    # ── Illustrations 3 + 4: P1 and P2 Landscapes ─────────────────────
+    _section_header(
+        "Illustrations 3 & 4 · P1 Landscape  &  P2 Landscape"
+    )
+    st.plotly_chart(_plot_p1_p2_profile(rv), use_container_width=True)
+    st.caption(
+        "P1 measures local sequence diversity (dinucleotide entropy). "
+        "P2 measures the stability of the P1 landscape across a sliding window. "
+        "Low P2 = stable regulatory architecture. Detected domains are shaded."
+    )
+
+    # ── Illustration 5: Local Depression Analysis ──────────────────────
+    _section_header("Illustration 5 · Local Depression Analysis")
+    dep_composite = dep.get("composite", np.full_like(rv["perp"], np.nan))
+    n_valid_dep = int(np.sum(np.isfinite(dep_composite)))
+    if n_valid_dep > 0:
+        st.plotly_chart(_plot_depression_profile(rv), use_container_width=True)
+        dep_vals = dep_composite[np.isfinite(dep_composite)]
+        mean_dep = float(np.mean(dep_vals))
+        max_dep = float(np.max(dep_vals))
+        _metric_strip([
+            ("Valid depression positions", f"{n_valid_dep:,}"),
+            ("Mean composite depression", f"{mean_dep:.3f}"),
+            ("Peak depression", f"{max_dep:.3f}"),
+        ])
+        st.caption(
+            "Values above 1.0 indicate locally depressed complexity architectures. "
+            "The Kadane optimiser targets the deepest valleys in −Composite_Depression."
+        )
+    else:
+        st.info(
+            "Depression profile not computed for this sequence — the sequence may be "
+            "shorter than the minimum required length "
+            f"(2 × (flank_win + spacer) + domain_win = "
+            f"{2*(flank_val + spacer_val) + 100} positions). "
+            "Residual-based composite was used instead."
+        )
+        # Show residual composite for short sequences
+        _section_header("Residual Composite Signal (fallback)")
+        st.plotly_chart(_plot_residual_composite(rv), use_container_width=True)
+        st.caption(
+            f"Composite residual = {w1:.2f} × P1_residual + {w2:.2f} × P2_residual. "
+            "Used when the sequence is too short for three-window depression analysis."
+        )
+
+    # ── Illustration 6: Kadane Optimization ───────────────────────────
+    _section_header("Illustration 6 · Kadane Optimization")
+    st.plotly_chart(
+        _ltheme(
+            plot_sequence_domain_map(
+                len(rv["seq"]), rv["regions"],
+                title="Kadane Domain Architecture Map",
+            )
+        ),
+        use_container_width=True,
+    )
+    st.markdown(
+        '<div class="sci-card">'
+        '<span class="page-kicker">Bounded Minimum-Mean Kadane</span>'
+        '<p style="color:#64748B;font-size:.85rem;line-height:1.7;margin:.3rem 0 0">'
+        'The optimiser operates on −Composite_Depression. For each finite run of '
+        'the signal, it finds the contiguous subarray with the minimum mean under '
+        'the constraints <code>min_len ≤ length ≤ max_len</code> using a monotonic '
+        'deque over the prefix-sum array — provably O(n). The best-scoring span is '
+        'recorded, masked to NaN, and the scan repeats for up to <em>top_k</em> '
+        'non-overlapping domains. Each domain represents a region where the local '
+        'complexity architecture is most depressed relative to its genomic context.'
+        '</p></div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── Illustration 7: Domain Architecture View ───────────────────────
+    _section_header("Illustration 7 · Domain Architecture View — RDI")
+    st.plotly_chart(
+        _plot_rdi_distribution(rv["regions"]), use_container_width=True
+    )
+    _rdi_legend()
+
+    # Domain ranking
+    _section_header("Domain Ranking — Width × RDI")
+    st.plotly_chart(
+        _plot_domain_ranking_rdi(rv["regions"]), use_container_width=True
+    )
+
+    # ── RDI table ──────────────────────────────────────────────────────
+    if rv["regions"]:
+        _section_header("Domain RDI Summary Table")
+        rows = []
+        for reg in rv["regions"]:
+            rows.append({
+                "Rank": reg["rank"],
+                "Start": reg["start"],
+                "End": reg["end"],
+                "Width": reg["width"],
+                "Mean_P1": reg.get("mean_p1"),
+                "Mean_P2": reg.get("mean_p2"),
+                "Mean_P1_Flanks": reg.get("mean_p1_flanks"),
+                "Mean_P2_Flanks": reg.get("mean_p2_flanks"),
+                "P1_Contrast": reg.get("p1_contrast"),
+                "P2_Contrast": reg.get("p2_contrast"),
+                "Mean_Residual": reg["mean_residual"],
+                "RDI": reg.get("rdi"),
+                "Class": reg.get("rdi_class"),
+                "GC%": reg["gc_pct"],
+                "Motif_Count": reg.get("motif_count", 0),
+                "Motifs": reg["motifs"],
+            })
+        rdi_df = pd.DataFrame(rows)
+        rdi_col = "RDI" if "RDI" in rdi_df.columns else "Mean_Residual"
+        _show_dataframe(rdi_df, rdi_col)
+
+    # ── RDI explanation ────────────────────────────────────────────────
+    _section_header("RDI — Regulatory Depression Index")
+    ec = st.columns(4)
+    items = [
+        ("P1_Contrast",
+         "Mean P1_flanks / Mean P1_domain",
+         "Ratio of flanking to domain first-order perplexity. "
+         "Higher values indicate stronger local complexity depression."),
+        ("P2_Contrast",
+         "Mean P2_flanks / Mean P2_domain",
+         "Ratio of flanking to domain second-order perplexity. "
+         "Confirms stable architecture within the domain."),
+        ("LengthFactor",
+         "log(domain_length)",
+         "Longer domains score proportionally via the logarithmic factor."),
+        ("MotifFactor",
+         "1 + motif_count",
+         "Each distinct Non-B DNA motif detected in the domain adds weight, "
+         "indicating biological regulatory relevance."),
+    ]
+    for col, (name, formula, desc) in zip(ec, items):
+        col.markdown(
+            f'<div class="sci-card">'
+            f'<span class="page-kicker">{name}</span>'
+            f'<code style="display:block;font-size:.78rem;color:#2563EB;'
+            f'margin:.2rem 0 .4rem">{formula}</code>'
+            f'<p style="color:#64748B;font-size:.82rem;line-height:1.5;margin:0">'
+            f'{desc}</p></div>',
+            unsafe_allow_html=True,
+        )
+    st.latex(
+        r"\mathrm{RDI_{raw}} = "
+        r"\frac{\overline{P1}_{flanks}}{\overline{P1}_{dom}} \times "
+        r"\frac{\overline{P2}_{flanks}}{\overline{P2}_{dom}} \times "
+        r"\ln(L) \times (1 + N_m)"
+    )
+
+
+def _rdi_legend() -> None:
+    """Render the RDI class legend as a small metric strip."""
+    st.markdown(
+        '<div class="metric-strip">'
+        '<div class="metric-item" style="border-left:3px solid #1D4ED8">'
+        '<span class="metric-val" style="color:#1D4ED8">Class I</span>'
+        '<span class="metric-lbl">RDI &gt; 0.80</span>'
+        '</div>'
+        '<div class="metric-item" style="border-left:3px solid #0891B2">'
+        '<span class="metric-val" style="color:#0891B2">Class II</span>'
+        '<span class="metric-lbl">RDI 0.60 – 0.80</span>'
+        '</div>'
+        '<div class="metric-item" style="border-left:3px solid #F59E0B">'
+        '<span class="metric-val" style="color:#F59E0B">Class III</span>'
+        '<span class="metric-lbl">RDI 0.40 – 0.60</span>'
+        '</div>'
+        '<div class="metric-item" style="border-left:3px solid #94A3B8">'
+        '<span class="metric-val" style="color:#94A3B8">Class IV</span>'
+        '<span class="metric-lbl">RDI &lt; 0.40</span>'
+        '</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+
+# ============================================================================
+# Page 5 — Non-B DNA Structure Analysis
 # ============================================================================
 
 
 def _page_nonb_dna() -> None:
     _page_header(
-        "Page 04",
+        "Page 05",
         "Non-B DNA Structure Analysis",
         "Structural genomics interpretation for REGPLEX-called domains. "
         "Motif enrichment, positional distribution, region overlap maps, "
@@ -1909,13 +2848,13 @@ def _page_nonb_dna() -> None:
 
 
 # ============================================================================
-# Page 5 — Reports & Exports
+# Page 6 — Reports & Exports
 # ============================================================================
 
 
 def _page_reports() -> None:
     _page_header(
-        "Page 05",
+        "Page 06",
         "Reports & Exports",
         "Publication-quality figure generation, structured data exports, "
         "and one-click PDF report for the current REGPLEX session.",
@@ -1964,13 +2903,8 @@ def _page_reports() -> None:
         st.dataframe(summary_df, use_container_width=True, hide_index=True)
     with t2:
         if not regions_df.empty:
-            try:
-                regions_styled = regions_df.style.background_gradient(
-                    subset=["Mean Residual"], cmap="Blues_r"
-                )
-            except (ImportError, TypeError, AttributeError):
-                regions_styled = regions_df
-            st.dataframe(regions_styled, use_container_width=True, hide_index=True)
+            rai_col = "RDI" if "RDI" in regions_df.columns else "Mean_Residual"
+            _show_dataframe(regions_df, rai_col)
         else:
             st.info("No regions to display.")
 
@@ -2112,8 +3046,8 @@ def _page_reports() -> None:
     # Statistical summary
     _section_header("Statistical Summary")
     if not regions_df.empty:
-        numeric_cols = ["Width", "Mean Residual", "GC%"]
-        stat_cols = [c for c in numeric_cols if c in regions_df.columns]
+        stat_candidates = ["Width", "Mean_Residual", "RDI", "GC%", "Motif_Count"]
+        stat_cols = [c for c in stat_candidates if c in regions_df.columns]
         if stat_cols:
             st.dataframe(
                 regions_df[stat_cols].describe().round(4),
@@ -2124,9 +3058,10 @@ def _page_reports() -> None:
     _section_header("Citation")
     st.code(
         textwrap.dedent("""\
-            Yella VR (2025). REGPLEX: Regulatory Domain Discovery Using DNA Sequence Perplexity.
-            An information-theoretic framework for identifying low-perplexity regulatory
-            DNA regions using bounded minimum-mean Kadane optimisation.
+            Yella VR (2025). REGPLEX v3: Hierarchical Regulatory Architecture
+            Discovery Using First-Order Perplexity, Second-Order Perplexity,
+            Local Depression Analysis, and Bounded Minimum-Mean Kadane Optimization.
+            Regulatory Depression Index (RDI) for genome-scale domain calling.
             GitHub: https://github.com/VRYella/PerCALL
         """),
         language=None,
@@ -2142,17 +3077,19 @@ def main() -> None:
     # Brand bar (above tabs)
     st.markdown(_BRAND_BAR, unsafe_allow_html=True)
 
-    # Five-page horizontal navigation via st.tabs
+    # Six-page horizontal navigation via st.tabs
     (
         tab_home,
         tab_seq,
         tab_region,
+        tab_hier,
         tab_nonb,
         tab_reports,
     ) = st.tabs([
         "🏠  Home",
         "🧬  Sequence & Perplexity",
         "📍  Region Caller",
+        "🎯  REGPLEX Hierarchical",
         "🔬  Non-B DNA",
         "📊  Reports & Exports",
     ])
@@ -2167,6 +3104,9 @@ def main() -> None:
 
     with tab_region:
         _page_region_caller()
+
+    with tab_hier:
+        _page_hierarchical()
 
     with tab_nonb:
         _page_nonb_dna()

@@ -4,6 +4,8 @@ PERCALL core modules.
 from .perplexity import compute_perplexity, local_residual
 from .region_caller import find_regions
 from .motifs import MOTIF_PATTERNS, MOTIF_LABELS, MOTIF_COLORS, scan_motifs, count_motifs
+from .second_order import compute_second_order_perplexity, second_order_residual
+from .depression import compute_depression_profile, compute_rdi
 
 __all__ = [
     "compute_perplexity",
@@ -14,4 +16,8 @@ __all__ = [
     "MOTIF_COLORS",
     "scan_motifs",
     "count_motifs",
+    "compute_second_order_perplexity",
+    "second_order_residual",
+    "compute_depression_profile",
+    "compute_rdi",
 ]
