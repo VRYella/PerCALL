@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import io
-import json
 import math
 from collections import deque
 from dataclasses import dataclass
@@ -44,7 +43,7 @@ def parse_fasta(text: str) -> list[tuple[str, str]]:
         line = line.strip()
         if not line:
             continue
-        if line.startswith(">"): 
+        if line.startswith(">"):
             if header is not None:
                 seq = "".join(chunks).upper().replace("U", "T")
                 seq = "".join(c for c in seq if c in _IUPAC_DNA)

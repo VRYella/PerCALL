@@ -130,7 +130,12 @@ def main() -> None:
         else:
             st.download_button("CSV", export_table(df, "csv"), "regplex_domains.csv", "text/csv")
             st.download_button("TSV", export_table(df, "tsv"), "regplex_domains.tsv", "text/tab-separated-values")
-            st.download_button("Excel", export_table(df, "xlsx"), "regplex_domains.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.download_button(
+                "Excel",
+                export_table(df, "xlsx"),
+                "regplex_domains.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
             st.download_button("BED", export_bed(df), "regplex_domains.bed", "text/plain")
             st.download_button("GFF", export_gff(df, gff3=False), "regplex_domains.gff", "text/plain")
             st.download_button("GFF3", export_gff(df, gff3=True), "regplex_domains.gff3", "text/plain")
