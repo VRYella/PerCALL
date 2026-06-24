@@ -214,13 +214,13 @@ def main() -> None:
             else:
                 mean_rcs = selected_df["RCS"].mean()
                 mean_gc = selected_df["GC_Content"].mean()
-                mean_rcs_display = f"{mean_rcs:.4f}"
-                mean_gc_display = f"{mean_gc * 100:.2f}%"
+                mean_rcs_display = f"{mean_rcs:.4f}" if pd.notna(mean_rcs) else "N/A"
+                mean_gc_display = f"{mean_gc * 100:.2f}%" if pd.notna(mean_gc) else "N/A"
             m1, m2, m3 = st.columns(3)
             with m1:
                 st.metric("Detected Domains", len(res.domains))
             with m2:
-                st.metric("Mean RCS (Regulatory Complexity Score)", mean_rcs_display)
+                st.metric("Mean RCS", mean_rcs_display)
             with m3:
                 st.metric("Mean GC Content", mean_gc_display)
             st.plotly_chart(plot_p1_profile(res.p1), use_container_width=True)
