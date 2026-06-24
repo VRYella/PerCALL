@@ -34,8 +34,66 @@ from visualization import (
 
 
 st.set_page_config(page_title="REGPLEX", layout="wide")
-st.title("REGPLEX")
-st.caption("Regulatory Architecture Discovery Through Perplexity Depression")
+
+SCIENTIFIC_THEME_CSS = """
+<style>
+:root {
+    --bg: #071126;
+    --bg-accent: #0d1f3a;
+    --text: #e7edf7;
+    --muted: #9fb3cc;
+    --line: rgba(120, 157, 201, 0.25);
+    --primary: #35d0ff;
+    --secondary: #8a7dff;
+}
+.stApp {
+    background:
+        radial-gradient(circle at 15% 15%, rgba(53, 208, 255, 0.16), transparent 45%),
+        radial-gradient(circle at 85% 5%, rgba(138, 125, 255, 0.12), transparent 35%),
+        linear-gradient(180deg, var(--bg) 0%, #050b19 100%);
+    color: var(--text);
+}
+.stApp :is(h1, h2, h3, h4, p, li, label), .stCaption {
+    color: var(--text) !important;
+}
+.scientific-hero {
+    padding: 1.25rem;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: linear-gradient(120deg, rgba(13,31,58,0.9), rgba(7,17,38,0.85));
+    margin-bottom: 1rem;
+}
+.scientific-card {
+    padding: 1rem;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: rgba(10, 24, 48, 0.68);
+    margin-bottom: 0.75rem;
+}
+[data-baseweb="tab-list"] {
+    gap: 0.4rem;
+}
+[data-baseweb="tab"] {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: rgba(8, 21, 44, 0.8);
+}
+[data-baseweb="tab-highlight"] {
+    background: linear-gradient(90deg, var(--primary), var(--secondary));
+}
+.stMetric {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 0.4rem;
+    background: rgba(9, 23, 46, 0.7);
+}
+</style>
+"""
+
+
+def apply_custom_css_theme() -> None:
+    """Apply a custom scientific theme to the Streamlit interface."""
+    st.markdown(SCIENTIFIC_THEME_CSS, unsafe_allow_html=True)
 
 
 def run_analysis(fasta_text: str, params: dict, motif_text: str) -> list[AnalysisResult]:
@@ -50,18 +108,50 @@ def run_analysis(fasta_text: str, params: dict, motif_text: str) -> list[Analysi
 
 
 def main() -> None:
+    apply_custom_css_theme()
+    st.markdown(
+        """
+        <div class="scientific-hero">
+            <h1 style="margin:0;">REGPLEX</h1>
+            <p style="margin:0.35rem 0 0 0; color:var(--muted);">
+            Regulatory Architecture Discovery Through Perplexity Depression
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     tabs = st.tabs(["Home", "Analysis", "Results", "Motifs", "Downloads"])
 
     with tabs[0]:
         st.markdown("""
         ### Scientific Motivation
-        Functional DNA regions can exhibit sustained local collapse in sequence uncertainty.
-
-        **Pipeline**: DNA → 10-mer Perplexity → PDI → Bounded Minimum-Mean Kadane → Domains → Optional Motif Annotation
+        REGPLEX quantifies local uncertainty-collapse signatures in DNA using a reproducible, annotation-free statistical framework.
         """)
+        st.markdown(
+            """
+            <div class="scientific-card">
+                <strong>Pipeline</strong><br>
+                DNA → 10-mer Perplexity → Perplexity Depression Index (PDI) →
+                Bounded Minimum-Mean Kadane → Ranked Regulatory Domains → Motif Architecture
+            </div>
+            <div class="scientific-card">
+                <strong>Interpretation Principle</strong><br>
+                Higher domain RCS and sustained PDI elevation indicate stronger evidence of putative regulatory architecture.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         st.plotly_chart(plot_algorithm_illustration(), use_container_width=True)
 
     with tabs[1]:
+        st.markdown(
+            """
+            <div class="scientific-card">
+                Configure statistically controlled windows, then run a full uncertainty-collapse scan across all FASTA records.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         upload = st.file_uploader("Upload FASTA", type=["fasta", "fa", "fna", "txt"])
         pasted = st.text_area("Or paste FASTA", height=180)
         c1, c2, c3 = st.columns(3)
@@ -117,12 +207,28 @@ def main() -> None:
         else:
             selected = st.selectbox("Sequence", [r.sequence_id for r in results])
             res = next(r for r in results if r.sequence_id == selected)
+            selected_df = df[df["Sequence_ID"] == selected]
+            if selected_df.empty:
+                mean_rcs_display = "N/A"
+                mean_gc_display = "N/A"
+            else:
+                mean_rcs = selected_df["RCS"].mean()
+                mean_gc = selected_df["GC_Content"].mean()
+                mean_rcs_display = f"{mean_rcs:.4f}" if pd.notna(mean_rcs) else "N/A"
+                mean_gc_display = f"{mean_gc * 100:.2f}%" if pd.notna(mean_gc) else "N/A"
+            m1, m2, m3 = st.columns(3)
+            with m1:
+                st.metric("Detected Domains", len(res.domains))
+            with m2:
+                st.metric("Mean RCS", mean_rcs_display)
+            with m3:
+                st.metric("Mean GC Content", mean_gc_display)
             st.plotly_chart(plot_p1_profile(res.p1), use_container_width=True)
             st.plotly_chart(plot_pdi_profile(res.pdi, res.domains), use_container_width=True)
             st.plotly_chart(plot_domain_map(res.length, res.domains), use_container_width=True)
             st.plotly_chart(plot_domain_ranking(res.domains), use_container_width=True)
             st.plotly_chart(plot_domain_statistics(res.domains), use_container_width=True)
-            st.dataframe(df[df["Sequence_ID"] == selected], use_container_width=True)
+            st.dataframe(selected_df, use_container_width=True)
 
     with tabs[3]:
         if df.empty:
