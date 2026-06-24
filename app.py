@@ -381,7 +381,7 @@ def main() -> None:
             </div>
             <div class="sci-card sci-card-purple">
                 <strong>Interpretation Principle</strong><br>
-                <span style="color:#9fb3cc; font-size:0.93rem;">
+                <span style="color:var(--muted); font-size:0.93rem;">
                 Higher domain RCS and sustained PDI elevation indicate stronger evidence
                 of putative regulatory architecture.
                 </span>

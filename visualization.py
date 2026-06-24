@@ -20,6 +20,13 @@ _PINK = "#ff6b9d"
 
 # Class colour mapping (I = gold, II = cyan, III = purple, IV = teal)
 _CLASS_COLOR = {"I": _GOLD, "II": _CYAN, "III": _PURPLE, "IV": _GREEN}
+# Pre-defined rgba fill colours for domain class vrects (opacity 0.12)
+_CLASS_FILL = {
+    "I":   "rgba(255,200,87,0.12)",
+    "II":  "rgba(53,208,255,0.12)",
+    "III": "rgba(138,125,255,0.12)",
+    "IV":  "rgba(54,247,176,0.12)",
+}
 _CLASS_DEFAULT = "#4a90e2"
 
 _BASE_LAYOUT = dict(
@@ -108,9 +115,10 @@ def plot_pdi_profile(pdi: np.ndarray, domains: list[dict]) -> go.Figure:
     for d in domains:
         cls = d.get("Class", "IV")
         col = _CLASS_COLOR.get(cls, _CLASS_DEFAULT)
+        fill = _CLASS_FILL.get(cls, "rgba(74,144,226,0.12)")
         fig.add_vrect(
             x0=d["Start"], x1=d["End"],
-            fillcolor=col.replace("#", "rgba(") + ",0.12)" if col.startswith("#") else col,
+            fillcolor=fill,
             line_width=1,
             line_color=col,
             opacity=0.5,
@@ -245,14 +253,14 @@ def plot_domain_statistics(domains: list[dict]) -> go.Figure:
         ([d.get("Variance_P1", 0) for d in domains], _GOLD, "Variance P1", 2, 1),
         ([d.get("RCS", 0) for d in domains], _GREEN, "RCS", 2, 2),
     ]
-    for vals, col, name, row, col_idx in datasets:
+    for vals, col, name, row, col_num in datasets:
         fig.add_trace(
             go.Histogram(
                 x=vals, name=name,
                 marker=dict(color=col, **hist_cfg),
                 hovertemplate=f"{name}: %{{x}}<br>Count: %{{y}}<extra></extra>",
             ),
-            row=row, col=col_idx,
+            row=row, col=col_num,
         )
     _apply_base(fig, "Fig. 5 · Domain Statistics", height=500)
     fig.update_layout(showlegend=False)
