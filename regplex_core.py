@@ -35,6 +35,7 @@ class AnalysisResult:
     p1: np.ndarray
     p2: np.ndarray
     pvs: np.ndarray
+    symmetry: np.ndarray
     upstream_mean: np.ndarray
     candidate_mean: np.ndarray
     downstream_mean: np.ndarray
@@ -159,16 +160,23 @@ def _fixed_valley_profile(
     downstream_mean = _window_means_from_prefix(csum, ccount, downstream_start, downstream_end)
     upstream_difference = upstream_mean - candidate_mean
     downstream_difference = downstream_mean - candidate_mean
-    pvs = ((upstream_mean + downstream_mean) / 2.0) - candidate_mean
+    # Contrast: average flank depression relative to candidate
+    contrast = (upstream_mean + downstream_mean) / 2.0 - candidate_mean
+    # Symmetry: flanks represent similar background (1 = balanced, 0 = pure slope)
+    denom = upstream_mean + downstream_mean
+    symmetry = 1.0 - np.abs(upstream_mean - downstream_mean) / (denom + EPSILON)
+    np.clip(symmetry, 0.0, 1.0, out=symmetry)
+    # PVS = Contrast × Symmetry
+    pvs = contrast * symmetry
+    # First decision: upstream must be depressed relative to candidate
     valid = (
         np.isfinite(upstream_mean)
         & np.isfinite(candidate_mean)
         & np.isfinite(downstream_mean)
-        & np.isfinite(upstream_difference)
-        & np.isfinite(downstream_difference)
+        & (upstream_difference > 0)
         & np.isfinite(pvs)
     )
-    for arr in (upstream_mean, candidate_mean, downstream_mean, upstream_difference, downstream_difference, pvs):
+    for arr in (upstream_mean, candidate_mean, downstream_mean, upstream_difference, downstream_difference, pvs, symmetry):
         arr[~valid] = np.nan
     candidate_window_track = np.zeros(n, dtype=np.int32)
     candidate_window_track[valid] = candidate_window
@@ -183,6 +191,7 @@ def _fixed_valley_profile(
         "downstream_mean": downstream_mean.astype(np.float32),
         "upstream_difference": upstream_difference.astype(np.float32),
         "downstream_difference": downstream_difference.astype(np.float32),
+        "symmetry": symmetry.astype(np.float32),
         "candidate_window": candidate_window_track,
         "candidate_start": candidate_start,
         "candidate_end": candidate_end,
@@ -210,6 +219,7 @@ def compute_valley_profile(
         "downstream_mean": np.full(len(p2), np.nan, dtype=np.float32),
         "upstream_difference": np.full(len(p2), np.nan, dtype=np.float32),
         "downstream_difference": np.full(len(p2), np.nan, dtype=np.float32),
+        "symmetry": np.full(len(p2), np.nan, dtype=np.float32),
         "candidate_window": np.zeros(len(p2), dtype=np.int32),
         "candidate_start": np.full(len(p2), -1, dtype=np.int32),
         "candidate_end": np.full(len(p2), -1, dtype=np.int32),
@@ -266,17 +276,22 @@ def domain_statistics(start: int, end: int, p1: np.ndarray, p2: np.ndarray, prof
     domain_p1 = p1[signal_slice]
     domain_p2 = p2[signal_slice]
     domain_pvs = profile["pvs"][signal_slice]
+    domain_symmetry = profile["symmetry"][signal_slice]
     finite_p1 = domain_p1[np.isfinite(domain_p1)]
     finite_p2 = domain_p2[np.isfinite(domain_p2)]
     finite_pvs = domain_pvs[np.isfinite(domain_pvs)]
+    finite_symmetry = domain_symmetry[np.isfinite(domain_symmetry)]
     mean_p1 = float(np.nanmean(finite_p1)) if finite_p1.size else float("nan")
     min_p1 = float(np.nanmin(finite_p1)) if finite_p1.size else float("nan")
+    max_p1 = float(np.nanmax(finite_p1)) if finite_p1.size else float("nan")
     variance = float(np.nanvar(finite_p1)) if finite_p1.size else float("nan")
     sd = float(np.sqrt(variance)) if np.isfinite(variance) else float("nan")
     cv = float(sd / (mean_p1 + EPSILON)) if np.isfinite(sd) and np.isfinite(mean_p1) else float("nan")
     mean_p2 = float(np.nanmean(finite_p2)) if finite_p2.size else float("nan")
     mean_pvs = float(np.nanmean(finite_pvs)) if finite_pvs.size else float("nan")
     max_pvs = float(np.nanmax(finite_pvs)) if finite_pvs.size else float("nan")
+    area_under_valley = float(np.nansum(finite_pvs)) if finite_pvs.size else 0.0
+    mean_symmetry = float(np.nanmean(finite_symmetry)) if finite_symmetry.size else 0.0
     upstream_mean = float(np.nanmean(profile["upstream_mean"][signal_slice]))
     candidate_mean = float(np.nanmean(profile["candidate_mean"][signal_slice]))
     downstream_mean = float(np.nanmean(profile["downstream_mean"][signal_slice]))
@@ -291,6 +306,8 @@ def domain_statistics(start: int, end: int, p1: np.ndarray, p2: np.ndarray, prof
     sequence = seq[start_nt:end_nt + 1]
     gc = (sequence.count("G") + sequence.count("C")) / max(len(sequence), 1)
     stability = 1.0 / (variance + EPSILON) if np.isfinite(variance) else 0.0
+    # Confidence: Contrast × Symmetry × Persistence × log(Length) × 1/(Variance+ε)
+    # PVS already encodes Contrast × Symmetry per position, so mean_pvs = mean(Contrast × Symmetry)
     contrast = max(mean_pvs, 0.0) if np.isfinite(mean_pvs) else 0.0
     confidence_raw = contrast * persistence * math.log(max(signal_length, 2)) * stability
     candidate_windows = profile["candidate_window"][signal_slice]
@@ -303,16 +320,19 @@ def domain_statistics(start: int, end: int, p1: np.ndarray, p2: np.ndarray, prof
         "End": int(end_nt),
         "Length": int(end_nt - start_nt + 1),
         "Mean_P1": mean_p1,
+        "Min_P1": min_p1,
+        "Max_P1": max_p1,
         "Mean_P2": mean_p2,
         "Mean_PVS": mean_pvs,
         "Max_PVS": max_pvs,
-        "Min_P1": min_p1,
+        "Area_Under_Valley": area_under_valley,
         "Upstream_Mean": upstream_mean,
         "Candidate_Mean": candidate_mean,
         "Downstream_Mean": downstream_mean,
         "Upstream_Difference": upstream_difference,
         "Downstream_Difference": downstream_difference,
         "Combined_Valley_Score": combined_valley_score,
+        "Symmetry": mean_symmetry,
         "Variance": variance,
         "SD": sd,
         "CV": cv,
@@ -423,6 +443,7 @@ def analyze_sequence(sequence_id: str, seq: str, **kwargs) -> AnalysisResult:
         p1=p1,
         p2=p2,
         pvs=profile["pvs"],
+        symmetry=profile["symmetry"],
         upstream_mean=profile["upstream_mean"],
         candidate_mean=profile["candidate_mean"],
         downstream_mean=profile["downstream_mean"],
@@ -448,16 +469,19 @@ def domains_dataframe(results: Iterable[AnalysisResult]) -> pd.DataFrame:
                 "Signal_End": domain["Signal_End"],
                 "Signal_Length": domain["Signal_Length"],
                 "Mean_P1": domain["Mean_P1"],
+                "Min_P1": domain["Min_P1"],
+                "Max_P1": domain["Max_P1"],
                 "Mean_P2": domain["Mean_P2"],
                 "Mean_PVS": domain["Mean_PVS"],
                 "Max_PVS": domain["Max_PVS"],
-                "Min_P1": domain["Min_P1"],
+                "Area_Under_Valley": domain["Area_Under_Valley"],
                 "Upstream_Mean": domain["Upstream_Mean"],
                 "Candidate_Mean": domain["Candidate_Mean"],
                 "Downstream_Mean": domain["Downstream_Mean"],
                 "Upstream_Difference": domain["Upstream_Difference"],
                 "Downstream_Difference": domain["Downstream_Difference"],
                 "Combined_Valley_Score": domain["Combined_Valley_Score"],
+                "Symmetry": domain["Symmetry"],
                 "Variance": domain["Variance"],
                 "SD": domain["SD"],
                 "CV": domain["CV"],
@@ -510,8 +534,9 @@ def export_gff(df: pd.DataFrame, gff3: bool = False) -> bytes:
     for _, row in df.iterrows():
         attr = (
             f"ID={row['Domain_ID']};Confidence={row['Confidence']:.4f};"
-            f"MeanP1={row['Mean_P1']:.4f};MeanP2={row['Mean_P2']:.4f};"
-            f"MeanPVS={row['Mean_PVS']:.4f};Motifs={row['Motifs']}"
+            f"MeanP1={row['Mean_P1']:.4f};MaxP1={row['Max_P1']:.4f};"
+            f"MeanPVS={row['Mean_PVS']:.4f};Symmetry={row['Symmetry']:.4f};"
+            f"AreaUnderValley={row['Area_Under_Valley']:.4f};Motifs={row['Motifs']}"
         )
         rows.append("\t".join([
             str(row["Sequence_ID"]),

@@ -119,7 +119,7 @@ def main() -> None:
         left, middle, right = st.columns(3)
         with left:
             perplexity_window = st.number_input("P1 window", 4, 50, PERPLEXITY_WINDOW)
-            second_order_window = st.number_input("P2 window", 20, 500, SECOND_ORDER_WINDOW)
+            second_order_window = st.number_input("Smooth window", 20, 500, SECOND_ORDER_WINDOW)
             upstream_window = st.number_input("Upstream window", 20, 1000, UPSTREAM_WINDOW)
             downstream_window = st.number_input("Downstream window", 20, 1000, DOWNSTREAM_WINDOW)
         with middle:

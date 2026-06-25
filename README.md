@@ -2,7 +2,7 @@
 
 **Perplexity Valley Discovery from DNA Sequence Alone**
 
-REGPLEX is a training-free, species-independent sequence analysis framework that discovers **Perplexity Valleys**: genomic regions where sequence uncertainty is locally depressed relative to the surrounding landscape.
+REGPLEX is a training-free, species-independent sequence analysis framework that discovers **Perplexity Valleys**: genomic regions where sequence uncertainty is locally and symmetrically depressed relative to the surrounding landscape.
 
 ## Core pipeline
 
@@ -10,19 +10,19 @@ DNA sequence
 ↓  
 10-mer dinucleotide perplexity (**P1**)  
 ↓  
-second-order perplexity landscape (**P2**)  
+Sliding smooth landscape (**P2**)  
 ↓  
-three-window valley comparison  
+Three-window valley analysis  
 ↓  
-Perplexity Valley Score (**PVS**)  
+Perplexity Valley Score (**PVS = Contrast × Symmetry**)  
 ↓  
-bounded minimum-mean Kadane optimization  
+Bounded Kadane optimization  
 ↓  
-valley domains  
+Valley domains  
 ↓  
-confidence ranking  
+Confidence ranking  
 ↓  
-optional motif annotation
+Optional motif annotation
 
 ## Design principles
 
@@ -39,39 +39,45 @@ optional motif annotation
 ### 1. First-order perplexity (P1)
 REGPLEX computes 10-mer dinucleotide perplexity along the input DNA sequence.
 
-### 2. Second-order perplexity (P2)
-The P1 signal is stabilized with a sliding second-order window. REGPLEX averages local first-order entropy and converts it back to perplexity to produce a smooth uncertainty landscape.
+### 2. Smooth landscape (P2)
+The P1 signal is stabilized with a sliding window mean to produce a smooth uncertainty landscape.
 
 ### 3. Three-window valley model
 For each genomic position REGPLEX compares:
 
 - upstream context window
 - spacer
-- candidate window
+- candidate window (fixed or adaptive 50–300 bp)
 - spacer
 - downstream context window
 
-Fixed-center mode uses one candidate width. Adaptive mode scans a user-defined candidate-width interval and keeps the strongest local valley score obtained with cumulative-sum-based window means.
+**First decision**: upstream must be elevated relative to the candidate (upstream mean > candidate mean). Positions that fail this test are rejected immediately.
+
+Fixed-center mode uses one candidate width. Adaptive mode scans a user-defined candidate-width interval using prefix sums and keeps the strongest local valley score.
 
 ### 4. Perplexity Valley Score (PVS)
-For each comparison:
 
-- `UpstreamDifference = UpstreamMean - CandidateMean`
+For each position:
+
+- `UpstreamDifference = UpstreamMean - CandidateMean`  (first decision, must be > 0)
 - `DownstreamDifference = DownstreamMean - CandidateMean`
-- `CombinedValleyScore = ((UpstreamMean + DownstreamMean) / 2) - CandidateMean`
+- `Contrast = ((UpstreamMean + DownstreamMean) / 2) - CandidateMean`
+- `Symmetry = 1 - |UpstreamMean - DownstreamMean| / (UpstreamMean + DownstreamMean)`
+- `PVS = Contrast × Symmetry`
 
-Positive PVS indicates a local uncertainty valley.
+High PVS indicates a deep, symmetric valley. Near-zero indicates background. Negative indicates not a valley.
 
 ### 5. Domain recovery
-REGPLEX runs the existing bounded minimum-mean Kadane routine on the PVS track to recover sustained positive-valley domains across the full sequence.
+REGPLEX runs bounded minimum-mean Kadane on the PVS track to recover sustained positive-valley domains.
 
 ### 6. Confidence ranking
-Each domain is ranked with a normalized confidence score built from:
+Each domain is ranked with a normalized confidence score:
 
-- contrast = mean PVS
-- persistence = fraction of positions with positive PVS
-- length = log(domain length)
-- stability = `1 / (variance(P1) + ε)`
+```
+Confidence ∝ mean(PVS) × Persistence × log(Length) × 1/(Variance+ε)
+```
+
+Since `PVS = Contrast × Symmetry`, this is equivalent to `Contrast × Symmetry × Persistence × log(Length) × 1/(Variance+ε)` normalized to 0–1.
 
 ## Installation
 
@@ -116,20 +122,23 @@ Each predicted domain includes:
 - Sequence ID
 - Start / End / Length
 - Mean P1
-- Mean P2
+- Minimum P1
+- Maximum P1
+- Mean smoothed P1 (P2)
 - Mean PVS
 - Maximum PVS
-- Minimum P1
+- Area Under Valley
 - Upstream mean
 - Candidate mean
 - Downstream mean
 - Upstream difference
 - Downstream difference
 - Combined valley score
+- Symmetry
 - Variance / SD / CV
 - GC content
 - Persistence
-- Confidence
+- Confidence (0–1 normalized)
 - Candidate window
 - Motif count / motifs
 - Domain sequence
@@ -139,9 +148,9 @@ Each predicted domain includes:
 Plotly figures provided by the app:
 
 1. Raw Perplexity Profile
-2. Second-Order Landscape
+2. Smoothed Landscape
 3. Three-Window Valley Illustration
-4. Genome-wide Valley Score
+4. Genome-wide Valley Score (PVS)
 5. Kadane Domain Selection
 6. Domain Ranking
 7. Motif Architecture

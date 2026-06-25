@@ -64,21 +64,21 @@ def plot_p1_profile(p1: np.ndarray) -> go.Figure:
 
 def plot_p2_landscape(p2: np.ndarray) -> go.Figure:
     if len(p2) == 0:
-        return _empty_figure("Figure 2 · Second-Order Landscape")
+        return _empty_figure("Figure 2 · Smoothed Landscape")
     x = np.arange(len(p2))
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x=x,
         y=p2,
         mode="lines",
-        name="P2",
+        name="Smoothed P1",
         line=dict(color=_SKY, width=2),
         fill="tozeroy",
         fillcolor="rgba(14,165,233,0.10)",
-        hovertemplate="Position %{x}<br>P2 %{y:.4f}<extra></extra>",
+        hovertemplate="Position %{x}<br>Smoothed P1 %{y:.4f}<extra></extra>",
     ))
-    fig.update_layout(xaxis_title="Signal position", yaxis_title="P2")
-    return _apply_base(fig, "Figure 2 · Second-Order Landscape")
+    fig.update_layout(xaxis_title="Signal position", yaxis_title="Smoothed perplexity")
+    return _apply_base(fig, "Figure 2 · Smoothed Landscape")
 
 
 def plot_three_window_illustration(
@@ -250,9 +250,9 @@ def plot_algorithm_workflow() -> go.Figure:
     labels = [
         "DNA sequence",
         "P1 (10-mer dinucleotide perplexity)",
-        "P2 second-order landscape",
-        "Three-window comparison",
-        "PVS",
+        "Smoothed landscape",
+        "Three-window valley analysis",
+        "PVS (Contrast × Symmetry)",
         "Bounded Kadane",
         "Valley domains",
         "Confidence scoring",
