@@ -155,7 +155,7 @@ div[data-testid="stRadio"] label:hover {
   background: var(--surface);
 }
 
-/* Active tab indicator via :has() – supported in all modern browsers. */
+/* Active tab indicator via :has() – requires Chrome 105+, Firefox 121+, Safari 15.4+. */
 div[data-testid="stRadio"] label:has(input[type="radio"]:checked) {
   color: var(--accent);
   border-bottom-color: var(--accent);

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import re
 import time
 from pathlib import Path
@@ -53,6 +54,20 @@ PLOT_CONFIG = {
 # Map nav labels to integer indices.
 _NAV_INDEX = {label: i for i, label in enumerate(_NAV_ITEMS)}
 
+# Module-level SVG icon path fragments for feature cards (avoids recreation on each render).
+_ICON_PATHS_TRAINING_FREE = (
+    '<path d="M11 21H31" stroke="#1E3A8A" stroke-width="2.2"/>'
+    '<path d="M21 11V31" stroke="#0F766E" stroke-width="2.2"/>'
+)
+_ICON_PATHS_GENOME_SCALE = (
+    '<path d="M10 26L18 18L24 24L32 16" stroke="#1E3A8A" stroke-width="2.2"/>'
+    '<circle cx="32" cy="16" r="2.5" fill="#0F766E"/>'
+)
+_ICON_PATHS_EXPLAINABLE = (
+    '<path d="M10 30L32 12" stroke="#1E3A8A" stroke-width="2.2"/>'
+    '<path d="M10 12H32V30" stroke="#0F766E" stroke-width="2.2"/>'
+)
+
 
 def _svg_square_logo() -> str:
     return """
@@ -104,6 +119,12 @@ def _load_styles() -> None:
         st.error("styles.css not found. Please ensure styles.css exists in the same directory as app.py.")
         return
     st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
+
+
+def _jump_to_nav(label: str) -> None:
+    """Request a navigation jump on the next rerun."""
+    st.session_state["jump_nav"] = label
+    st.rerun()
 
 
 def _render_nav() -> int:
@@ -203,31 +224,20 @@ def _render_home() -> None:
     c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
     with c1:
         if st.button("Start Analysis", key="home_start_analysis", use_container_width=True, type="primary"):
-            st.session_state["jump_nav"] = "Analysis"
-            st.rerun()
+            _jump_to_nav("Analysis")
     with c2:
         if st.button("Load Example", key="home_load_example", use_container_width=True):
             st.session_state["input_fasta_text"] = _load_example_text()
-            st.session_state["jump_nav"] = "Analysis"
-            st.rerun()
+            _jump_to_nav("Analysis")
     with c3:
         st.link_button("Documentation", "https://github.com/VRYella/PerCALL#readme", use_container_width=True)
     with c4:
         st.link_button("GitHub", "https://github.com/VRYella/PerCALL", use_container_width=True)
 
+    _icon_tf = _svg_feature(_ICON_PATHS_TRAINING_FREE)
+    _icon_gs = _svg_feature(_ICON_PATHS_GENOME_SCALE)
+    _icon_ex = _svg_feature(_ICON_PATHS_EXPLAINABLE)
     f1, f2, f3 = st.columns(3)
-    _icon_tf = _svg_feature(
-        '<path d="M11 21H31" stroke="#1E3A8A" stroke-width="2.2"/>'
-        '<path d="M21 11V31" stroke="#0F766E" stroke-width="2.2"/>'
-    )
-    _icon_gs = _svg_feature(
-        '<path d="M10 26L18 18L24 24L32 16" stroke="#1E3A8A" stroke-width="2.2"/>'
-        '<circle cx="32" cy="16" r="2.5" fill="#0F766E"/>'
-    )
-    _icon_ex = _svg_feature(
-        '<path d="M10 30L32 12" stroke="#1E3A8A" stroke-width="2.2"/>'
-        '<path d="M10 12H32V30" stroke="#0F766E" stroke-width="2.2"/>'
-    )
     with f1:
         st.markdown(
             f"<div class='card'>{_icon_tf}<h4>Training-free</h4>"
@@ -352,9 +362,9 @@ def _render_analysis() -> None:
         motif_rows = _validate_motifs(motif_text)
         if motif_rows:
             status_lines = [
-                f"<div class='motif-valid mono'>{row['Motif']} → {row['Regex']}</div>"
+                f"<div class='motif-valid mono'>{html.escape(row['Motif'])} → {html.escape(row['Regex'])}</div>"
                 if row["Status"] == "valid"
-                else f"<div class='motif-invalid mono'>{row['Motif']} → invalid regex</div>"
+                else f"<div class='motif-invalid mono'>{html.escape(row['Motif'])} → invalid regex</div>"
                 for row in motif_rows
             ]
             st.markdown("".join(status_lines), unsafe_allow_html=True)
@@ -512,7 +522,9 @@ def _render_motifs(df: pd.DataFrame) -> None:
     for row in rows:
         klass = "motif-valid" if row["Status"] == "valid" else "motif-invalid"
         label = row["Regex"] if row["Status"] == "valid" else "invalid regex"
-        st.markdown(f"<div class='{klass} mono'>{row['Motif']} → {label}</div>", unsafe_allow_html=True)
+        safe_motif = html.escape(row["Motif"])
+        safe_label = html.escape(label)
+        st.markdown(f"<div class='{klass} mono'>{safe_motif} → {safe_label}</div>", unsafe_allow_html=True)
 
     if not df.empty:
         st.markdown("---")
