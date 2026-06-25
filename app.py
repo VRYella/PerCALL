@@ -10,16 +10,14 @@ import streamlit as st
 
 from motif_engine import annotate_domains, compile_motifs, iupac_to_regex
 from regplex_core import (
-    ADAPTIVE_MAX_WINDOW,
-    ADAPTIVE_MIN_WINDOW,
-    DOWNSTREAM_WINDOW,
+    BASE_SCALE,
     LANDSCAPE_METHOD,
-    LANDSCAPE_WINDOW,
+    MAX_CANDIDATE,
     MAX_DOMAIN,
+    MERGE_GAP,
+    MIN_CANDIDATE,
     MIN_DOMAIN,
     PERPLEXITY_WINDOW,
-    SPACER,
-    UPSTREAM_WINDOW,
     AnalysisResult,
     analyze_sequence,
     domains_dataframe,
@@ -31,13 +29,13 @@ from regplex_core import (
 )
 from visualization import (
     plot_algorithm_workflow,
+    plot_consensus_lpc,
     plot_domain_ranking,
     plot_kadane_domains,
     plot_motif_architecture,
+    plot_multiscale_landscapes,
     plot_p1_profile,
-    plot_p2_landscape,
-    plot_pvs_profile,
-    plot_three_window_illustration,
+    plot_scale_support_heatmap,
 )
 
 st.set_page_config(page_title="REGPLEX", layout="wide", initial_sidebar_state="collapsed")
@@ -172,7 +170,7 @@ def _render_topbar() -> None:
               {_svg_square_logo()}
               <div>
                 <h1>REGPLEX</h1>
-                <span>v7 · Scientific UI</span>
+                <span>v9 · Multi-scale Consensus UI</span>
               </div>
             </div>
             <div class="top-links">
@@ -319,66 +317,101 @@ def _render_analysis() -> None:
     p1, p2, p3, p4 = st.columns(4)
     with p1:
         perplexity_window = st.number_input(
-            "Window", 4, 50, PERPLEXITY_WINDOW, help="P1 perplexity window size", key="param_perplexity_window"
-        )
-        landscape_window = st.number_input(
-            "Landscape", 20, 5000, LANDSCAPE_WINDOW, help="Smoothing window for landscape", key="param_landscape_window"
+            "P1 window", 4, 50, PERPLEXITY_WINDOW,
+            help="k-mer window for dinucleotide perplexity",
+            key="param_perplexity_window",
         )
         landscape_method = st.selectbox(
             "Landscape method", ["mean", "median"],
-            index=0 if LANDSCAPE_METHOD == "mean" else 1, key="param_landscape_method"
+            index=0 if LANDSCAPE_METHOD == "mean" else 1,
+            key="param_landscape_method",
         )
     with p2:
-        spacer = st.number_input(
-            "Spacer", 0, 1000, SPACER, help="Nucleotide spacer between windows", key="param_spacer"
+        base_scale = st.number_input(
+            "Base scale (bp)", 20, 2000, BASE_SCALE,
+            help=(
+                "Centre of 5 auto-generated observation scales: "
+                "base÷4, base÷2, base, base×2, base×4"
+            ),
+            key="param_base_scale",
         )
-        candidate_mode = st.selectbox(
-            "Candidate mode", ["adaptive", "fixed"], format_func=lambda v: v.title(), key="param_candidate_mode"
+        custom_scales_text = st.text_input(
+            "Custom scales (comma-separated, overrides base scale)",
+            value="",
+            placeholder="e.g. 25,50,100,200,400",
+            key="param_custom_scales",
         )
-        if candidate_mode == "fixed":
-            candidate_window = st.number_input(
-                "Fixed candidate", 20, 1500, ADAPTIVE_MIN_WINDOW, key="param_candidate_window_fixed"
-            )
-            adaptive_min_window = ADAPTIVE_MIN_WINDOW
-            adaptive_max_window = ADAPTIVE_MAX_WINDOW
-        else:
-            adaptive_min_window = st.number_input(
-                "Minimum valley", 20, 2000, ADAPTIVE_MIN_WINDOW, key="param_adaptive_min_window"
-            )
-            adaptive_max_window = st.number_input(
-                "Maximum valley", int(adaptive_min_window), 3000,
-                max(int(adaptive_min_window), ADAPTIVE_MAX_WINDOW), key="param_adaptive_max_window"
-            )
-            candidate_window = ADAPTIVE_MIN_WINDOW
+        scales_list = None
+        if custom_scales_text.strip():
+            try:
+                scales_list = [
+                    int(s.strip())
+                    for s in custom_scales_text.split(",")
+                    if s.strip()
+                ]
+            except ValueError:
+                st.warning("Custom scales must be comma-separated integers.")
+                scales_list = None
     with p3:
-        upstream_window = st.number_input("Upstream", 20, 2000, UPSTREAM_WINDOW, key="param_upstream_window")
-        downstream_window = st.number_input("Downstream", 20, 2000, DOWNSTREAM_WINDOW, key="param_downstream_window")
-        min_domain = st.number_input("Domain minimum", 20, 10000, MIN_DOMAIN, key="param_min_domain")
+        min_candidate = st.number_input(
+            "Min candidate (bp)", 10, 500, MIN_CANDIDATE,
+            help="Minimum candidate window size per scale (≥ 50 bp enforced)",
+            key="param_min_candidate",
+        )
+        max_candidate = st.number_input(
+            "Max candidate (bp)", int(min_candidate), 5000,
+            max(int(min_candidate), MAX_CANDIDATE),
+            key="param_max_candidate",
+        )
+        min_domain = st.number_input(
+            "Min valley (bp)", 20, 10000, MIN_DOMAIN,
+            key="param_min_domain",
+        )
         max_domain = st.number_input(
-            "Domain maximum", int(min_domain), 20000, max(int(min_domain), MAX_DOMAIN), key="param_max_domain"
+            "Max valley (bp)", int(min_domain), 20000,
+            max(int(min_domain), MAX_DOMAIN),
+            key="param_max_domain",
+        )
+        merge_gap = st.number_input(
+            "Merge gap (bp)", 0, 500, MERGE_GAP,
+            help="Merge valleys closer than this distance",
+            key="param_merge_gap",
         )
     with p4:
-        motif_text = st.text_area("Motifs (Regex/IUPAC, one per line)", height=190, key="param_motif_text")
+        motif_text = st.text_area(
+            "Motifs (Regex/IUPAC, one per line)",
+            height=190, key="param_motif_text",
+        )
         motif_rows = _validate_motifs(motif_text)
         if motif_rows:
             status_lines = [
-                f"<div class='motif-valid mono'>{html.escape(row['Motif'])} → {html.escape(row['Regex'])}</div>"
+                f"<div class='motif-valid mono'>{html.escape(row['Motif'])}"
+                f" → {html.escape(row['Regex'])}</div>"
                 if row["Status"] == "valid"
-                else f"<div class='motif-invalid mono'>{html.escape(row['Motif'])} → invalid regex</div>"
+                else f"<div class='motif-invalid mono'>{html.escape(row['Motif'])}"
+                f" → invalid regex</div>"
                 for row in motif_rows
             ]
             st.markdown("".join(status_lines), unsafe_allow_html=True)
 
     b1, b2, b3 = st.columns([1.5, 1, 1])
     with b1:
-        run_clicked = st.button("Run Analysis", key="analysis_run", type="primary", use_container_width=True)
+        run_clicked = st.button(
+            "Run Analysis", key="analysis_run",
+            type="primary", use_container_width=True,
+        )
     with b2:
         if st.button("Reset", key="analysis_reset", use_container_width=True):
-            for key in ["results", "domains_df", "runtime", "input_fasta_text", "motif_text"]:
+            for key in [
+                "results", "domains_df", "runtime",
+                "input_fasta_text", "motif_text",
+            ]:
                 st.session_state.pop(key, None)
             st.rerun()
     with b3:
-        if st.button("Load Example", key="analysis_load_example", use_container_width=True):
+        if st.button(
+            "Load Example", key="analysis_load_example", use_container_width=True
+        ):
             st.session_state["input_fasta_text"] = _load_example_text()
             st.rerun()
 
@@ -389,33 +422,36 @@ def _render_analysis() -> None:
 
         params = {
             "perplexity_window": int(perplexity_window),
-            "landscape_window": int(landscape_window),
+            "base_scale": int(base_scale),
+            "scales": scales_list,
             "landscape_method": str(landscape_method),
-            "candidate_mode": candidate_mode,
-            "candidate_window": int(candidate_window),
-            "upstream_window": int(upstream_window),
-            "downstream_window": int(downstream_window),
-            "spacer": int(spacer),
-            "adaptive_min_window": int(adaptive_min_window),
-            "adaptive_max_window": int(adaptive_max_window),
+            "min_candidate": int(min_candidate),
+            "max_candidate": int(max_candidate),
             "min_domain": int(min_domain),
             "max_domain": int(max_domain),
+            "merge_gap": int(merge_gap),
         }
 
-        with st.status("Running REGPLEX pipeline...", expanded=True) as status:
+        with st.status("Running REGPLEX v9 pipeline...", expanded=True) as status:
             steps = [
-                "Step 1 · Calculating Perplexity",
-                "Step 2 · Building Landscape",
-                "Step 3 · Computing Local Contrast",
-                "Step 4 · Running Kadane",
-                "Step 5 · Annotating Motifs",
+                "Step 1 · Computing P1 Perplexity",
+                "Step 2 · Building Multi-scale Landscapes",
+                "Step 3 · Computing Per-scale LPC Profiles",
+                "Step 4 · Building Consensus LPC",
+                "Step 5 · Kadane + Valley Expansion + Merging",
+                "Step 6 · Annotating Motifs",
             ]
             for step in steps:
                 st.write(step)
             try:
-                results, runtime_seconds = _run_analysis(fasta_text, params, motif_text)
+                results, runtime_seconds = _run_analysis(
+                    fasta_text, params, motif_text
+                )
             except re.error as exc:
-                status.update(label=f"Failed: invalid motif pattern ({exc})", state="error")
+                status.update(
+                    label=f"Failed: invalid motif pattern ({exc})",
+                    state="error",
+                )
                 return
             st.session_state["results"] = results
             st.session_state["domains_df"] = domains_dataframe(results)
@@ -450,29 +486,58 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
     with m5:
         _metric_card("GC", f"{gc:.2f}%")
 
-    inner_tabs = st.tabs(["Perplexity", "Landscape", "Contrast", "Kadane", "Ranking", "Motifs", "Downloads"])
+    inner_tabs = st.tabs([
+        "Perplexity", "Landscapes", "Scale Support",
+        "Consensus LPC", "Kadane", "Ranking", "Motifs", "Downloads",
+    ])
+    scales = result.params.get("resolved_scales", [])
+
     with inner_tabs[0]:
         _show_figure(plot_p1_profile(result.p1), f"p1-{selected_seq}")
     with inner_tabs[1]:
-        _show_figure(plot_p2_landscape(result.landscape), f"landscape-{selected_seq}")
         _show_figure(
-            plot_three_window_illustration(result.landscape, result.lpc, result.params, result.domains, result.candidate_window),
-            f"illustration-{selected_seq}",
+            plot_multiscale_landscapes(result.landscapes, result.domains),
+            f"landscapes-{selected_seq}",
         )
     with inner_tabs[2]:
-        _show_figure(plot_pvs_profile(result.lpc, result.domains), f"lpc-{selected_seq}")
+        _show_figure(
+            plot_scale_support_heatmap(
+                result.lpc_profiles, result.domains, scales
+            ),
+            f"support-{selected_seq}",
+        )
     with inner_tabs[3]:
-        _show_figure(plot_kadane_domains(result.lpc, result.domains), f"kadane-{selected_seq}")
+        _show_figure(
+            plot_consensus_lpc(result.consensus_lpc, result.domains),
+            f"consensus-{selected_seq}",
+        )
     with inner_tabs[4]:
-        _show_figure(plot_domain_ranking(result.domains), f"ranking-{selected_seq}")
+        _show_figure(
+            plot_kadane_domains(result.consensus_lpc, result.domains),
+            f"kadane-{selected_seq}",
+        )
+    with inner_tabs[5]:
+        _show_figure(
+            plot_domain_ranking(result.domains), f"ranking-{selected_seq}"
+        )
 
         st.subheader("Valley Table")
-        display_cols = ["ID", "Start", "End", "Length", "ValleyScore", "GC%", "MotifCount", "Motifs"]
-        search = st.text_input("Search valleys", placeholder="Filter by ID or motif", key="results_valley_search")
+        display_cols = [
+            "ID", "Start", "End", "Length",
+            "ScaleSupport", "Persistence",
+            "ValleyScore", "GC%", "MotifCount", "Motifs",
+        ]
+        search = st.text_input(
+            "Search valleys", placeholder="Filter by ID or motif",
+            key="results_valley_search",
+        )
         filtered = selected_df
         if search:
             q = search.lower()
-            filtered = selected_df[selected_df["ID"].astype(str).str.lower().str.contains(q) | selected_df["Motifs"].astype(str).str.lower().str.contains(q)]
+            filtered = selected_df[
+                selected_df["ID"].astype(str).str.lower().str.contains(q)
+                | selected_df["Motifs"].astype(str).str.lower().str.contains(q)
+            ]
 
         row_choice = None
         try:
@@ -488,27 +553,68 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
             if picked:
                 row_choice = filtered.iloc[picked[0]]
         except TypeError:
-            st.info("Interactive row selection is unavailable (requires a Streamlit runtime with selection-enabled dataframe events).")
-            st.dataframe(filtered[display_cols], use_container_width=True, hide_index=True, key="results_valley_table_static")
+            st.info(
+                "Interactive row selection is unavailable "
+                "(requires a Streamlit runtime with selection-enabled dataframe events)."
+            )
+            st.dataframe(
+                filtered[display_cols], use_container_width=True,
+                hide_index=True, key="results_valley_table_static",
+            )
 
         if row_choice is not None:
-            st.info(f"Highlighted valley: {row_choice['ID']} ({int(row_choice['Start'])}-{int(row_choice['End'])})")
-
-    with inner_tabs[5]:
-        _show_figure(plot_motif_architecture(selected_df.to_dict("records")), f"motif-{selected_seq}")
+            st.info(
+                f"Highlighted valley: {row_choice['ID']} "
+                f"({int(row_choice['Start'])}-{int(row_choice['End'])})"
+            )
 
     with inner_tabs[6]:
+        _show_figure(
+            plot_motif_architecture(selected_df.to_dict("records")),
+            f"motif-{selected_seq}",
+        )
+
+    with inner_tabs[7]:
         c1, c2, c3 = st.columns(3)
         with c1:
-            st.download_button("CSV", export_table(selected_df, "csv"), "regplex_valleys.csv", "text/csv", use_container_width=True, key="dl_csv")
-            st.download_button("Excel", export_table(selected_df, "xlsx"), "regplex_valleys.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True, key="dl_xlsx")
-            st.download_button("BED", export_bed(selected_df), "regplex_valleys.bed", "text/plain", use_container_width=True, key="dl_bed")
+            st.download_button(
+                "CSV", export_table(selected_df, "csv"),
+                "regplex_valleys.csv", "text/csv",
+                use_container_width=True, key="dl_csv",
+            )
+            st.download_button(
+                "Excel", export_table(selected_df, "xlsx"),
+                "regplex_valleys.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True, key="dl_xlsx",
+            )
+            st.download_button(
+                "BED", export_bed(selected_df),
+                "regplex_valleys.bed", "text/plain",
+                use_container_width=True, key="dl_bed",
+            )
         with c2:
-            st.download_button("GFF", export_gff(selected_df, gff3=False), "regplex_valleys.gff", "text/plain", use_container_width=True, key="dl_gff")
-            st.download_button("GFF3", export_gff(selected_df, gff3=True), "regplex_valleys.gff3", "text/plain", use_container_width=True, key="dl_gff3")
-            st.download_button("FASTA", export_fasta(selected_df), "regplex_valleys.fasta", "text/plain", use_container_width=True, key="dl_fasta")
+            st.download_button(
+                "GFF", export_gff(selected_df, gff3=False),
+                "regplex_valleys.gff", "text/plain",
+                use_container_width=True, key="dl_gff",
+            )
+            st.download_button(
+                "GFF3", export_gff(selected_df, gff3=True),
+                "regplex_valleys.gff3", "text/plain",
+                use_container_width=True, key="dl_gff3",
+            )
+            st.download_button(
+                "FASTA", export_fasta(selected_df),
+                "regplex_valleys.fasta", "text/plain",
+                use_container_width=True, key="dl_fasta",
+            )
         with c3:
-            st.download_button("JSON", export_table(selected_df, "json"), "regplex_valleys.json", "application/json", use_container_width=True, key="dl_json")
+            st.download_button(
+                "JSON", export_table(selected_df, "json"),
+                "regplex_valleys.json", "application/json",
+                use_container_width=True, key="dl_json",
+            )
 
 
 def _render_motifs(df: pd.DataFrame) -> None:
@@ -537,7 +643,8 @@ def _render_about() -> None:
         """
         <div class="card">
           <h3>Scientific Workflow</h3>
-          <p>DNA → Perplexity → Landscape → Local Contrast → Kadane → Valleys → Motifs</p>
+          <p>DNA → P1 (once) → Multi-scale Landscapes → Per-scale LPC →
+          Consensus LPC → Kadane + Expansion → Merging → Valleys → Motifs</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -547,17 +654,26 @@ def _render_about() -> None:
     st.markdown(
         """
         <div class="card">
-          <h3>Algorithm</h3>
+          <h3>Algorithm — REGPLEX v9 Multi-scale Consensus</h3>
           <p>
-            REGPLEX computes dinucleotide perplexity, smooths it into a landscape, computes
-            local contrast against flanking windows, recovers high-confidence valleys with
-            bounded Kadane, and optionally annotates motifs.
+            REGPLEX v9 computes dinucleotide perplexity (P1) exactly once, then
+            builds rolling-mean/median landscapes at five independent observation
+            scales. At each scale a three-window Local Perplexity Contrast (LPC)
+            profile is computed with upstream = downstream = scale and spacer =
+            scale ÷ 2. Each LPC profile is independently normalised by robust
+            z-score and the profiles are combined into a single Consensus LPC via
+            the positional nanmedian. Bounded Kadane locates valley cores in the
+            Consensus LPC, which are expanded to natural boundaries (where
+            ConsensusLPC &gt; 0) and merged if within the merge-gap. Every
+            returned valley is a single continuous genomic interval supported by
+            evidence from multiple observation scales.
           </p>
           <h3>Scientific Hypothesis</h3>
           <p>
-            Regulatory regions locally collapse sequence uncertainty relative to immediate context.
-            Persistent low-perplexity valleys provide a model-free signature of potential
-            regulatory architecture.
+            A true regulatory region exhibits lower sequence uncertainty than its
+            surrounding DNA <em>across multiple observation scales</em>. Consensus
+            evidence across scales — not any single-window comparison — is what
+            defines a Perplexity Valley.
           </p>
         </div>
         """,
@@ -569,12 +685,20 @@ def _render_about() -> None:
         <div class="card">
           <h3>Parameter Reference</h3>
           <div class="help-grid">
-            <div class="help-tile"><strong>Window</strong><br/>Per-position perplexity granularity.</div>
-            <div class="help-tile"><strong>Landscape</strong><br/>Smoothing span for low-noise context.</div>
-            <div class="help-tile"><strong>Spacer</strong><br/>Buffer between candidate and flanks.</div>
-            <div class="help-tile"><strong>Valley bounds</strong><br/>Minimum/maximum accepted valley length.</div>
-            <div class="help-tile"><strong>Upstream / Downstream</strong><br/>Flanking window sizes for local contrast.</div>
-            <div class="help-tile"><strong>Candidate mode</strong><br/>Adaptive scales to sequence; fixed uses a constant window.</div>
+            <div class="help-tile"><strong>P1 window</strong><br/>
+              k-mer size for dinucleotide perplexity (default 10 bp).</div>
+            <div class="help-tile"><strong>Base scale</strong><br/>
+              Generates 5 scales: base÷4, base÷2, base, base×2, base×4.</div>
+            <div class="help-tile"><strong>Custom scales</strong><br/>
+              Override auto-scales with any comma-separated bp values.</div>
+            <div class="help-tile"><strong>Landscape method</strong><br/>
+              Rolling mean (fast) or rolling median (robust).</div>
+            <div class="help-tile"><strong>Min/Max candidate</strong><br/>
+              Bounds for the candidate window size at each scale (≥ 50 bp).</div>
+            <div class="help-tile"><strong>Min/Max valley</strong><br/>
+              Minimum and maximum reported valley length (bp).</div>
+            <div class="help-tile"><strong>Merge gap</strong><br/>
+              Valleys closer than this are merged into one domain.</div>
           </div>
         </div>
         """,
@@ -586,7 +710,7 @@ def _render_about() -> None:
         <div class="card">
           <h3>Citation</h3>
           <div class="mono" style="background:var(--surface-2);padding:0.75rem;border-radius:10px;">
-            REGPLEX: Regulatory Region Discovery through Perplexity Valleys (v7)
+            REGPLEX v9: Multi-scale Perplexity Valley Framework
           </div>
           <h3 style="margin-top:1rem;">References</h3>
           <ul>
@@ -594,7 +718,7 @@ def _render_about() -> None:
             <li><a href="https://www.ensembl.org" target="_blank">Ensembl Genome Browser</a></li>
             <li><a href="https://alphafold.ebi.ac.uk" target="_blank">AlphaFold DB</a></li>
             <li><a href="https://igv.org/web/release/latest/webapp" target="_blank">IGV-Web</a></li>
-            <li><a href="https://www.nature.com/nmeth/" target="_blank">Nature Methods (web server publication standards)</a></li>
+            <li><a href="https://www.nature.com/nmeth/" target="_blank">Nature Methods</a></li>
           </ul>
         </div>
         """,
@@ -624,7 +748,7 @@ def main() -> None:
 
     st.markdown("---")
     st.markdown(
-        "REGPLEX v7 · [Citation](https://github.com/VRYella/PerCALL#citation) · "
+        "REGPLEX v9 · [Citation](https://github.com/VRYella/PerCALL#citation) · "
         "[GitHub](https://github.com/VRYella/PerCALL) · MIT License · "
         "[Contact](https://github.com/VRYella)"
     )
