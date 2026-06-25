@@ -219,7 +219,13 @@ def main() -> None:
             st.info("Run analysis first.")
         else:
             st.download_button("CSV", export_table(df, "csv"), "regplex_valleys.csv", "text/csv")
-            st.download_button("Excel", export_table(df, "xlsx"), "regplex_valleys.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.download_button("TSV", export_table(df, "tsv"), "regplex_valleys.tsv", "text/tab-separated-values")
+            st.download_button(
+                "Excel",
+                export_table(df, "xlsx"),
+                "regplex_valleys.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
             st.download_button("BED", export_bed(df), "regplex_valleys.bed", "text/plain")
             st.download_button("GFF", export_gff(df, gff3=False), "regplex_valleys.gff", "text/plain")
             st.download_button("GFF3", export_gff(df, gff3=True), "regplex_valleys.gff3", "text/plain")

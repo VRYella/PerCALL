@@ -128,6 +128,7 @@ def _window_means_from_prefix(csum: np.ndarray, ccount: np.ndarray, starts: np.n
 
 
 def _window_medians(arr: np.ndarray, window: int) -> np.ndarray:
+    """Return center-aligned sliding medians with NaN-padded edge positions."""
     n = len(arr)
     out = np.full(n, np.nan, dtype=np.float64)
     if n == 0 or window < 1 or n < window:
@@ -291,13 +292,14 @@ def _nucleotide_bounds(signal_start: int, signal_end: int, seq_len: int, p1_wind
 
 
 def _nan_stats(arr: np.ndarray) -> tuple[float, float, float, float, float, float]:
+    """Return mean/min/max/variance/sd/cv for finite values; all-NaN if empty."""
     finite = arr[np.isfinite(arr)]
     if finite.size == 0:
         return float("nan"), float("nan"), float("nan"), float("nan"), float("nan"), float("nan")
-    mean = float(np.nanmean(finite))
-    min_v = float(np.nanmin(finite))
-    max_v = float(np.nanmax(finite))
-    var = float(np.nanvar(finite))
+    mean = float(np.mean(finite))
+    min_v = float(np.min(finite))
+    max_v = float(np.max(finite))
+    var = float(np.var(finite))
     sd = float(np.sqrt(var))
     cv = float(sd / (mean + EPSILON)) if np.isfinite(sd) and np.isfinite(mean) else float("nan")
     return mean, min_v, max_v, var, sd, cv
@@ -353,7 +355,6 @@ def valley_statistics(
 
     return {
         "ID": f"PV_{idx:06d}",
-        "Domain_ID": f"PV_{idx:06d}",
         "Signal_Start": int(start),
         "Signal_End": int(end),
         "Signal_Length": int(signal_length),

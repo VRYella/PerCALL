@@ -40,6 +40,8 @@ Additional interpretation metrics:
 ## Installation
 
 ```bash
+git clone https://github.com/VRYella/PerCALL.git
+cd PerCALL
 pip install -r requirements.txt
 ```
 
