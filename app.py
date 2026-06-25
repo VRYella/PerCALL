@@ -41,11 +41,17 @@ from visualization import (
 
 st.set_page_config(page_title="REGPLEX", layout="wide", initial_sidebar_state="collapsed")
 
+# Navigation labels used throughout.
+_NAV_ITEMS = ["Home", "Analysis", "Results", "Motifs", "About"]
+
 PLOT_CONFIG = {
     "displaylogo": False,
     "toImageButtonOptions": {"format": "svg", "filename": "regplex_figure", "scale": 2},
     "modeBarButtonsToAdd": ["resetScale2d"],
 }
+
+# Map nav labels to integer indices.
+_NAV_INDEX = {label: i for i, label in enumerate(_NAV_ITEMS)}
 
 
 def _svg_square_logo() -> str:
@@ -98,6 +104,26 @@ def _load_styles() -> None:
         st.error("styles.css not found. Please ensure styles.css exists in the same directory as app.py.")
         return
     st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
+
+
+def _render_nav() -> int:
+    """Custom full-width navigation.
+
+    Renders a horizontal radio widget styled by CSS to look like a professional
+    tab bar.  Returns the active tab index (0 = Home … 4 = About).
+    """
+    # Apply any programmatic jump requested before rendering the widget.
+    if "jump_nav" in st.session_state:
+        st.session_state["main_nav"] = st.session_state.pop("jump_nav")
+
+    tab = st.radio(
+        "Navigation",
+        _NAV_ITEMS,
+        horizontal=True,
+        label_visibility="collapsed",
+        key="main_nav",
+    )
+    return _NAV_INDEX[tab]
 
 
 def _show_figure(fig, key: str) -> None:
@@ -168,7 +194,6 @@ def _render_home() -> None:
         f"""
         <section class="hero">
           {_svg_horizontal_logo()}
-          <h2>REGPLEX</h2>
           <p><strong>Regulatory Region Discovery through Perplexity Valleys</strong></p>
           <p>Training-free discovery of localized sequence uncertainty collapse.</p>
         </section>
@@ -177,31 +202,48 @@ def _render_home() -> None:
     )
     c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
     with c1:
-        if st.button("Start Analysis", use_container_width=True, type="primary"):
-            st.session_state["jump_tab"] = 1
+        if st.button("Start Analysis", key="home_start_analysis", use_container_width=True, type="primary"):
+            st.session_state["jump_nav"] = "Analysis"
+            st.rerun()
     with c2:
-        if st.button("Load Example", use_container_width=True):
+        if st.button("Load Example", key="home_load_example", use_container_width=True):
             st.session_state["input_fasta_text"] = _load_example_text()
-            st.success("Example FASTA loaded.")
+            st.session_state["jump_nav"] = "Analysis"
+            st.rerun()
     with c3:
         st.link_button("Documentation", "https://github.com/VRYella/PerCALL#readme", use_container_width=True)
     with c4:
         st.link_button("GitHub", "https://github.com/VRYella/PerCALL", use_container_width=True)
 
     f1, f2, f3 = st.columns(3)
+    _icon_tf = _svg_feature(
+        '<path d="M11 21H31" stroke="#1E3A8A" stroke-width="2.2"/>'
+        '<path d="M21 11V31" stroke="#0F766E" stroke-width="2.2"/>'
+    )
+    _icon_gs = _svg_feature(
+        '<path d="M10 26L18 18L24 24L32 16" stroke="#1E3A8A" stroke-width="2.2"/>'
+        '<circle cx="32" cy="16" r="2.5" fill="#0F766E"/>'
+    )
+    _icon_ex = _svg_feature(
+        '<path d="M10 30L32 12" stroke="#1E3A8A" stroke-width="2.2"/>'
+        '<path d="M10 12H32V30" stroke="#0F766E" stroke-width="2.2"/>'
+    )
     with f1:
         st.markdown(
-            f"<div class='card'>{_svg_feature('<path d="M11 21H31" stroke="#1E3A8A" stroke-width="2.2"/><path d="M21 11V31" stroke="#0F766E" stroke-width="2.2"/>')}<h4>Training-free</h4><p>No pre-trained model required. Sequence uncertainty alone drives discovery.</p></div>",
+            f"<div class='card'>{_icon_tf}<h4>Training-free</h4>"
+            "<p>No pre-trained model required. Sequence uncertainty alone drives discovery.</p></div>",
             unsafe_allow_html=True,
         )
     with f2:
         st.markdown(
-            f"<div class='card'>{_svg_feature('<path d="M10 26L18 18L24 24L32 16" stroke="#1E3A8A" stroke-width="2.2"/><circle cx="32" cy="16" r="2.5" fill="#0F766E"/>')}<h4>Genome-scale</h4><p>Efficient profile construction for long contiguous genomic sequences.</p></div>",
+            f"<div class='card'>{_icon_gs}<h4>Genome-scale</h4>"
+            "<p>Efficient profile construction for long contiguous genomic sequences.</p></div>",
             unsafe_allow_html=True,
         )
     with f3:
         st.markdown(
-            f"<div class='card'>{_svg_feature('<path d="M10 30L32 12" stroke="#1E3A8A" stroke-width="2.2"/><path d="M10 12H32V30" stroke="#0F766E" stroke-width="2.2"/>')}<h4>Explainable</h4><p>Every valley includes interpretable metrics and explicit motif evidence.</p></div>",
+            f"<div class='card'>{_icon_ex}<h4>Explainable</h4>"
+            "<p>Every valley includes interpretable metrics and explicit motif evidence.</p></div>",
             unsafe_allow_html=True,
         )
 
@@ -228,8 +270,20 @@ def _render_analysis() -> None:
     st.markdown("<div class='card'><h3>Analysis Input</h3><p>Upload FASTA or paste sequence text.</p></div>", unsafe_allow_html=True)
 
     default_text = st.session_state.get("input_fasta_text", "")
-    upload = st.file_uploader("Drag-and-drop FASTA", type=["fasta", "fa", "fna", "txt"], help="Supported formats: FASTA, FA, FNA, TXT")
-    pasted = st.text_area("Or paste FASTA", value=default_text, height=180, placeholder=">sequence\nACTG...", help="Input is parsed as FASTA records and sanitized to DNA/IUPAC-compatible sequence characters.")
+    upload = st.file_uploader(
+        "Drag-and-drop FASTA",
+        type=["fasta", "fa", "fna", "txt"],
+        help="Supported formats: FASTA, FA, FNA, TXT",
+        key="analysis_file_uploader",
+    )
+    pasted = st.text_area(
+        "Or paste FASTA",
+        value=default_text,
+        height=180,
+        placeholder=">sequence\nACTG...",
+        help="Input is parsed as FASTA records and sanitized to DNA/IUPAC-compatible sequence characters.",
+        key="analysis_paste_fasta",
+    )
 
     fasta_text = ""
     uploaded_name = ""
@@ -254,45 +308,67 @@ def _render_analysis() -> None:
 
     p1, p2, p3, p4 = st.columns(4)
     with p1:
-        perplexity_window = st.number_input("Window", 4, 50, PERPLEXITY_WINDOW, help="P1 perplexity window size")
-        landscape_window = st.number_input("Landscape", 20, 5000, LANDSCAPE_WINDOW, help="Smoothing window for landscape")
-        landscape_method = st.selectbox("Landscape method", ["mean", "median"], index=0 if LANDSCAPE_METHOD == "mean" else 1)
+        perplexity_window = st.number_input(
+            "Window", 4, 50, PERPLEXITY_WINDOW, help="P1 perplexity window size", key="param_perplexity_window"
+        )
+        landscape_window = st.number_input(
+            "Landscape", 20, 5000, LANDSCAPE_WINDOW, help="Smoothing window for landscape", key="param_landscape_window"
+        )
+        landscape_method = st.selectbox(
+            "Landscape method", ["mean", "median"],
+            index=0 if LANDSCAPE_METHOD == "mean" else 1, key="param_landscape_method"
+        )
     with p2:
-        spacer = st.number_input("Spacer", 0, 1000, SPACER, help="Nucleotide spacer between windows")
-        candidate_mode = st.selectbox("Candidate mode", ["adaptive", "fixed"], format_func=lambda v: v.title())
+        spacer = st.number_input(
+            "Spacer", 0, 1000, SPACER, help="Nucleotide spacer between windows", key="param_spacer"
+        )
+        candidate_mode = st.selectbox(
+            "Candidate mode", ["adaptive", "fixed"], format_func=lambda v: v.title(), key="param_candidate_mode"
+        )
         if candidate_mode == "fixed":
-            candidate_window = st.number_input("Fixed candidate", 20, 1500, ADAPTIVE_MIN_WINDOW)
+            candidate_window = st.number_input(
+                "Fixed candidate", 20, 1500, ADAPTIVE_MIN_WINDOW, key="param_candidate_window_fixed"
+            )
             adaptive_min_window = ADAPTIVE_MIN_WINDOW
             adaptive_max_window = ADAPTIVE_MAX_WINDOW
         else:
-            adaptive_min_window = st.number_input("Minimum valley", 20, 2000, ADAPTIVE_MIN_WINDOW)
-            adaptive_max_window = st.number_input("Maximum valley", int(adaptive_min_window), 3000, max(int(adaptive_min_window), ADAPTIVE_MAX_WINDOW))
+            adaptive_min_window = st.number_input(
+                "Minimum valley", 20, 2000, ADAPTIVE_MIN_WINDOW, key="param_adaptive_min_window"
+            )
+            adaptive_max_window = st.number_input(
+                "Maximum valley", int(adaptive_min_window), 3000,
+                max(int(adaptive_min_window), ADAPTIVE_MAX_WINDOW), key="param_adaptive_max_window"
+            )
             candidate_window = ADAPTIVE_MIN_WINDOW
     with p3:
-        upstream_window = st.number_input("Upstream", 20, 2000, UPSTREAM_WINDOW)
-        downstream_window = st.number_input("Downstream", 20, 2000, DOWNSTREAM_WINDOW)
-        min_domain = st.number_input("Domain minimum", 20, 10000, MIN_DOMAIN)
-        max_domain = st.number_input("Domain maximum", int(min_domain), 20000, max(int(min_domain), MAX_DOMAIN))
+        upstream_window = st.number_input("Upstream", 20, 2000, UPSTREAM_WINDOW, key="param_upstream_window")
+        downstream_window = st.number_input("Downstream", 20, 2000, DOWNSTREAM_WINDOW, key="param_downstream_window")
+        min_domain = st.number_input("Domain minimum", 20, 10000, MIN_DOMAIN, key="param_min_domain")
+        max_domain = st.number_input(
+            "Domain maximum", int(min_domain), 20000, max(int(min_domain), MAX_DOMAIN), key="param_max_domain"
+        )
     with p4:
-        motif_text = st.text_area("Motifs (Regex/IUPAC, one per line)", height=190)
+        motif_text = st.text_area("Motifs (Regex/IUPAC, one per line)", height=190, key="param_motif_text")
         motif_rows = _validate_motifs(motif_text)
         if motif_rows:
             status_lines = [
-                f"<div class='motif-valid mono'>{row['Motif']} → {row['Regex']}</div>" if row["Status"] == "valid" else f"<div class='motif-invalid mono'>{row['Motif']} → invalid regex</div>"
+                f"<div class='motif-valid mono'>{row['Motif']} → {row['Regex']}</div>"
+                if row["Status"] == "valid"
+                else f"<div class='motif-invalid mono'>{row['Motif']} → invalid regex</div>"
                 for row in motif_rows
             ]
             st.markdown("".join(status_lines), unsafe_allow_html=True)
 
     b1, b2, b3 = st.columns([1.5, 1, 1])
     with b1:
-        run_clicked = st.button("Run Analysis", type="primary", use_container_width=True)
+        run_clicked = st.button("Run Analysis", key="analysis_run", type="primary", use_container_width=True)
     with b2:
-        if st.button("Reset", use_container_width=True):
+        if st.button("Reset", key="analysis_reset", use_container_width=True):
             for key in ["results", "domains_df", "runtime", "input_fasta_text", "motif_text"]:
                 st.session_state.pop(key, None)
             st.rerun()
     with b3:
-        if st.button("Load Example", use_container_width=True):
+        if st.button("Load Example", key="analysis_load_example", use_container_width=True):
             st.session_state["input_fasta_text"] = _load_example_text()
             st.rerun()
 
@@ -344,7 +420,7 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
         return
 
     runtime_seconds = float(st.session_state.get("runtime", 0.0))
-    selected_seq = st.selectbox("Sequence", [result.sequence_id for result in results])
+    selected_seq = st.selectbox("Sequence", [result.sequence_id for result in results], key="results_selected_seq")
     result = next(item for item in results if item.sequence_id == selected_seq)
     selected_df = df[df["Sequence_ID"] == selected_seq].copy()
 
@@ -382,7 +458,7 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
 
         st.subheader("Valley Table")
         display_cols = ["ID", "Start", "End", "Length", "ValleyScore", "GC%", "MotifCount", "Motifs"]
-        search = st.text_input("Search valleys", placeholder="Filter by ID or motif")
+        search = st.text_input("Search valleys", placeholder="Filter by ID or motif", key="results_valley_search")
         filtered = selected_df
         if search:
             q = search.lower()
@@ -396,14 +472,14 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
                 hide_index=True,
                 on_select="rerun",
                 selection_mode="single-row",
-                key="valley-table",
+                key="results_valley_table",
             )
             picked = event.selection.get("rows", []) if event else []
             if picked:
                 row_choice = filtered.iloc[picked[0]]
         except TypeError:
             st.info("Interactive row selection is unavailable (requires a Streamlit runtime with selection-enabled dataframe events).")
-            st.dataframe(filtered[display_cols], use_container_width=True, hide_index=True)
+            st.dataframe(filtered[display_cols], use_container_width=True, hide_index=True, key="results_valley_table_static")
 
         if row_choice is not None:
             st.info(f"Highlighted valley: {row_choice['ID']} ({int(row_choice['Start'])}-{int(row_choice['End'])})")
@@ -414,20 +490,20 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
     with inner_tabs[6]:
         c1, c2, c3 = st.columns(3)
         with c1:
-            st.download_button("CSV", export_table(selected_df, "csv"), "regplex_valleys.csv", "text/csv", use_container_width=True)
-            st.download_button("Excel", export_table(selected_df, "xlsx"), "regplex_valleys.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
-            st.download_button("BED", export_bed(selected_df), "regplex_valleys.bed", "text/plain", use_container_width=True)
+            st.download_button("CSV", export_table(selected_df, "csv"), "regplex_valleys.csv", "text/csv", use_container_width=True, key="dl_csv")
+            st.download_button("Excel", export_table(selected_df, "xlsx"), "regplex_valleys.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True, key="dl_xlsx")
+            st.download_button("BED", export_bed(selected_df), "regplex_valleys.bed", "text/plain", use_container_width=True, key="dl_bed")
         with c2:
-            st.download_button("GFF", export_gff(selected_df, gff3=False), "regplex_valleys.gff", "text/plain", use_container_width=True)
-            st.download_button("GFF3", export_gff(selected_df, gff3=True), "regplex_valleys.gff3", "text/plain", use_container_width=True)
-            st.download_button("FASTA", export_fasta(selected_df), "regplex_valleys.fasta", "text/plain", use_container_width=True)
+            st.download_button("GFF", export_gff(selected_df, gff3=False), "regplex_valleys.gff", "text/plain", use_container_width=True, key="dl_gff")
+            st.download_button("GFF3", export_gff(selected_df, gff3=True), "regplex_valleys.gff3", "text/plain", use_container_width=True, key="dl_gff3")
+            st.download_button("FASTA", export_fasta(selected_df), "regplex_valleys.fasta", "text/plain", use_container_width=True, key="dl_fasta")
         with c3:
-            st.download_button("JSON", export_table(selected_df, "json"), "regplex_valleys.json", "application/json", use_container_width=True)
+            st.download_button("JSON", export_table(selected_df, "json"), "regplex_valleys.json", "application/json", use_container_width=True, key="dl_json")
 
 
 def _render_motifs(df: pd.DataFrame) -> None:
     st.markdown("<div class='card'><h3>Motif Editor</h3><p>Enter one motif per line (Regex or IUPAC).</p></div>", unsafe_allow_html=True)
-    motif_text = st.text_area("Motif editor", value=st.session_state.get("motif_text", ""), height=240)
+    motif_text = st.text_area("Motif editor", value=st.session_state.get("motif_text", ""), height=240, key="motifs_editor")
     rows = _validate_motifs(motif_text)
     if not rows:
         _render_empty("No motifs entered.")
@@ -445,41 +521,69 @@ def _render_motifs(df: pd.DataFrame) -> None:
 
 
 def _render_about() -> None:
-    st.markdown("<div class='card'><h3>Scientific Workflow</h3><p>DNA → Perplexity → Landscape → Local Contrast → Kadane → Valleys → Motifs</p></div>", unsafe_allow_html=True)
-    _show_figure(plot_algorithm_workflow(), "workflow")
-
-    st.markdown("### Algorithm")
-    st.write(
-        "REGPLEX computes dinucleotide perplexity, smooths into a landscape, computes local contrast against flanking windows, "
-        "recovers high-confidence valleys with bounded Kadane, and optionally annotates motifs."
-    )
-
-    st.markdown("### Scientific Hypothesis")
-    st.write(
-        "Regulatory regions locally collapse sequence uncertainty relative to immediate context. "
-        "Persistent low-perplexity valleys provide a model-free signature of potential regulatory architecture."
-    )
-
-    st.markdown("### References")
-    st.markdown(
-        "- UCSC Genome Browser: https://genome.ucsc.edu\n"
-        "- Ensembl Genome Browser: https://www.ensembl.org\n"
-        "- AlphaFold DB: https://alphafold.ebi.ac.uk\n"
-        "- IGV-Web: https://igv.org/web/release/latest/webapp\n"
-        "- Nature Methods (web server publication standards): https://www.nature.com/nmeth/"
-    )
-
-    st.markdown("### Citation")
-    st.code("REGPLEX: Regulatory Region Discovery through Perplexity Valleys (v7)", language="text")
-
-    st.markdown("### Help")
     st.markdown(
         """
-        <div class="help-grid">
-          <div class="help-tile"><strong>Window</strong><br/>Per-position perplexity granularity.</div>
-          <div class="help-tile"><strong>Landscape</strong><br/>Smoothing span for low-noise context.</div>
-          <div class="help-tile"><strong>Spacer</strong><br/>Buffer between candidate and flanks.</div>
-          <div class="help-tile"><strong>Valley bounds</strong><br/>Minimum/maximum accepted valley length.</div>
+        <div class="card">
+          <h3>Scientific Workflow</h3>
+          <p>DNA → Perplexity → Landscape → Local Contrast → Kadane → Valleys → Motifs</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    _show_figure(plot_algorithm_workflow(), "workflow")
+
+    st.markdown(
+        """
+        <div class="card">
+          <h3>Algorithm</h3>
+          <p>
+            REGPLEX computes dinucleotide perplexity, smooths it into a landscape, computes
+            local contrast against flanking windows, recovers high-confidence valleys with
+            bounded Kadane, and optionally annotates motifs.
+          </p>
+          <h3>Scientific Hypothesis</h3>
+          <p>
+            Regulatory regions locally collapse sequence uncertainty relative to immediate context.
+            Persistent low-perplexity valleys provide a model-free signature of potential
+            regulatory architecture.
+          </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        """
+        <div class="card">
+          <h3>Parameter Reference</h3>
+          <div class="help-grid">
+            <div class="help-tile"><strong>Window</strong><br/>Per-position perplexity granularity.</div>
+            <div class="help-tile"><strong>Landscape</strong><br/>Smoothing span for low-noise context.</div>
+            <div class="help-tile"><strong>Spacer</strong><br/>Buffer between candidate and flanks.</div>
+            <div class="help-tile"><strong>Valley bounds</strong><br/>Minimum/maximum accepted valley length.</div>
+            <div class="help-tile"><strong>Upstream / Downstream</strong><br/>Flanking window sizes for local contrast.</div>
+            <div class="help-tile"><strong>Candidate mode</strong><br/>Adaptive scales to sequence; fixed uses a constant window.</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        """
+        <div class="card">
+          <h3>Citation</h3>
+          <div class="mono" style="background:var(--surface-2);padding:0.75rem;border-radius:10px;">
+            REGPLEX: Regulatory Region Discovery through Perplexity Valleys (v7)
+          </div>
+          <h3 style="margin-top:1rem;">References</h3>
+          <ul>
+            <li><a href="https://genome.ucsc.edu" target="_blank">UCSC Genome Browser</a></li>
+            <li><a href="https://www.ensembl.org" target="_blank">Ensembl Genome Browser</a></li>
+            <li><a href="https://alphafold.ebi.ac.uk" target="_blank">AlphaFold DB</a></li>
+            <li><a href="https://igv.org/web/release/latest/webapp" target="_blank">IGV-Web</a></li>
+            <li><a href="https://www.nature.com/nmeth/" target="_blank">Nature Methods (web server publication standards)</a></li>
+          </ul>
         </div>
         """,
         unsafe_allow_html=True,
@@ -490,24 +594,20 @@ def main() -> None:
     _load_styles()
     _render_topbar()
 
-    tabs = st.tabs(["Home", "Analysis", "Results", "Motifs", "About"])
-
-    with tabs[0]:
-        _render_home()
-
-    with tabs[1]:
-        _render_analysis()
+    active_tab = _render_nav()
 
     results: list[AnalysisResult] = st.session_state.get("results", [])
     df = st.session_state.get("domains_df", pd.DataFrame())
 
-    with tabs[2]:
+    if active_tab == 0:
+        _render_home()
+    elif active_tab == 1:
+        _render_analysis()
+    elif active_tab == 2:
         _render_results(results, df)
-
-    with tabs[3]:
+    elif active_tab == 3:
         _render_motifs(df)
-
-    with tabs[4]:
+    elif active_tab == 4:
         _render_about()
 
     st.markdown("---")
