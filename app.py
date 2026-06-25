@@ -275,7 +275,11 @@ def _validate_motifs(motif_text: str) -> list[dict]:
 
 
 def _render_analysis() -> None:
-    st.markdown("<div class='card'><h3>Analysis Input</h3><p>Upload FASTA or paste sequence text.</p></div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div class='card'><h3>Analysis Input</h3>"
+        "<p>Upload FASTA or paste sequence text.</p></div>",
+        unsafe_allow_html=True,
+    )
 
     default_text = st.session_state.get("input_fasta_text", "")
     upload = st.file_uploader(
@@ -344,14 +348,21 @@ def _render_analysis() -> None:
         scales_list = None
         if custom_scales_text.strip():
             try:
-                scales_list = [
+                parsed_scales = [
                     int(s.strip())
                     for s in custom_scales_text.split(",")
                     if s.strip()
                 ]
+                invalid = [s for s in parsed_scales if s <= 0]
+                if invalid:
+                    st.warning(
+                        f"Custom scales must be positive integers. "
+                        f"Invalid values: {invalid}"
+                    )
+                else:
+                    scales_list = parsed_scales
             except ValueError:
                 st.warning("Custom scales must be comma-separated integers.")
-                scales_list = None
     with p3:
         min_candidate = st.number_input(
             "Min candidate (bp)", 10, 500, MIN_CANDIDATE,
@@ -618,8 +629,17 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
 
 
 def _render_motifs(df: pd.DataFrame) -> None:
-    st.markdown("<div class='card'><h3>Motif Editor</h3><p>Enter one motif per line (Regex or IUPAC).</p></div>", unsafe_allow_html=True)
-    motif_text = st.text_area("Motif editor", value=st.session_state.get("motif_text", ""), height=240, key="motifs_editor")
+    st.markdown(
+        "<div class='card'><h3>Motif Editor</h3>"
+        "<p>Enter one motif per line (Regex or IUPAC).</p></div>",
+        unsafe_allow_html=True,
+    )
+    motif_text = st.text_area(
+        "Motif editor",
+        value=st.session_state.get("motif_text", ""),
+        height=240,
+        key="motifs_editor",
+    )
     rows = _validate_motifs(motif_text)
     if not rows:
         _render_empty("No motifs entered.")

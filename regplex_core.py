@@ -22,6 +22,7 @@ MAX_CANDIDATE = 1000         # maximum candidate window (bp)
 MIN_DOMAIN = 50              # minimum reported valley length (bp)
 MAX_DOMAIN = 1000            # Kadane maximum segment length (bp)
 MERGE_GAP = 25               # merge valleys closer than this (bp)
+BACKGROUND_FLANK = 200       # fallback flank size for background P1 estimate
 EPSILON = 1e-9
 
 _IUPAC_DNA = set("ACGTN")
@@ -231,6 +232,8 @@ def _robust_normalize(arr: np.ndarray) -> np.ndarray:
     idx = np.isfinite(arr)
     vals = arr[idx].astype(np.float64)
     if vals.size < 2:
+        # Single value has no variance; assign 0 (at the median) so it does
+        # not artificially inflate or suppress the consensus.
         if vals.size == 1:
             out[idx] = 0.0
         return out
@@ -332,7 +335,7 @@ def _expand_valley(
 def _merge_valleys(
     intervals: list[tuple[int, int]], gap: int
 ) -> list[tuple[int, int]]:
-    """Merge overlapping or near-adjacent intervals (gap < *gap* bp)."""
+    """Merge intervals whose start-to-end gap is ≤ *gap* bp."""
     if not intervals:
         return []
     merged: list[tuple[int, int]] = [sorted(intervals)[0]]
@@ -393,7 +396,7 @@ def valley_statistics(
     scale_support, n_scales = _scale_support(lpc_profiles, start, end)
 
     # Background: mean P1 in flanking regions
-    flank = max(scales) if scales else 200
+    flank = max(scales) if scales else BACKGROUND_FLANK
     bg = np.concatenate([
         p1[max(0, start - flank): start],
         p1[end + 1: min(len(p1), end + 1 + flank)],
@@ -500,11 +503,11 @@ def find_domains(
         if cs is None or not np.isfinite(score) or score >= 0:
             break
 
-        # Enforce minimum core length
+        # Enforce minimum core length with bounds safety
         if ce - cs + 1 < min_domain:
             mid = (cs + ce) // 2
             cs = max(0, mid - min_domain // 2)
-            ce = cs + min_domain - 1
+            ce = min(n - 1, cs + min_domain - 1)
 
         exp_s, exp_e = _expand_valley(consensus_lpc, cs, ce)
         cores.append((exp_s, exp_e))
