@@ -10,9 +10,12 @@ from typing import Iterable, Optional
 import numpy as np
 import pandas as pd
 
+# ---------------------------
+# Tunable scientific defaults
+# ---------------------------
 PERPLEXITY_WINDOW = 10
-SECOND_ORDER_WINDOW = 100
-CANDIDATE_WINDOW = 100
+LANDSCAPE_WINDOW = 100
+LANDSCAPE_METHOD = "mean"  # mean | median
 UPSTREAM_WINDOW = 100
 DOWNSTREAM_WINDOW = 100
 SPACER = 50
@@ -33,15 +36,17 @@ class AnalysisResult:
     sequence_id: str
     length: int
     p1: np.ndarray
-    p2: np.ndarray
-    pvs: np.ndarray
-    symmetry: np.ndarray
+    landscape: np.ndarray
+    lpc: np.ndarray
     upstream_mean: np.ndarray
     candidate_mean: np.ndarray
     downstream_mean: np.ndarray
-    upstream_difference: np.ndarray
-    downstream_difference: np.ndarray
+    lpc_up: np.ndarray
+    lpc_down: np.ndarray
+    flank_mean: np.ndarray
     candidate_window: np.ndarray
+    candidate_start: np.ndarray
+    candidate_end: np.ndarray
     domains: list[dict]
     params: dict
 
@@ -122,117 +127,132 @@ def _window_means_from_prefix(csum: np.ndarray, ccount: np.ndarray, starts: np.n
     return out
 
 
-def compute_p2(p1: np.ndarray, window: int = SECOND_ORDER_WINDOW) -> np.ndarray:
+def _window_medians(arr: np.ndarray, window: int) -> np.ndarray:
+    """Return center-aligned sliding medians with NaN-padded edge positions."""
+    n = len(arr)
+    out = np.full(n, np.nan, dtype=np.float64)
+    if n == 0 or window < 1 or n < window:
+        return out
+    views = np.lib.stride_tricks.sliding_window_view(arr, window)
+    med = np.nanmedian(views, axis=1)
+    offset = window // 2
+    out[offset:offset + len(med)] = med
+    return out
+
+
+def compute_landscape(p1: np.ndarray, window: int = LANDSCAPE_WINDOW, method: str = LANDSCAPE_METHOD) -> np.ndarray:
     if len(p1) == 0:
         return np.array([], dtype=np.float32)
-    entropy1 = np.full(len(p1), np.nan, dtype=np.float64)
-    finite = np.isfinite(p1) & (p1 > 0)
-    entropy1[finite] = np.log2(p1[finite])
-    csum, _, ccount = _prefix(entropy1)
+    method = (method or "mean").lower()
+    if method == "median":
+        return _window_medians(p1.astype(np.float64), window).astype(np.float32)
+    csum, _, ccount = _prefix(p1)
     positions = np.arange(len(p1), dtype=np.int64)
     starts = positions - (window // 2)
     ends = starts + window
-    mean_entropy = _window_means_from_prefix(csum, ccount, starts, ends)
-    p2 = np.full(len(p1), np.nan, dtype=np.float64)
-    valid = np.isfinite(mean_entropy)
-    p2[valid] = np.power(2.0, mean_entropy[valid])
-    return p2.astype(np.float32)
+    return _window_means_from_prefix(csum, ccount, starts, ends).astype(np.float32)
 
 
-def _fixed_valley_profile(
-    p2: np.ndarray,
+def _lpc_for_candidate_window(
+    landscape: np.ndarray,
     upstream_window: int,
     spacer: int,
     candidate_window: int,
     downstream_window: int,
 ) -> dict[str, np.ndarray]:
-    n = len(p2)
+    n = len(landscape)
     centers = np.arange(n, dtype=np.int64)
+
     candidate_start = centers - (candidate_window // 2)
     candidate_end = candidate_start + candidate_window
     upstream_end = candidate_start - spacer
     upstream_start = upstream_end - upstream_window
     downstream_start = candidate_end + spacer
     downstream_end = downstream_start + downstream_window
-    csum, _, ccount = _prefix(p2)
+
+    csum, _, ccount = _prefix(landscape)
     upstream_mean = _window_means_from_prefix(csum, ccount, upstream_start, upstream_end)
     candidate_mean = _window_means_from_prefix(csum, ccount, candidate_start, candidate_end)
     downstream_mean = _window_means_from_prefix(csum, ccount, downstream_start, downstream_end)
-    upstream_difference = upstream_mean - candidate_mean
-    downstream_difference = downstream_mean - candidate_mean
-    # Contrast: average flank depression relative to candidate
-    contrast = (upstream_mean + downstream_mean) / 2.0 - candidate_mean
-    # Symmetry: flanks represent similar background (1 = balanced, 0 = pure slope)
-    denom = upstream_mean + downstream_mean
-    symmetry = 1.0 - np.abs(upstream_mean - downstream_mean) / (denom + EPSILON)
-    np.clip(symmetry, 0.0, 1.0, out=symmetry)
-    # PVS = Contrast × Symmetry
-    pvs = contrast * symmetry
-    # First decision: upstream must be depressed relative to candidate
+
+    lpc_up = upstream_mean - candidate_mean
+    lpc_down = downstream_mean - candidate_mean
+    lpc = np.minimum(lpc_up, lpc_down)
+
     valid = (
         np.isfinite(upstream_mean)
         & np.isfinite(candidate_mean)
         & np.isfinite(downstream_mean)
-        & (upstream_difference > 0)
-        & np.isfinite(pvs)
+        & (lpc_up > 0)
+        & (lpc_down > 0)
+        & np.isfinite(lpc)
     )
-    for arr in (upstream_mean, candidate_mean, downstream_mean, upstream_difference, downstream_difference, pvs, symmetry):
+
+    flank_mean = (upstream_mean + downstream_mean) / 2.0
+    for arr in (upstream_mean, candidate_mean, downstream_mean, lpc_up, lpc_down, lpc, flank_mean):
         arr[~valid] = np.nan
-    candidate_window_track = np.zeros(n, dtype=np.int32)
-    candidate_window_track[valid] = candidate_window
+
     candidate_start = candidate_start.astype(np.int32)
     candidate_end = (candidate_end - 1).astype(np.int32)
     candidate_start[~valid] = -1
     candidate_end[~valid] = -1
+    candidate_window_track = np.zeros(n, dtype=np.int32)
+    candidate_window_track[valid] = candidate_window
+
     return {
-        "pvs": pvs.astype(np.float32),
+        "lpc": lpc.astype(np.float32),
         "upstream_mean": upstream_mean.astype(np.float32),
         "candidate_mean": candidate_mean.astype(np.float32),
         "downstream_mean": downstream_mean.astype(np.float32),
-        "upstream_difference": upstream_difference.astype(np.float32),
-        "downstream_difference": downstream_difference.astype(np.float32),
-        "symmetry": symmetry.astype(np.float32),
+        "lpc_up": lpc_up.astype(np.float32),
+        "lpc_down": lpc_down.astype(np.float32),
+        "flank_mean": flank_mean.astype(np.float32),
         "candidate_window": candidate_window_track,
         "candidate_start": candidate_start,
         "candidate_end": candidate_end,
     }
 
 
-def compute_valley_profile(
-    p2: np.ndarray,
-    mode: str = "fixed",
+def compute_lpc_profile(
+    landscape: np.ndarray,
+    mode: str = "adaptive",
     upstream_window: int = UPSTREAM_WINDOW,
     spacer: int = SPACER,
-    candidate_window: int = CANDIDATE_WINDOW,
+    candidate_window: int = ADAPTIVE_MIN_WINDOW,
     downstream_window: int = DOWNSTREAM_WINDOW,
     adaptive_min_window: int = ADAPTIVE_MIN_WINDOW,
     adaptive_max_window: int = ADAPTIVE_MAX_WINDOW,
 ) -> dict[str, np.ndarray]:
+    n = len(landscape)
     if mode == "fixed":
-        return _fixed_valley_profile(p2, upstream_window, spacer, candidate_window, downstream_window)
+        return _lpc_for_candidate_window(landscape, upstream_window, spacer, candidate_window, downstream_window)
+
     min_window = max(1, int(adaptive_min_window))
     max_window = max(min_window, int(adaptive_max_window))
+
     best_profile = {
-        "pvs": np.full(len(p2), np.nan, dtype=np.float32),
-        "upstream_mean": np.full(len(p2), np.nan, dtype=np.float32),
-        "candidate_mean": np.full(len(p2), np.nan, dtype=np.float32),
-        "downstream_mean": np.full(len(p2), np.nan, dtype=np.float32),
-        "upstream_difference": np.full(len(p2), np.nan, dtype=np.float32),
-        "downstream_difference": np.full(len(p2), np.nan, dtype=np.float32),
-        "symmetry": np.full(len(p2), np.nan, dtype=np.float32),
-        "candidate_window": np.zeros(len(p2), dtype=np.int32),
-        "candidate_start": np.full(len(p2), -1, dtype=np.int32),
-        "candidate_end": np.full(len(p2), -1, dtype=np.int32),
+        "lpc": np.full(n, np.nan, dtype=np.float32),
+        "upstream_mean": np.full(n, np.nan, dtype=np.float32),
+        "candidate_mean": np.full(n, np.nan, dtype=np.float32),
+        "downstream_mean": np.full(n, np.nan, dtype=np.float32),
+        "lpc_up": np.full(n, np.nan, dtype=np.float32),
+        "lpc_down": np.full(n, np.nan, dtype=np.float32),
+        "flank_mean": np.full(n, np.nan, dtype=np.float32),
+        "candidate_window": np.zeros(n, dtype=np.int32),
+        "candidate_start": np.full(n, -1, dtype=np.int32),
+        "candidate_end": np.full(n, -1, dtype=np.int32),
     }
+
     for current_window in range(min_window, max_window + 1):
-        current = _fixed_valley_profile(p2, upstream_window, spacer, current_window, downstream_window)
-        better = np.isfinite(current["pvs"]) & (
-            ~np.isfinite(best_profile["pvs"]) | (current["pvs"] > best_profile["pvs"])
+        current = _lpc_for_candidate_window(landscape, upstream_window, spacer, current_window, downstream_window)
+        better = np.isfinite(current["lpc"]) & (
+            ~np.isfinite(best_profile["lpc"]) | (current["lpc"] > best_profile["lpc"])
         )
         if not np.any(better):
             continue
         for key in best_profile:
             best_profile[key][better] = current[key][better]
+
     return best_profile
 
 
@@ -265,89 +285,109 @@ def bounded_min_mean(arr: np.ndarray, min_len: int, max_len: int) -> tuple[Optio
     return best_i, best_j, float(best_mean)
 
 
-def _nucleotide_bounds(signal_start: int, signal_end: int, seq_len: int) -> tuple[int, int]:
+def _nucleotide_bounds(signal_start: int, signal_end: int, seq_len: int, p1_window: int) -> tuple[int, int]:
     start = max(0, int(signal_start))
-    end = min(seq_len - 1, int(signal_end + PERPLEXITY_WINDOW - 1))
+    end = min(seq_len - 1, int(signal_end + p1_window - 1))
     return start, end
 
 
-def domain_statistics(start: int, end: int, p1: np.ndarray, p2: np.ndarray, profile: dict[str, np.ndarray], seq: str) -> dict:
+def _nan_stats(arr: np.ndarray) -> tuple[float, float, float, float, float, float]:
+    """Return mean/min/max/variance/sd/cv for finite values; all-NaN if empty."""
+    finite = arr[np.isfinite(arr)]
+    if finite.size == 0:
+        return float("nan"), float("nan"), float("nan"), float("nan"), float("nan"), float("nan")
+    mean = float(np.mean(finite))
+    min_v = float(np.min(finite))
+    max_v = float(np.max(finite))
+    var = float(np.var(finite))
+    sd = float(np.sqrt(var))
+    cv = float(sd / (mean + EPSILON)) if np.isfinite(sd) and np.isfinite(mean) else float("nan")
+    return mean, min_v, max_v, var, sd, cv
+
+
+def valley_statistics(
+    idx: int,
+    start: int,
+    end: int,
+    p1: np.ndarray,
+    landscape: np.ndarray,
+    profile: dict[str, np.ndarray],
+    seq: str,
+    p1_window: int,
+) -> dict:
     signal_slice = slice(start, end + 1)
     domain_p1 = p1[signal_slice]
-    domain_p2 = p2[signal_slice]
-    domain_pvs = profile["pvs"][signal_slice]
-    domain_symmetry = profile["symmetry"][signal_slice]
-    finite_p1 = domain_p1[np.isfinite(domain_p1)]
-    finite_p2 = domain_p2[np.isfinite(domain_p2)]
-    finite_pvs = domain_pvs[np.isfinite(domain_pvs)]
-    finite_symmetry = domain_symmetry[np.isfinite(domain_symmetry)]
-    mean_p1 = float(np.nanmean(finite_p1)) if finite_p1.size else float("nan")
-    min_p1 = float(np.nanmin(finite_p1)) if finite_p1.size else float("nan")
-    max_p1 = float(np.nanmax(finite_p1)) if finite_p1.size else float("nan")
-    variance = float(np.nanvar(finite_p1)) if finite_p1.size else float("nan")
-    sd = float(np.sqrt(variance)) if np.isfinite(variance) else float("nan")
-    cv = float(sd / (mean_p1 + EPSILON)) if np.isfinite(sd) and np.isfinite(mean_p1) else float("nan")
-    mean_p2 = float(np.nanmean(finite_p2)) if finite_p2.size else float("nan")
-    mean_pvs = float(np.nanmean(finite_pvs)) if finite_pvs.size else float("nan")
-    max_pvs = float(np.nanmax(finite_pvs)) if finite_pvs.size else float("nan")
-    area_under_valley = float(np.nansum(finite_pvs)) if finite_pvs.size else 0.0
-    mean_symmetry = float(np.nanmean(finite_symmetry)) if finite_symmetry.size else 0.0
+    domain_lpc = profile["lpc"][signal_slice]
+
+    mean_p1, min_p1, max_p1, variance, sd, cv = _nan_stats(domain_p1)
+    mean_lpc = float(np.nanmean(domain_lpc)) if np.isfinite(domain_lpc).any() else float("nan")
+    max_lpc = float(np.nanmax(domain_lpc)) if np.isfinite(domain_lpc).any() else float("nan")
+
     upstream_mean = float(np.nanmean(profile["upstream_mean"][signal_slice]))
     candidate_mean = float(np.nanmean(profile["candidate_mean"][signal_slice]))
     downstream_mean = float(np.nanmean(profile["downstream_mean"][signal_slice]))
-    upstream_difference = float(np.nanmean(profile["upstream_difference"][signal_slice]))
-    downstream_difference = float(np.nanmean(profile["downstream_difference"][signal_slice]))
-    combined_valley_score = float(np.nanmean((
-        profile["upstream_difference"][signal_slice] + profile["downstream_difference"][signal_slice]
-    ) / 2.0))
-    persistence = float(np.sum(finite_pvs > 0) / finite_pvs.size) if finite_pvs.size else 0.0
+    lpc_up = float(np.nanmean(profile["lpc_up"][signal_slice]))
+    lpc_down = float(np.nanmean(profile["lpc_down"][signal_slice]))
+
+    symmetry = 1.0 - abs(upstream_mean - downstream_mean) / (upstream_mean + downstream_mean + EPSILON)
+    symmetry = float(np.clip(symmetry, 0.0, 1.0)) if np.isfinite(symmetry) else float("nan")
+
+    flank_local = profile["flank_mean"][signal_slice]
+    finite_mask = np.isfinite(domain_p1) & np.isfinite(flank_local)
+    if np.any(finite_mask):
+        below = np.sum(domain_p1[finite_mask] < flank_local[finite_mask])
+        persistence = float(below / np.sum(finite_mask))
+        auc = float(np.nansum(np.maximum(flank_local[finite_mask] - domain_p1[finite_mask], 0.0)))
+    else:
+        persistence = 0.0
+        auc = 0.0
+
     signal_length = end - start + 1
-    start_nt, end_nt = _nucleotide_bounds(start, end, len(seq))
+    start_nt, end_nt = _nucleotide_bounds(start, end, len(seq), p1_window)
     sequence = seq[start_nt:end_nt + 1]
     gc = (sequence.count("G") + sequence.count("C")) / max(len(sequence), 1)
-    stability = 1.0 / (variance + EPSILON) if np.isfinite(variance) else 0.0
-    # Confidence: Contrast × Symmetry × Persistence × log(Length) × 1/(Variance+ε)
-    # PVS already encodes Contrast × Symmetry per position, so mean_pvs = mean(Contrast × Symmetry)
-    contrast = max(mean_pvs, 0.0) if np.isfinite(mean_pvs) else 0.0
-    confidence_raw = contrast * persistence * math.log(max(signal_length, 2)) * stability
+
+    lpc_strength = max(mean_lpc, 0.0) if np.isfinite(mean_lpc) else 0.0
+    valley_score_raw = lpc_strength * persistence * math.log(max(signal_length, 2))
+
     candidate_windows = profile["candidate_window"][signal_slice]
     selected_window = int(np.nanmedian(candidate_windows[candidate_windows > 0])) if np.any(candidate_windows > 0) else 0
+
     return {
+        "ID": f"PV_{idx:06d}",
         "Signal_Start": int(start),
         "Signal_End": int(end),
         "Signal_Length": int(signal_length),
         "Start": int(start_nt),
         "End": int(end_nt),
         "Length": int(end_nt - start_nt + 1),
-        "Mean_P1": mean_p1,
-        "Min_P1": min_p1,
-        "Max_P1": max_p1,
-        "Mean_P2": mean_p2,
-        "Mean_PVS": mean_pvs,
-        "Max_PVS": max_pvs,
-        "Area_Under_Valley": area_under_valley,
-        "Upstream_Mean": upstream_mean,
-        "Candidate_Mean": candidate_mean,
-        "Downstream_Mean": downstream_mean,
-        "Upstream_Difference": upstream_difference,
-        "Downstream_Difference": downstream_difference,
-        "Combined_Valley_Score": combined_valley_score,
-        "Symmetry": mean_symmetry,
+        "MeanP1": mean_p1,
+        "MinimumP1": min_p1,
+        "MaximumP1": max_p1,
         "Variance": variance,
         "SD": sd,
         "CV": cv,
-        "GC_Content": gc,
+        "MeanLPC": mean_lpc,
+        "MaximumLPC": max_lpc,
+        "AreaUnderValley": auc,
+        "UpstreamMean": upstream_mean,
+        "CandidateMean": candidate_mean,
+        "DownstreamMean": downstream_mean,
+        "LPC_up": lpc_up,
+        "LPC_down": lpc_down,
         "Persistence": persistence,
-        "Candidate_Window": selected_window,
-        "Confidence_raw": confidence_raw,
+        "Symmetry": symmetry,
+        "ValleyScore_raw": valley_score_raw,
+        "GC%": gc,
+        "CandidateWindow": selected_window,
         "Sequence": sequence,
     }
 
 
-def normalize_confidence(domains: list[dict]) -> list[dict]:
+def normalize_valley_score(domains: list[dict]) -> list[dict]:
     if not domains:
         return domains
-    raw = np.array([max(0.0, float(d.get("Confidence_raw", 0.0))) for d in domains], dtype=np.float64)
+    raw = np.array([max(0.0, float(d.get("ValleyScore_raw", 0.0))) for d in domains], dtype=np.float64)
     lo = float(raw.min())
     hi = float(raw.max())
     span = hi - lo
@@ -355,26 +395,29 @@ def normalize_confidence(domains: list[dict]) -> list[dict]:
         norm = np.where(raw > 0, 1.0, 0.0)
     else:
         norm = (raw - lo) / span
-    for idx, domain in enumerate(domains, start=1):
-        domain["Confidence"] = float(norm[idx - 1])
-        domain["Domain_ID"] = f"REGPLEX_{idx:04d}"
-        domain.pop("Confidence_raw", None)
+    for idx, domain in enumerate(domains):
+        domain["ValleyScore"] = float(raw[idx])
+        domain["ValleyScoreNormalized"] = float(norm[idx])
+        domain.pop("ValleyScore_raw", None)
     return domains
 
 
 def find_domains(
     p1: np.ndarray,
-    p2: np.ndarray,
+    landscape: np.ndarray,
     profile: dict[str, np.ndarray],
     seq: str,
     min_domain: int = MIN_DOMAIN,
     max_domain: int = MAX_DOMAIN,
+    p1_window: int = PERPLEXITY_WINDOW,
 ) -> list[dict]:
-    signal = profile["pvs"].astype(np.float64)
-    work = -signal
+    signal = profile["lpc"].astype(np.float64)
+    work = -signal  # bounded minimum-mean Kadane on inverted LPC
     nan_mask = ~np.isfinite(work)
     n = len(work)
     domains: list[dict] = []
+    k = 1
+
     while True:
         best = (np.inf, None, None)
         i = 0
@@ -391,22 +434,38 @@ def find_domains(
                 if s is not None and mean_value < best[0]:
                     best = (mean_value, i + s, i + e)
             i = j
+
         score, start, end = best
         if start is None or not np.isfinite(score) or score >= 0:
             break
-        domains.append(domain_statistics(start, end, p1=p1, p2=p2, profile=profile, seq=seq))
+
+        domains.append(
+            valley_statistics(
+                k,
+                start,
+                end,
+                p1=p1,
+                landscape=landscape,
+                profile=profile,
+                seq=seq,
+                p1_window=p1_window,
+            )
+        )
+        k += 1
         work[start:end + 1] = np.nan
         nan_mask[start:end + 1] = True
+
     domains.sort(key=lambda domain: domain["Signal_Start"])
-    return normalize_confidence(domains)
+    return normalize_valley_score(domains)
 
 
 def analyze_sequence(sequence_id: str, seq: str, **kwargs) -> AnalysisResult:
     params = {
         "perplexity_window": int(kwargs.get("perplexity_window", PERPLEXITY_WINDOW)),
-        "second_order_window": int(kwargs.get("second_order_window", SECOND_ORDER_WINDOW)),
-        "candidate_mode": kwargs.get("candidate_mode", "fixed"),
-        "candidate_window": int(kwargs.get("candidate_window", CANDIDATE_WINDOW)),
+        "landscape_window": int(kwargs.get("landscape_window", LANDSCAPE_WINDOW)),
+        "landscape_method": kwargs.get("landscape_method", LANDSCAPE_METHOD),
+        "candidate_mode": kwargs.get("candidate_mode", "adaptive"),
+        "candidate_window": int(kwargs.get("candidate_window", ADAPTIVE_MIN_WINDOW)),
         "upstream_window": int(kwargs.get("upstream_window", UPSTREAM_WINDOW)),
         "downstream_window": int(kwargs.get("downstream_window", DOWNSTREAM_WINDOW)),
         "spacer": int(kwargs.get("spacer", SPACER)),
@@ -415,10 +474,11 @@ def analyze_sequence(sequence_id: str, seq: str, **kwargs) -> AnalysisResult:
         "min_domain": int(kwargs.get("min_domain", MIN_DOMAIN)),
         "max_domain": int(kwargs.get("max_domain", MAX_DOMAIN)),
     }
+
     p1 = compute_p1(seq, params["perplexity_window"])
-    p2 = compute_p2(p1, params["second_order_window"])
-    profile = compute_valley_profile(
-        p2,
+    landscape = compute_landscape(p1, params["landscape_window"], params["landscape_method"])
+    profile = compute_lpc_profile(
+        landscape,
         mode=params["candidate_mode"],
         upstream_window=params["upstream_window"],
         spacer=params["spacer"],
@@ -429,27 +489,31 @@ def analyze_sequence(sequence_id: str, seq: str, **kwargs) -> AnalysisResult:
     )
     domains = find_domains(
         p1,
-        p2,
+        landscape,
         profile,
         seq,
         min_domain=params["min_domain"],
         max_domain=params["max_domain"],
+        p1_window=params["perplexity_window"],
     )
     for domain in domains:
         domain["Sequence_ID"] = sequence_id
+
     return AnalysisResult(
         sequence_id=sequence_id,
         length=len(seq),
         p1=p1,
-        p2=p2,
-        pvs=profile["pvs"],
-        symmetry=profile["symmetry"],
+        landscape=landscape,
+        lpc=profile["lpc"],
         upstream_mean=profile["upstream_mean"],
         candidate_mean=profile["candidate_mean"],
         downstream_mean=profile["downstream_mean"],
-        upstream_difference=profile["upstream_difference"],
-        downstream_difference=profile["downstream_difference"],
+        lpc_up=profile["lpc_up"],
+        lpc_down=profile["lpc_down"],
+        flank_mean=profile["flank_mean"],
         candidate_window=profile["candidate_window"],
+        candidate_start=profile["candidate_start"],
+        candidate_end=profile["candidate_end"],
         domains=domains,
         params=params,
     )
@@ -460,38 +524,37 @@ def domains_dataframe(results: Iterable[AnalysisResult]) -> pd.DataFrame:
     for result in results:
         for domain in result.domains:
             rows.append({
-                "Domain_ID": domain["Domain_ID"],
+                "ID": domain["ID"],
                 "Sequence_ID": domain["Sequence_ID"],
                 "Start": domain["Start"],
                 "End": domain["End"],
                 "Length": domain["Length"],
-                "Signal_Start": domain["Signal_Start"],
-                "Signal_End": domain["Signal_End"],
-                "Signal_Length": domain["Signal_Length"],
-                "Mean_P1": domain["Mean_P1"],
-                "Min_P1": domain["Min_P1"],
-                "Max_P1": domain["Max_P1"],
-                "Mean_P2": domain["Mean_P2"],
-                "Mean_PVS": domain["Mean_PVS"],
-                "Max_PVS": domain["Max_PVS"],
-                "Area_Under_Valley": domain["Area_Under_Valley"],
-                "Upstream_Mean": domain["Upstream_Mean"],
-                "Candidate_Mean": domain["Candidate_Mean"],
-                "Downstream_Mean": domain["Downstream_Mean"],
-                "Upstream_Difference": domain["Upstream_Difference"],
-                "Downstream_Difference": domain["Downstream_Difference"],
-                "Combined_Valley_Score": domain["Combined_Valley_Score"],
-                "Symmetry": domain["Symmetry"],
+                "MeanP1": domain["MeanP1"],
+                "MinimumP1": domain["MinimumP1"],
+                "MaximumP1": domain["MaximumP1"],
                 "Variance": domain["Variance"],
                 "SD": domain["SD"],
                 "CV": domain["CV"],
-                "GC_Content": domain["GC_Content"],
+                "MeanLPC": domain["MeanLPC"],
+                "MaximumLPC": domain["MaximumLPC"],
+                "AreaUnderValley": domain["AreaUnderValley"],
+                "UpstreamMean": domain["UpstreamMean"],
+                "CandidateMean": domain["CandidateMean"],
+                "DownstreamMean": domain["DownstreamMean"],
+                "LPC_up": domain["LPC_up"],
+                "LPC_down": domain["LPC_down"],
                 "Persistence": domain["Persistence"],
-                "Confidence": domain["Confidence"],
-                "Candidate_Window": domain["Candidate_Window"],
-                "Motif_Count": domain.get("Motif_Count", 0),
+                "Symmetry": domain["Symmetry"],
+                "ValleyScore": domain["ValleyScore"],
+                "ValleyScoreNormalized": domain["ValleyScoreNormalized"],
+                "GC%": domain["GC%"],
+                "MotifCount": domain.get("MotifCount", 0),
                 "Motifs": domain.get("Motifs", ""),
                 "Sequence": domain["Sequence"],
+                "Signal_Start": domain["Signal_Start"],
+                "Signal_End": domain["Signal_End"],
+                "Signal_Length": domain["Signal_Length"],
+                "CandidateWindow": domain["CandidateWindow"],
             })
     return pd.DataFrame(rows)
 
@@ -513,7 +576,7 @@ def export_table(df: pd.DataFrame, fmt: str) -> bytes:
 
 
 def export_bed(df: pd.DataFrame) -> bytes:
-    bed = df[["Sequence_ID", "Start", "End", "Domain_ID", "Confidence"]].copy()
+    bed = df[["Sequence_ID", "Start", "End", "ID", "ValleyScore"]].copy()
     bed["Start"] = bed["Start"].astype(int)
     bed["End"] = bed["End"].astype(int) + 1
     return bed.to_csv(index=False, sep="\t", header=False).encode()
@@ -523,7 +586,7 @@ def export_fasta(df: pd.DataFrame) -> bytes:
     lines: list[str] = []
     for _, row in df.iterrows():
         lines.append(
-            f">{row['Domain_ID']}|{row['Sequence_ID']}:{row['Start']}-{row['End']}|Confidence={row['Confidence']:.4f}"
+            f">{row['ID']}|{row['Sequence_ID']}:{row['Start']}-{row['End']}|ValleyScore={row['ValleyScore']:.4f}"
         )
         lines.append(str(row["Sequence"]))
     return ("\n".join(lines) + ("\n" if lines else "")).encode()
@@ -533,10 +596,10 @@ def export_gff(df: pd.DataFrame, gff3: bool = False) -> bytes:
     rows: list[str] = []
     for _, row in df.iterrows():
         attr = (
-            f"ID={row['Domain_ID']};Confidence={row['Confidence']:.4f};"
-            f"MeanP1={row['Mean_P1']:.4f};MaxP1={row['Max_P1']:.4f};"
-            f"MeanPVS={row['Mean_PVS']:.4f};Symmetry={row['Symmetry']:.4f};"
-            f"AreaUnderValley={row['Area_Under_Valley']:.4f};Motifs={row['Motifs']}"
+            f"ID={row['ID']};ValleyScore={row['ValleyScore']:.4f};"
+            f"MeanP1={row['MeanP1']:.4f};MaximumLPC={row['MaximumLPC']:.4f};"
+            f"Persistence={row['Persistence']:.4f};Symmetry={row['Symmetry']:.4f};"
+            f"AreaUnderValley={row['AreaUnderValley']:.4f};Motifs={row['Motifs']}"
         )
         rows.append("\t".join([
             str(row["Sequence_ID"]),
@@ -544,7 +607,7 @@ def export_gff(df: pd.DataFrame, gff3: bool = False) -> bytes:
             "perplexity_valley",
             str(int(row["Start"]) + 1),
             str(int(row["End"]) + 1),
-            f"{float(row['Confidence']):.4f}",
+            f"{float(row['ValleyScore']):.4f}",
             ".",
             ".",
             attr,
@@ -556,10 +619,12 @@ def export_gff(df: pd.DataFrame, gff3: bool = False) -> bytes:
 def cli() -> None:
     parser = argparse.ArgumentParser(description="Run REGPLEX perplexity valley analysis from FASTA")
     parser.add_argument("fasta", help="Input FASTA file")
-    parser.add_argument("--out", default="regplex_domains.csv", help="Output CSV path")
+    parser.add_argument("--out", default="regplex_valleys.csv", help="Output CSV path")
     args = parser.parse_args()
+
     with open(args.fasta, encoding="utf-8") as handle:
         fasta_text = handle.read()
+
     records = parse_fasta(fasta_text)
     results = [analyze_sequence(header, sequence) for header, sequence in records]
     df = domains_dataframe(results)

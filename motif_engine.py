@@ -49,6 +49,6 @@ def annotate_domains(domains: list[dict], compiled_motifs: list[tuple[str, re.Pa
             if count:
                 hits.append(f"{motif}:{count}")
                 total += count
-        domain["Motif_Count"] = total
+        domain["MotifCount"] = total
         domain["Motifs"] = ";".join(hits)
     return domains
