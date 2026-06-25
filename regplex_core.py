@@ -91,7 +91,7 @@ def compute_p1(seq: str, window: int = PERPLEXITY_WINDOW) -> np.ndarray:
     np.add.at(counts, (np.arange(len(windows))[:, None], din), 1)
     p = np.where(counts == 0, 1.0, counts / (window - 1)).astype(np.float32)
     entropy = -np.sum(p * np.log2(p), axis=1)
-    perplexity = (2.0**entropy).astype(np.float32)
+    perplexity = (2.0 ** entropy).astype(np.float32)
     perplexity[windows_n.any(axis=1)] = np.nan
     return perplexity
 
