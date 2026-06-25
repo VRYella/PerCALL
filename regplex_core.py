@@ -5,7 +5,7 @@ import io
 import math
 from collections import deque
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Iterable, Optional
 
 import numpy as np
 import pandas as pd
@@ -226,7 +226,7 @@ def compute_valley_profile(
     return best_profile
 
 
-def bounded_min_mean(arr: np.ndarray, min_len: int, max_len: int) -> tuple[int | None, int | None, float]:
+def bounded_min_mean(arr: np.ndarray, min_len: int, max_len: int) -> tuple[Optional[int], Optional[int], float]:
     n = len(arr)
     if n < min_len:
         return None, None, np.inf
