@@ -94,6 +94,13 @@ def _load_styles() -> None:
     st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
 
 
+def _render_html(body: str) -> None:
+    if hasattr(st, "html"):
+        st.html(body)
+    else:
+        st.markdown(body, unsafe_allow_html=True)
+
+
 def _jump_to_nav(label: str) -> None:
     """Request a navigation jump on the next rerun."""
     st.session_state["jump_nav"] = label
@@ -273,10 +280,7 @@ def _render_home() -> None:
 """
     hero_right = f'<div class="hero-right">{img_html}</div>'
 
-    st.markdown(
-        f'<div class="hero-section">{hero_left}{hero_right}</div>',
-        unsafe_allow_html=True,
-    )
+    _render_html(f'<div class="hero-section">{hero_left}{hero_right}</div>')
 
     # ── Action buttons (Streamlit widgets below hero columns) ──
     b1, b2, b3, b4 = st.columns([1.6, 1.2, 1.2, 1.2])
