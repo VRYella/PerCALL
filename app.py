@@ -9,12 +9,12 @@ from motif_engine import annotate_domains, compile_motifs
 from regplex_core import (
     ADAPTIVE_MAX_WINDOW,
     ADAPTIVE_MIN_WINDOW,
-    CANDIDATE_WINDOW,
     DOWNSTREAM_WINDOW,
-    MIN_DOMAIN,
+    LANDSCAPE_METHOD,
+    LANDSCAPE_WINDOW,
     MAX_DOMAIN,
+    MIN_DOMAIN,
     PERPLEXITY_WINDOW,
-    SECOND_ORDER_WINDOW,
     SPACER,
     UPSTREAM_WINDOW,
     AnalysisResult,
@@ -90,7 +90,7 @@ def main() -> None:
         <div class="hero">
             <h1>REGPLEX</h1>
             <p>
-                De novo discovery of <strong>Perplexity Valleys</strong> from intrinsic DNA sequence uncertainty.
+                De novo discovery of <strong>Perplexity Valleys</strong> via Local Perplexity Contrast.
             </p>
         </div>
         """,
@@ -104,9 +104,8 @@ def main() -> None:
             """
             <div class="card">
                 <strong>Scientific positioning</strong><br>
-                REGPLEX is a training-free, species-independent sequence analysis framework that detects
-                localized uncertainty collapse by contrasting candidate DNA segments against their immediate
-                genomic context using a three-window valley model and bounded Kadane optimization.
+                REGPLEX is a training-free, species-independent framework that identifies sustained local
+                reductions in sequence uncertainty relative to immediate upstream/downstream genomic context.
             </div>
             """,
             unsafe_allow_html=True,
@@ -119,28 +118,29 @@ def main() -> None:
         left, middle, right = st.columns(3)
         with left:
             perplexity_window = st.number_input("P1 window", 4, 50, PERPLEXITY_WINDOW)
-            second_order_window = st.number_input("Smooth window", 20, 500, SECOND_ORDER_WINDOW)
-            upstream_window = st.number_input("Upstream window", 20, 1000, UPSTREAM_WINDOW)
-            downstream_window = st.number_input("Downstream window", 20, 1000, DOWNSTREAM_WINDOW)
+            landscape_window = st.number_input("Landscape window", 20, 5000, LANDSCAPE_WINDOW)
+            landscape_method = st.selectbox("Landscape method", ["mean", "median"], index=0 if LANDSCAPE_METHOD == "mean" else 1)
+            upstream_window = st.number_input("Upstream window", 20, 2000, UPSTREAM_WINDOW)
+            downstream_window = st.number_input("Downstream window", 20, 2000, DOWNSTREAM_WINDOW)
         with middle:
-            spacer = st.number_input("Spacer", 0, 500, SPACER)
-            candidate_mode = st.selectbox("Candidate mode", ["fixed", "adaptive"], format_func=lambda value: value.title())
+            spacer = st.number_input("Spacer", 0, 1000, SPACER)
+            candidate_mode = st.selectbox("Candidate mode", ["adaptive", "fixed"], format_func=lambda value: value.title())
             if candidate_mode == "fixed":
-                candidate_window = st.number_input("Candidate window", 20, 1000, CANDIDATE_WINDOW)
+                candidate_window = st.number_input("Candidate window", 20, 1500, ADAPTIVE_MIN_WINDOW)
                 adaptive_min_window = ADAPTIVE_MIN_WINDOW
                 adaptive_max_window = ADAPTIVE_MAX_WINDOW
             else:
-                adaptive_min_window = st.number_input("Adaptive minimum window", 20, 1000, ADAPTIVE_MIN_WINDOW)
+                adaptive_min_window = st.number_input("Adaptive minimum window", 20, 2000, ADAPTIVE_MIN_WINDOW)
                 adaptive_max_window = st.number_input(
                     "Adaptive maximum window",
                     int(adaptive_min_window),
-                    1500,
+                    3000,
                     max(int(adaptive_min_window), ADAPTIVE_MAX_WINDOW),
                 )
-                candidate_window = CANDIDATE_WINDOW
+                candidate_window = ADAPTIVE_MIN_WINDOW
         with right:
-            min_domain = st.number_input("Minimum domain length", 20, 5000, MIN_DOMAIN)
-            max_domain = st.number_input("Maximum domain length", int(min_domain), 10000, max(int(min_domain), MAX_DOMAIN))
+            min_domain = st.number_input("Minimum valley length", 20, 10000, MIN_DOMAIN)
+            max_domain = st.number_input("Maximum valley length", int(min_domain), 20000, max(int(min_domain), MAX_DOMAIN))
             motif_text = st.text_area("Optional motifs (one per line; IUPAC or regex)", height=190)
 
         if st.button("Run Analysis", type="primary"):
@@ -150,12 +150,14 @@ def main() -> None:
                 fasta_text = upload.read().decode("utf-8", errors="replace")
             elif pasted_text:
                 fasta_text = pasted_text if pasted_text.startswith(">") else f">query\n{pasted_text}"
+
             if not fasta_text:
                 st.warning("Please upload or paste FASTA.")
             else:
                 params = {
                     "perplexity_window": int(perplexity_window),
-                    "second_order_window": int(second_order_window),
+                    "landscape_window": int(landscape_window),
+                    "landscape_method": str(landscape_method),
                     "candidate_mode": candidate_mode,
                     "candidate_window": int(candidate_window),
                     "upstream_window": int(upstream_window),
@@ -171,7 +173,7 @@ def main() -> None:
                     st.session_state["motif_text"] = motif_text
                     st.success("Perplexity valley analysis complete.")
                 except re.error as exc:
-                    st.error(f"Invalid motif pattern: {str(exc)}. Please check the regex syntax or use IUPAC symbols.")
+                    st.error(f"Invalid motif pattern: {str(exc)}. Please check regex syntax or use IUPAC symbols.")
 
     results: list[AnalysisResult] = st.session_state.get("results", [])
     df = domains_dataframe(results) if results else pd.DataFrame()
@@ -183,30 +185,25 @@ def main() -> None:
             sequence_id = st.selectbox("Sequence", [result.sequence_id for result in results])
             result = next(item for item in results if item.sequence_id == sequence_id)
             selected_df = df[df["Sequence_ID"] == sequence_id]
-            mean_confidence = selected_df["Confidence"].mean() if not selected_df.empty else float("nan")
-            mean_pvs = selected_df["Mean_PVS"].mean() if not selected_df.empty else float("nan")
-            top_confidence = selected_df["Confidence"].max() if not selected_df.empty else float("nan")
             m1, m2, m3 = st.columns(3)
             m1.metric("Detected valleys", len(result.domains))
-            m2.metric("Mean confidence", f"{mean_confidence:.4f}" if pd.notna(mean_confidence) else "N/A")
-            m3.metric("Top confidence", f"{top_confidence:.4f}" if pd.notna(top_confidence) else "N/A")
-            st.caption(
-                f"Mean domain PVS: {mean_pvs:.4f}" if pd.notna(mean_pvs) else "Mean domain PVS: N/A"
-            )
+            m2.metric("Mean ValleyScore", f"{selected_df['ValleyScore'].mean():.4f}" if not selected_df.empty else "N/A")
+            m3.metric("Top ValleyScore", f"{selected_df['ValleyScore'].max():.4f}" if not selected_df.empty else "N/A")
+
             _show_figure(plot_p1_profile(result.p1), f"p1-{sequence_id}")
-            _show_figure(plot_p2_landscape(result.p2), f"p2-{sequence_id}")
+            _show_figure(plot_p2_landscape(result.landscape), f"landscape-{sequence_id}")
             _show_figure(
                 plot_three_window_illustration(
-                    result.p2,
-                    result.pvs,
+                    result.landscape,
+                    result.lpc,
                     result.params,
                     result.domains,
                     result.candidate_window,
                 ),
                 f"illustration-{sequence_id}",
             )
-            _show_figure(plot_pvs_profile(result.pvs, result.domains), f"pvs-{sequence_id}")
-            _show_figure(plot_kadane_domains(result.pvs, result.domains), f"kadane-{sequence_id}")
+            _show_figure(plot_pvs_profile(result.lpc, result.domains), f"lpc-{sequence_id}")
+            _show_figure(plot_kadane_domains(result.lpc, result.domains), f"kadane-{sequence_id}")
             _show_figure(plot_domain_ranking(result.domains), f"ranking-{sequence_id}")
             st.dataframe(selected_df, use_container_width=True)
 
@@ -221,19 +218,13 @@ def main() -> None:
         if df.empty:
             st.info("Run analysis first.")
         else:
-            st.download_button("CSV", export_table(df, "csv"), "regplex_domains.csv", "text/csv")
-            st.download_button("TSV", export_table(df, "tsv"), "regplex_domains.tsv", "text/tab-separated-values")
-            st.download_button(
-                "Excel",
-                export_table(df, "xlsx"),
-                "regplex_domains.xlsx",
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            )
-            st.download_button("BED", export_bed(df), "regplex_domains.bed", "text/plain")
-            st.download_button("GFF", export_gff(df, gff3=False), "regplex_domains.gff", "text/plain")
-            st.download_button("GFF3", export_gff(df, gff3=True), "regplex_domains.gff3", "text/plain")
-            st.download_button("FASTA", export_fasta(df), "regplex_domains.fasta", "text/plain")
-            st.download_button("JSON", export_table(df, "json"), "regplex_domains.json", "application/json")
+            st.download_button("CSV", export_table(df, "csv"), "regplex_valleys.csv", "text/csv")
+            st.download_button("Excel", export_table(df, "xlsx"), "regplex_valleys.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.download_button("BED", export_bed(df), "regplex_valleys.bed", "text/plain")
+            st.download_button("GFF", export_gff(df, gff3=False), "regplex_valleys.gff", "text/plain")
+            st.download_button("GFF3", export_gff(df, gff3=True), "regplex_valleys.gff3", "text/plain")
+            st.download_button("FASTA", export_fasta(df), "regplex_valleys.fasta", "text/plain")
+            st.download_button("JSON", export_table(df, "json"), "regplex_valleys.json", "application/json")
 
 
 if __name__ == "__main__":
