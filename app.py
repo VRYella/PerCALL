@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import html
 import re
 import time
@@ -52,21 +53,6 @@ PLOT_CONFIG = {
 # Map nav labels to integer indices.
 _NAV_INDEX = {label: i for i, label in enumerate(_NAV_ITEMS)}
 
-# Module-level SVG icon path fragments for feature cards (avoids recreation on each render).
-_ICON_PATHS_TRAINING_FREE = (
-    '<path d="M11 21H31" stroke="#1E3A8A" stroke-width="2.2"/>'
-    '<path d="M21 11V31" stroke="#0F766E" stroke-width="2.2"/>'
-)
-_ICON_PATHS_GENOME_SCALE = (
-    '<path d="M10 26L18 18L24 24L32 16" stroke="#1E3A8A" stroke-width="2.2"/>'
-    '<circle cx="32" cy="16" r="2.5" fill="#0F766E"/>'
-)
-_ICON_PATHS_EXPLAINABLE = (
-    '<path d="M10 30L32 12" stroke="#1E3A8A" stroke-width="2.2"/>'
-    '<path d="M10 12H32V30" stroke="#0F766E" stroke-width="2.2"/>'
-)
-
-
 def _svg_square_logo() -> str:
     return """
 <svg width="40" height="40" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="REGPLEX icon">
@@ -78,25 +64,6 @@ def _svg_square_logo() -> str:
 """
 
 
-def _svg_horizontal_logo() -> str:
-    return """
-<svg width="220" height="44" viewBox="0 0 220 44" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="REGPLEX logo">
-<path d="M8 11C16 11 16 23 24 23C32 23 32 11 40 11" stroke="#1E3A8A" stroke-width="2.8" stroke-linecap="round"/>
-<path d="M8 19C16 19 16 31 24 31C32 31 32 19 40 19" stroke="#0F766E" stroke-width="2.8" stroke-linecap="round"/>
-<path d="M41 26C49 31 57 31 65 26" stroke="#0F766E" stroke-width="2.8" stroke-linecap="round"/>
-<text x="74" y="28" fill="#1E3A8A" font-size="22" font-family="Inter, Arial, sans-serif" font-weight="700" letter-spacing="1">REGPLEX</text>
-</svg>
-"""
-
-
-def _svg_feature(icon: str) -> str:
-    return f"""
-<svg width="42" height="42" viewBox="0 0 42 42" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-<rect x="1" y="1" width="40" height="40" rx="12" fill="#F8FAFC" stroke="#1E3A8A"/>
-{icon}
-</svg>
-"""
-
 
 def _svg_empty() -> str:
     return """
@@ -107,6 +74,14 @@ def _svg_empty() -> str:
 <circle cx="136" cy="56" r="4" fill="#F59E0B"/>
 </svg>
 """
+
+
+def _load_hero_image_b64() -> str | None:
+    """Return base64-encoded hero image or None if not found."""
+    img_path = Path(__file__).with_name("regplexlogo.png")
+    if not img_path.exists():
+        return None
+    return base64.b64encode(img_path.read_bytes()).decode()
 
 
 def _load_styles() -> None:
@@ -208,52 +183,142 @@ def _load_example_text() -> str:
     return example_path.read_text(encoding="utf-8")
 
 
+# ---------------------------------------------------------------------------
+# SVG icons for workflow steps
+# ---------------------------------------------------------------------------
+_SVG_STEP_DNA = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+<path d="M7 4C9 8 15 8 17 12C15 16 9 16 7 20" stroke="#1E3A8A" stroke-width="1.8" stroke-linecap="round"/>
+<path d="M17 4C15 8 9 8 7 12C9 16 15 16 17 20" stroke="#0F766E" stroke-width="1.8" stroke-linecap="round"/>
+<line x1="8.5" y1="9" x2="15.5" y2="9" stroke="#1E3A8A" stroke-width="1.2" stroke-linecap="round"/>
+<line x1="8.5" y1="15" x2="15.5" y2="15" stroke="#0F766E" stroke-width="1.2" stroke-linecap="round"/>
+</svg>"""
+
+_SVG_STEP_PERPLEXITY = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+<polyline points="3,18 7,10 10,14 13,7 16,11 20,5" stroke="#1E3A8A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<line x1="3" y1="20" x2="21" y2="20" stroke="#CBD5E1" stroke-width="1.2"/>
+</svg>"""
+
+_SVG_STEP_VALLEY = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+<path d="M3 7 L8 7 C10 7 10 17 12 17 C14 17 14 7 16 7 L21 7" stroke="#1E3A8A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M10 17 C10 17 11 20 12 20 C13 20 14 17 14 17" stroke="#0F766E" stroke-width="1.5" stroke-linecap="round"/>
+</svg>"""
+
+_SVG_STEP_KADANE = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+<polyline points="3,17 7,17 7,9 11,9 11,13 15,13 15,7 19,7 19,17 21,17" stroke="#CBD5E1" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<polyline points="7,17 7,9 11,9 11,13 15,13 15,7 19,7" stroke="#1E3A8A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="7" y="7" width="12" height="10" rx="2" fill="rgba(30,58,138,0.08)" stroke="none"/>
+</svg>"""
+
+_SVG_STEP_DOMAINS = """<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+<rect x="3" y="9" width="5" height="7" rx="2" fill="rgba(30,58,138,0.15)" stroke="#1E3A8A" stroke-width="1.6"/>
+<rect x="10" y="6" width="5" height="13" rx="2" fill="rgba(15,118,110,0.15)" stroke="#0F766E" stroke-width="1.6"/>
+<rect x="17" y="10" width="4" height="6" rx="2" fill="rgba(30,58,138,0.10)" stroke="#1E3A8A" stroke-width="1.6"/>
+<line x1="3" y1="21" x2="21" y2="21" stroke="#CBD5E1" stroke-width="1.2"/>
+</svg>"""
+
+_SVG_ARROW = """<svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+<path d="M4 9 L13 9 M10 6 L13 9 L10 12" stroke="rgba(30,58,138,0.4)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>"""
+
+
 def _render_home() -> None:
+    img_b64 = _load_hero_image_b64()
+    img_html = (
+        f'<img src="data:image/png;base64,{img_b64}" class="hero-image" alt="REGPLEX algorithm overview"/>'
+        if img_b64
+        else '<div style="height:240px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:0.9rem;">Image not found</div>'
+    )
+
+    # ── Two-column hero ──
+    hero_left = f"""
+<div class="hero-left">
+  <div class="hero-brand">REGPLEX</div>
+  <div class="hero-subtitle">
+    <span class="hero-subtitle-line">Regulatory Region Discovery through</span>
+    <span class="hero-subtitle-line">Perplexity Valleys</span>
+  </div>
+  <p class="hero-desc">
+    REGPLEX identifies regulatory regions in genomic DNA by detecting localised
+    collapses in sequence complexity — Perplexity Valleys — across multiple
+    independent observation scales. The approach is entirely training-free:
+    dinucleotide perplexity is computed once, then multi-scale consensus
+    integrates evidence from <span class="hero-nowrap">25 bp</span> to
+    <span class="hero-nowrap">400 bp</span> windows into a single,
+    interpretable signal without any reference data.
+  </p>
+  <div class="hero-chips">
+    <span class="hero-chip">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+        <circle cx="7" cy="7" r="6" stroke="#1E3A8A" stroke-width="1.4"/>
+        <polyline points="4,7 6,9 10,5" stroke="#1E3A8A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Training-free
+    </span>
+    <span class="hero-chip">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+        <circle cx="7" cy="7" r="6" stroke="#1E3A8A" stroke-width="1.4"/>
+        <polyline points="4,7 6,9 10,5" stroke="#1E3A8A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Genome-scale
+    </span>
+    <span class="hero-chip">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+        <circle cx="7" cy="7" r="6" stroke="#1E3A8A" stroke-width="1.4"/>
+        <polyline points="4,7 6,9 10,5" stroke="#1E3A8A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Explainable
+    </span>
+  </div>
+</div>
+"""
+    hero_right = f'<div class="hero-right">{img_html}</div>'
+
     st.markdown(
-        f"""
-        <section class="hero">
-          {_svg_horizontal_logo()}
-          <p><strong>Regulatory Region Discovery through Perplexity Valleys</strong></p>
-          <p>Training-free discovery of localized sequence uncertainty collapse.</p>
-        </section>
-        """,
+        f'<div class="hero-section">{hero_left}{hero_right}</div>',
         unsafe_allow_html=True,
     )
-    c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
-    with c1:
-        if st.button("Start Analysis", key="home_start_analysis", use_container_width=True, type="primary"):
+
+    # ── Action buttons (Streamlit widgets below hero columns) ──
+    b1, b2, b3, b4 = st.columns([1.6, 1.2, 1.2, 1.2])
+    with b1:
+        if st.button("Run Analysis", key="home_start_analysis", use_container_width=True, type="primary"):
             _jump_to_nav("Analysis")
-    with c2:
+    with b2:
         if st.button("Load Example", key="home_load_example", use_container_width=True):
             st.session_state["input_fasta_text"] = _load_example_text()
             _jump_to_nav("Analysis")
-    with c3:
+    with b3:
         st.link_button("Documentation", "https://github.com/VRYella/PerCALL#readme", use_container_width=True)
-    with c4:
+    with b4:
         st.link_button("GitHub", "https://github.com/VRYella/PerCALL", use_container_width=True)
 
-    _icon_tf = _svg_feature(_ICON_PATHS_TRAINING_FREE)
-    _icon_gs = _svg_feature(_ICON_PATHS_GENOME_SCALE)
-    _icon_ex = _svg_feature(_ICON_PATHS_EXPLAINABLE)
-    f1, f2, f3 = st.columns(3)
-    with f1:
-        st.markdown(
-            f"<div class='card'>{_icon_tf}<h4>Training-free</h4>"
-            "<p>No pre-trained model required. Sequence uncertainty alone drives discovery.</p></div>",
-            unsafe_allow_html=True,
-        )
-    with f2:
-        st.markdown(
-            f"<div class='card'>{_icon_gs}<h4>Genome-scale</h4>"
-            "<p>Efficient profile construction for long contiguous genomic sequences.</p></div>",
-            unsafe_allow_html=True,
-        )
-    with f3:
-        st.markdown(
-            f"<div class='card'>{_icon_ex}<h4>Explainable</h4>"
-            "<p>Every valley includes interpretable metrics and explicit motif evidence.</p></div>",
-            unsafe_allow_html=True,
-        )
+    # ── Quick workflow card ──
+    steps = [
+        (_SVG_STEP_DNA, "DNA", "Sequence"),
+        (_SVG_STEP_PERPLEXITY, "Dinucleotide", "Perplexity"),
+        (_SVG_STEP_VALLEY, "Consensus", "Valley"),
+        (_SVG_STEP_KADANE, "Kadane", "Segments"),
+        (_SVG_STEP_DOMAINS, "Predicted", "Domains"),
+    ]
+    steps_html = ""
+    for i, (icon, line1, line2) in enumerate(steps):
+        steps_html += f"""
+<div class="workflow-step">
+  <div class="workflow-step-icon">{icon}</div>
+  <div class="workflow-step-label"><span>{line1}</span><span>{line2}</span></div>
+</div>"""
+        if i < len(steps) - 1:
+            steps_html += f'<div class="workflow-arrow">{_SVG_ARROW}</div>'
+
+    st.markdown(
+        f"""
+        <div class="workflow-card">
+          <div class="workflow-title">Quick Workflow</div>
+          <div class="workflow-steps">{steps_html}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def _validate_motifs(motif_text: str) -> list[dict]:
