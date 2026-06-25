@@ -171,7 +171,7 @@ def main() -> None:
                     st.session_state["motif_text"] = motif_text
                     st.success("Perplexity valley analysis complete.")
                 except re.error as exc:
-                    st.error(f"Invalid motif pattern: {exc}")
+                    st.error(f"Invalid motif pattern: {str(exc)}. Please check the regex syntax or use IUPAC symbols.")
 
     results: list[AnalysisResult] = st.session_state.get("results", [])
     df = domains_dataframe(results) if results else pd.DataFrame()

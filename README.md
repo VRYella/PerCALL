@@ -76,6 +76,8 @@ Each domain is ranked with a normalized confidence score built from:
 ## Installation
 
 ```bash
+git clone https://github.com/VRYella/PerCALL.git
+cd PerCALL
 pip install -r requirements.txt
 ```
 
