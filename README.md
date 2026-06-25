@@ -1,41 +1,59 @@
-# REGPLEX
+# REGPLEX v9
 
-**Perplexity Valley discovery from DNA sequence alone**
+**Multi-scale Perplexity Valley Framework for DNA Regulatory Region Discovery**
 
-REGPLEX is a training-free, species-independent, annotation-independent framework for discovering **Perplexity Valleys (PVs)**: sustained regions where sequence uncertainty is reduced relative to immediate genomic context.
+REGPLEX v9 is a training-free, species-independent framework for discovering
+**Perplexity Valleys (PVs)**: continuous genomic regions where sequence
+uncertainty is consistently lower than the surrounding DNA *across multiple
+observation scales*.
 
 ## Core pipeline
 
-DNA sequence  
-↓  
-10-mer dinucleotide perplexity (**P1**)  
-↓  
-Perplexity Landscape (sliding mean/median)  
-↓  
-Local Perplexity Contrast (**LPC**)  
-↓  
-Adaptive candidate optimization (50–300 bp default)  
-↓  
-Bounded Kadane valley recovery  
-↓  
-Valley quality metrics + score  
-↓  
+```
+DNA sequence
+↓
+10-mer dinucleotide perplexity (P1) — computed exactly once
+↓
+Multi-scale Landscapes (default: 25 / 50 / 100 / 200 / 400 bp)
+↓
+Per-scale Three-window LPC (upstream = downstream = scale, spacer = scale÷2)
+↓
+Robust z-score normalisation of each LPC profile
+↓
+Consensus LPC (nanmedian across normalised profiles)
+↓
+Bounded Kadane valley core detection + natural boundary expansion
+↓
+Valley merging
+↓
+Quality metrics + valley score
+↓
 Optional motif annotation (IUPAC/regex; valleys only)
+```
 
 ## Scientific definitions
 
-For each position, REGPLEX compares upstream/candidate/downstream windows with spacer regions:
+At each observation scale *s*, for every genomic position:
 
-- `LPC_up = UpstreamMean - CandidateMean`
-- `LPC_down = DownstreamMean - CandidateMean`
-- Reject if `LPC_up <= 0` or `LPC_down <= 0`
+- `upstream = s`, `spacer = s÷2`, `candidate = max(s, 50)`, `downstream = s`
+- `LPC_up  = UpstreamMean  − CandidateMean`
+- `LPC_down = DownstreamMean − CandidateMean`
+- Reject if `LPC_up ≤ 0` or `LPC_down ≤ 0`
 - `LPC = min(LPC_up, LPC_down)`
 
-Additional interpretation metrics:
+Each LPC profile is independently normalised by robust z-score:
 
-- `Symmetry = 1 - |UpstreamMean - DownstreamMean| / (UpstreamMean + DownstreamMean + ε)`
-- `Persistence = fraction of valley positions with P1 below local flank mean`
-- `ValleyScore = MeanLPC × Persistence × log(Length)`
+```
+z = (x − median) / (MAD × 1.4826)
+```
+
+The **Consensus LPC** is the position-wise nanmedian of all normalised profiles.
+
+Valley quality metrics:
+
+- `Persistence   = fraction of valley positions with ConsensusLPC > 0`
+- `ScaleSupport  = fraction of scales with mean raw LPC > 0 inside the valley`
+- `ValleyScore   = MeanLPC × Persistence × ScaleSupport × log(Length) × 1/(Variance+ε)`
 
 ## Installation
 
@@ -57,63 +75,56 @@ streamlit run app.py
 
 ```bash
 python regplex_core.py examples/ecoli.fasta --out regplex_valleys.csv
+python regplex_core.py examples/ecoli.fasta --base-scale 200 --landscape-method median
 ```
 
 ## Outputs
 
-Downloads include:
-
-- CSV
-- Excel (.xlsx)
-- BED
-- GFF
-- GFF3
-- FASTA
-- JSON
+Downloads include: CSV · Excel (.xlsx) · BED · GFF · GFF3 · FASTA · JSON
 
 ## Reported columns
 
-- ID
-- Sequence_ID
-- Start / End / Length
-- MeanP1 / MinimumP1 / MaximumP1
-- Variance / SD / CV
-- MeanLPC / MaximumLPC
-- AreaUnderValley
-- UpstreamMean / CandidateMean / DownstreamMean
-- LPC_up / LPC_down
-- Persistence
-- Symmetry
-- ValleyScore / ValleyScoreNormalized
-- GC%
-- MotifCount / Motifs
-- Sequence
+| Column | Description |
+|---|---|
+| ID | Valley identifier (PV_XXXXXX) |
+| Sequence_ID | Source sequence name |
+| Start / End / Length | Nucleotide coordinates (0-based) |
+| MeanP1 / MinimumP1 / MaximumP1 | P1 statistics inside the valley |
+| Variance / SD / CV | P1 variability |
+| MeanBackground | Mean P1 in flanking regions |
+| MeanLPC / MaximumLPC | Consensus LPC statistics |
+| AreaUnderValley | Sum of positive ConsensusLPC |
+| Persistence | Fraction of valley with ConsensusLPC > 0 |
+| ScaleSupport | Fraction of scales supporting the valley |
+| NScales | Total number of observation scales used |
+| ValleyScore / ValleyScoreNormalized | Raw and normalised valley scores |
+| GC% | GC content of the valley sequence |
+| MotifCount / Motifs | Motif annotation results |
+| Sequence | DNA sequence of the valley |
 
-## Visualizations (Plotly)
+## Visualizations (Plotly, SVG/PNG/PDF export)
 
-1. Perplexity Landscape
-2. Adaptive Valley Detection
-3. Three Window Illustration
-4. Local Perplexity Contrast Profile
-5. Kadane Optimization
+1. Perplexity Profile (P1)
+2. Multi-scale Perplexity Landscapes
+3. Scale Support Heatmap
+4. Consensus LPC
+5. Kadane Segments
 6. Valley Ranking
 7. Motif Architecture
-8. Complete Workflow
+8. Complete Workflow (Sankey)
 
-## REGPLEX v7 interface
+## REGPLEX v9 interface
 
-- Full-width, no-sidebar scientific layout with fixed top navigation
-- Five-page structure: Home, Analysis, Results, Motifs, About
-- Custom `styles.css` design system for cards, tabs, forms, tables, and animations
-- Publication-oriented Plotly styling with export support from results panels
+- Full-width, no-sidebar layout with fixed top navigation
+- Pages: Home · Analysis · Results · Motifs · About
+- New parameter controls: Base scale · Custom scales · Merge gap · Min/Max candidate
 
 ## Repository layout
 
-- `app.py`
-- `regplex_core.py`
-- `motif_engine.py`
-- `visualization.py`
-- `styles.css`
-- `README.md`
-- `REGPLEX_Local.ipynb`
-- `examples/`
+- `app.py` — Streamlit application
+- `regplex_core.py` — Multi-scale analysis engine
+- `motif_engine.py` — IUPAC/regex motif scanner
+- `visualization.py` — Plotly figure library
+- `styles.css` — UI design system
+- `REGPLEX_Local.ipynb` — Jupyter notebook interface
+- `examples/` — Example FASTA files
