@@ -232,7 +232,7 @@ def _robust_normalize(arr: np.ndarray) -> np.ndarray:
     idx = np.isfinite(arr)
     vals = arr[idx].astype(np.float64)
     if vals.size < 2:
-        # A single value equals the median by definition; its z-score is 0.
+        # Single value: variance is undefined; return z-score of 0 by convention.
         if vals.size == 1:
             out[idx] = 0.0
         return out
@@ -421,7 +421,7 @@ def valley_statistics(
     )
 
     return {
-        "ID": f"PV_{idx:06d}",
+        "ID": f"PV_{valley_index:06d}",
         "Signal_Start": int(start),
         "Signal_End": int(end),
         "Signal_Length": int(signal_length),
@@ -508,7 +508,7 @@ def find_domains(
             mid = (cs + ce) // 2
             cs = max(0, mid - min_domain // 2)
             ce = min(n - 1, cs + min_domain - 1)
-            cs = max(0, ce - min_domain + 1)  # re-clamp if ce hit the boundary
+            cs = max(0, ce - min_domain + 1)  # pull cs back to maintain minimum length
 
         exp_s, exp_e = _expand_valley(consensus_lpc, cs, ce)
         cores.append((exp_s, exp_e))
