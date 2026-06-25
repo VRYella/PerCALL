@@ -169,7 +169,7 @@ def plot_scale_support_heatmap(
 ) -> go.Figure:
     if not domains or not lpc_profiles:
         return _empty_figure("Scale Support Heatmap")
-    valley_ids = [d.get("ID", f"PV_{i:06d}") for i, d in enumerate(domains)]
+    valley_ids = [d.get("ID", f"PV_{i:06d}") for i, d in enumerate(domains, 1)]
     z: list[list[float]] = []
     for d in domains:
         s0, s1 = _valley_bounds(d)

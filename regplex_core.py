@@ -232,8 +232,7 @@ def _robust_normalize(arr: np.ndarray) -> np.ndarray:
     idx = np.isfinite(arr)
     vals = arr[idx].astype(np.float64)
     if vals.size < 2:
-        # Single value has no variance; assign 0 (at the median) so it does
-        # not artificially inflate or suppress the consensus.
+        # A single value equals the median by definition; its z-score is 0.
         if vals.size == 1:
             out[idx] = 0.0
         return out
@@ -365,7 +364,7 @@ def _scale_support(
 
 
 def valley_statistics(
-    idx: int,
+    valley_index: int,
     start: int,
     end: int,
     p1: np.ndarray,
@@ -503,11 +502,13 @@ def find_domains(
         if cs is None or not np.isfinite(score) or score >= 0:
             break
 
-        # Enforce minimum core length with bounds safety
+        # Enforce minimum core length with bounds safety.
+        # Clamp ce first, then pull cs back if still too short.
         if ce - cs + 1 < min_domain:
             mid = (cs + ce) // 2
             cs = max(0, mid - min_domain // 2)
             ce = min(n - 1, cs + min_domain - 1)
+            cs = max(0, ce - min_domain + 1)  # re-clamp if ce hit the boundary
 
         exp_s, exp_e = _expand_valley(consensus_lpc, cs, ce)
         cores.append((exp_s, exp_e))

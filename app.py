@@ -354,10 +354,16 @@ def _render_analysis() -> None:
                     if s.strip()
                 ]
                 invalid = [s for s in parsed_scales if s <= 0]
+                too_small = [s for s in parsed_scales if 0 < s < 10]
                 if invalid:
                     st.warning(
                         f"Custom scales must be positive integers. "
                         f"Invalid values: {invalid}"
+                    )
+                elif too_small:
+                    st.warning(
+                        f"Scale values below 10 bp are not scientifically "
+                        f"meaningful. Found: {too_small}"
                     )
                 else:
                     scales_list = parsed_scales
