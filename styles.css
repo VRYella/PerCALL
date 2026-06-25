@@ -221,11 +221,14 @@ div[data-testid="stRadio"] div[data-baseweb="radio"] {
   flex-shrink: 0;
 }
 
-.hero-right {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.hero-subtitle-line {
+  display: block;
 }
+
+.hero-nowrap {
+  white-space: nowrap;
+}
+
 
 .hero-image {
   width: 100%;
@@ -345,6 +348,10 @@ div[data-testid="stRadio"] div[data-baseweb="radio"] {
   color: var(--text);
   text-align: center;
   line-height: 1.2;
+}
+
+.workflow-step-label span {
+  display: block;
 }
 
 .workflow-arrow {

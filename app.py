@@ -233,13 +233,17 @@ def _render_home() -> None:
     hero_left = f"""
 <div class="hero-left">
   <div class="hero-brand">REGPLEX</div>
-  <div class="hero-subtitle">Regulatory Region Discovery through<br>Perplexity Valleys</div>
+  <div class="hero-subtitle">
+    <span class="hero-subtitle-line">Regulatory Region Discovery through</span>
+    <span class="hero-subtitle-line">Perplexity Valleys</span>
+  </div>
   <p class="hero-desc">
     REGPLEX identifies regulatory regions in genomic DNA by detecting localised
     collapses in sequence complexity — Perplexity Valleys — across multiple
     independent observation scales. The approach is entirely training-free:
     dinucleotide perplexity is computed once, then multi-scale consensus
-    integrates evidence from 25&nbsp;bp to 400&nbsp;bp windows into a single,
+    integrates evidence from <span class="hero-nowrap">25 bp</span> to
+    <span class="hero-nowrap">400 bp</span> windows into a single,
     interpretable signal without any reference data.
   </p>
   <div class="hero-chips">
@@ -277,7 +281,7 @@ def _render_home() -> None:
     # ── Action buttons (Streamlit widgets below hero columns) ──
     b1, b2, b3, b4 = st.columns([1.6, 1.2, 1.2, 1.2])
     with b1:
-        if st.button("▶ Run Analysis", key="home_start_analysis", use_container_width=True, type="primary"):
+        if st.button("Run Analysis", key="home_start_analysis", use_container_width=True, type="primary"):
             _jump_to_nav("Analysis")
     with b2:
         if st.button("Load Example", key="home_load_example", use_container_width=True):
@@ -290,18 +294,18 @@ def _render_home() -> None:
 
     # ── Quick workflow card ──
     steps = [
-        (_SVG_STEP_DNA, "DNA<br>Sequence"),
-        (_SVG_STEP_PERPLEXITY, "Dinucleotide<br>Perplexity"),
-        (_SVG_STEP_VALLEY, "Consensus<br>Valley"),
-        (_SVG_STEP_KADANE, "Kadane<br>Segments"),
-        (_SVG_STEP_DOMAINS, "Predicted<br>Domains"),
+        (_SVG_STEP_DNA, "DNA", "Sequence"),
+        (_SVG_STEP_PERPLEXITY, "Dinucleotide", "Perplexity"),
+        (_SVG_STEP_VALLEY, "Consensus", "Valley"),
+        (_SVG_STEP_KADANE, "Kadane", "Segments"),
+        (_SVG_STEP_DOMAINS, "Predicted", "Domains"),
     ]
     steps_html = ""
-    for i, (icon, label) in enumerate(steps):
+    for i, (icon, line1, line2) in enumerate(steps):
         steps_html += f"""
 <div class="workflow-step">
   <div class="workflow-step-icon">{icon}</div>
-  <div class="workflow-step-label">{label}</div>
+  <div class="workflow-step-label"><span>{line1}</span><span>{line2}</span></div>
 </div>"""
         if i < len(steps) - 1:
             steps_html += f'<div class="workflow-arrow">{_SVG_ARROW}</div>'
