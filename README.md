@@ -100,12 +100,20 @@ Downloads include:
 7. Motif Architecture
 8. Complete Workflow
 
+## REGPLEX v7 interface
+
+- Full-width, no-sidebar scientific layout with fixed top navigation
+- Five-page structure: Home, Analysis, Results, Motifs, About
+- Custom `styles.css` design system for cards, tabs, forms, tables, and animations
+- Publication-oriented Plotly styling with export support from results panels
+
 ## Repository layout
 
 - `app.py`
 - `regplex_core.py`
 - `motif_engine.py`
 - `visualization.py`
+- `styles.css`
 - `README.md`
 - `REGPLEX_Local.ipynb`
 - `examples/`

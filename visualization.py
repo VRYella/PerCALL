@@ -4,28 +4,28 @@ import numpy as np
 import plotly.graph_objects as go
 
 _BG = "#ffffff"
-_GRID = "rgba(100,116,139,0.18)"
-_TEXT = "#0f172a"
+_GRID = "rgba(148,163,184,0.22)"
+_TEXT = "#1f2937"
 _MUTED = "#475569"
-_BLUE = "#2563eb"
-_SKY = "#0ea5e9"
-_TEAL = "#14b8a6"
-_GREEN = "#16a34a"
-_ORANGE = "#f97316"
-_RED = "#ef4444"
+_BLUE = "#1E3A8A"
+_TEAL = "#0F766E"
+_GREEN = "#16A34A"
+_AMBER = "#F59E0B"
+_CRIMSON = "#DC2626"
+_BLUE_ALT = "#2563eb"
+_BLUE_DARK = "#1d4ed8"
 
 _BASE_LAYOUT = dict(
-    template="plotly_white",
     paper_bgcolor=_BG,
     plot_bgcolor=_BG,
-    font=dict(color=_TEXT, family="Arial, Helvetica, sans-serif", size=12),
-    title_font=dict(size=16, color=_TEXT),
-    margin=dict(l=60, r=30, t=60, b=50),
+    font=dict(color=_TEXT, family="Inter, Segoe UI, sans-serif", size=13),
+    title_font=dict(size=18, color=_TEXT),
+    margin=dict(l=62, r=30, t=66, b=52),
     legend=dict(bgcolor="rgba(255,255,255,0.9)", bordercolor=_GRID, borderwidth=1),
 )
 
 
-def _apply_base(fig: go.Figure, title: str, height: int = 320) -> go.Figure:
+def _apply_base(fig: go.Figure, title: str, height: int = 360) -> go.Figure:
     fig.update_layout(**_BASE_LAYOUT, title=title, height=height)
     fig.update_xaxes(showgrid=True, gridcolor=_GRID, zeroline=False, linecolor=_GRID, tickfont=dict(color=_MUTED))
     fig.update_yaxes(showgrid=True, gridcolor=_GRID, zeroline=False, linecolor=_GRID, tickfont=dict(color=_MUTED))
@@ -44,17 +44,17 @@ def _domain_signal_bounds(domain: dict) -> tuple[int, int]:
 
 def plot_p1_profile(p1: np.ndarray) -> go.Figure:
     if len(p1) == 0:
-        return _empty_figure("Figure 1 · Perplexity Landscape")
+        return _empty_figure("Perplexity Profile")
     x = np.arange(len(p1))
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=x, y=p1, mode="lines", name="P1", line=dict(color=_BLUE, width=1.7)))
+    fig.add_trace(go.Scatter(x=x, y=p1, mode="lines", name="P1", line=dict(color=_BLUE, width=1.9)))
     fig.update_layout(xaxis_title="Signal position", yaxis_title="P1")
-    return _apply_base(fig, "Figure 1 · Perplexity Landscape")
+    return _apply_base(fig, "Perplexity Profile")
 
 
 def plot_p2_landscape(landscape: np.ndarray) -> go.Figure:
     if len(landscape) == 0:
-        return _empty_figure("Figure 2 · Adaptive Valley Detection")
+        return _empty_figure("Perplexity Landscape")
     x = np.arange(len(landscape))
     fig = go.Figure()
     fig.add_trace(go.Scatter(
@@ -62,12 +62,12 @@ def plot_p2_landscape(landscape: np.ndarray) -> go.Figure:
         y=landscape,
         mode="lines",
         name="Landscape",
-        line=dict(color=_SKY, width=2),
+        line=dict(color=_TEAL, width=2.2),
         fill="tozeroy",
-        fillcolor="rgba(14,165,233,0.10)",
+        fillcolor="rgba(15,118,110,0.10)",
     ))
     fig.update_layout(xaxis_title="Signal position", yaxis_title="Landscape perplexity")
-    return _apply_base(fig, "Figure 2 · Adaptive Valley Detection")
+    return _apply_base(fig, "Perplexity Landscape")
 
 
 def plot_three_window_illustration(
@@ -78,7 +78,7 @@ def plot_three_window_illustration(
     candidate_windows: np.ndarray,
 ) -> go.Figure:
     if len(landscape) == 0:
-        return _empty_figure("Figure 3 · Three Window Illustration")
+        return _empty_figure("Three-Window Contrast")
     if domains:
         anchor = int((domains[0]["Signal_Start"] + domains[0]["Signal_End"]) // 2)
     elif np.isfinite(lpc).any():
@@ -103,14 +103,14 @@ def plot_three_window_illustration(
     x = np.arange(left, right + 1)
 
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=x, y=landscape[left:right + 1], mode="lines", name="Landscape", line=dict(color=_BLUE, width=2)))
+    fig.add_trace(go.Scatter(x=x, y=landscape[left:right + 1], mode="lines", name="Landscape", line=dict(color=_BLUE, width=2.2)))
 
     regions = [
-        (upstream_start, upstream_end, "Upstream", "rgba(37,99,235,0.12)"),
-        (candidate_start - spacer, candidate_start - 1, "Spacer", "rgba(148,163,184,0.10)"),
-        (candidate_start, candidate_end, "Candidate", "rgba(20,184,166,0.16)"),
-        (candidate_end + 1, candidate_end + spacer, "Spacer", "rgba(148,163,184,0.10)"),
-        (downstream_start, downstream_end, "Downstream", "rgba(249,115,22,0.12)"),
+        (upstream_start, upstream_end, "Upstream", "rgba(30,58,138,0.10)"),
+        (candidate_start - spacer, candidate_start - 1, "Spacer", "rgba(148,163,184,0.12)"),
+        (candidate_start, candidate_end, "Candidate", "rgba(15,118,110,0.16)"),
+        (candidate_end + 1, candidate_end + spacer, "Spacer", "rgba(148,163,184,0.12)"),
+        (downstream_start, downstream_end, "Downstream", "rgba(245,158,11,0.14)"),
     ]
     for start, end, label, fill in regions:
         if end < left or start > right:
@@ -121,30 +121,30 @@ def plot_three_window_illustration(
         fig.add_annotation(x=(s + e) / 2, y=1.04, yref="paper", text=label, showarrow=False, font=dict(color=_MUTED, size=11))
 
     fig.update_layout(xaxis_title="Signal position", yaxis_title="Landscape perplexity")
-    return _apply_base(fig, "Figure 3 · Three Window Illustration")
+    return _apply_base(fig, "Three-Window Contrast")
 
 
 def plot_pvs_profile(lpc: np.ndarray, domains: list[dict]) -> go.Figure:
     if len(lpc) == 0:
-        return _empty_figure("Figure 4 · Local Perplexity Contrast Profile")
+        return _empty_figure("Local Contrast")
     x = np.arange(len(lpc))
     pos = np.where(lpc > 0, lpc, 0)
     fig = go.Figure()
     fig.add_hline(y=0, line=dict(color=_GRID, dash="dot"))
-    fig.add_trace(go.Scatter(x=x, y=pos, mode="lines", name="LPC", line=dict(color=_GREEN, width=1.8), fill="tozeroy", fillcolor="rgba(22,163,74,0.14)"))
+    fig.add_trace(go.Scatter(x=x, y=pos, mode="lines", name="LPC", line=dict(color=_GREEN, width=1.9), fill="tozeroy", fillcolor="rgba(22,163,74,0.14)"))
     for domain in domains:
         start, end = _domain_signal_bounds(domain)
-        fig.add_vrect(x0=start, x1=end, fillcolor="rgba(37,99,235,0.12)", line_color=_BLUE, opacity=0.25)
+        fig.add_vrect(x0=start, x1=end, fillcolor="rgba(30,58,138,0.16)", line_color=_BLUE, opacity=0.30)
     fig.update_layout(xaxis_title="Signal position", yaxis_title="LPC")
-    return _apply_base(fig, "Figure 4 · Local Perplexity Contrast Profile")
+    return _apply_base(fig, "Local Contrast")
 
 
 def plot_kadane_domains(lpc: np.ndarray, domains: list[dict]) -> go.Figure:
     if len(lpc) == 0:
-        return _empty_figure("Figure 5 · Kadane Optimization")
+        return _empty_figure("Kadane Segments")
     x = np.arange(len(lpc))
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=x, y=lpc, mode="lines", name="LPC", line=dict(color="rgba(15,23,42,0.35)", width=1.1)))
+    fig.add_trace(go.Scatter(x=x, y=lpc, mode="lines", name="LPC", line=dict(color="rgba(31,41,55,0.35)", width=1.15)))
     for domain in domains:
         start, end = _domain_signal_bounds(domain)
         fig.add_trace(go.Scatter(
@@ -152,31 +152,31 @@ def plot_kadane_domains(lpc: np.ndarray, domains: list[dict]) -> go.Figure:
             y=lpc[start:end + 1],
             mode="lines",
             name=domain.get("ID", "Valley"),
-            line=dict(color=_BLUE, width=2.6),
+            line=dict(color=_BLUE, width=2.5),
             showlegend=False,
         ))
     fig.update_layout(xaxis_title="Signal position", yaxis_title="LPC")
-    return _apply_base(fig, "Figure 5 · Kadane Optimization")
+    return _apply_base(fig, "Kadane Segments")
 
 
 def plot_domain_ranking(domains: list[dict]) -> go.Figure:
     if not domains:
-        return _empty_figure("Figure 6 · Valley Ranking")
+        return _empty_figure("Valley Ranking")
     ranked = sorted(domains, key=lambda d: d.get("ValleyScore", 0.0), reverse=True)
     fig = go.Figure(go.Bar(
         x=[d.get("ID", "PV") for d in ranked],
         y=[d.get("ValleyScore", 0.0) for d in ranked],
-        marker=dict(color=[d.get("MeanLPC", 0.0) for d in ranked], colorscale=[[0.0, "#bfdbfe"], [0.5, _SKY], [1.0, _BLUE]], colorbar=dict(title="Mean LPC")),
+        marker=dict(color=[d.get("MeanLPC", 0.0) for d in ranked], colorscale=[[0.0, "#cbd5e1"], [0.5, _TEAL], [1.0, _BLUE]], colorbar=dict(title="Mean LPC")),
         customdata=np.array([[d.get("Length", 0), d.get("Persistence", 0.0)] for d in ranked], dtype=object),
         hovertemplate="%{x}<br>ValleyScore %{y:.4f}<br>Length %{customdata[0]} bp<br>Persistence %{customdata[1]:.4f}<extra></extra>",
     ))
     fig.update_layout(xaxis_title="Valley ID", yaxis_title="Valley Score")
-    return _apply_base(fig, "Figure 6 · Valley Ranking", height=360)
+    return _apply_base(fig, "Valley Ranking", height=390)
 
 
 def plot_motif_architecture(domains: list[dict]) -> go.Figure:
     if not domains:
-        return _empty_figure("Figure 7 · Motif Architecture")
+        return _empty_figure("Motif Mapping")
     ranked = sorted(domains, key=lambda d: d.get("MotifCount", 0), reverse=True)
     fig = go.Figure(go.Bar(
         x=[d.get("ID", "PV") for d in ranked],
@@ -186,7 +186,7 @@ def plot_motif_architecture(domains: list[dict]) -> go.Figure:
         hovertemplate="%{x}<br>MotifCount %{y}<br>%{customdata}<extra></extra>",
     ))
     fig.update_layout(xaxis_title="Valley ID", yaxis_title="Motif count")
-    return _apply_base(fig, "Figure 7 · Motif Architecture", height=340)
+    return _apply_base(fig, "Motif Mapping", height=360)
 
 
 def plot_algorithm_workflow() -> go.Figure:
@@ -195,15 +195,14 @@ def plot_algorithm_workflow() -> go.Figure:
         "P1 (10-mer dinucleotide perplexity)",
         "Perplexity landscape",
         "Local Perplexity Contrast",
-        "Adaptive candidate optimization",
+        "Adaptive Window Selection",
         "Bounded Kadane",
         "Perplexity valleys",
-        "Quality metrics + valley score",
-        "Optional motif annotation",
+        "Motif Annotation",
     ]
     fig = go.Figure(go.Sankey(
         arrangement="snap",
-        node=dict(label=labels, pad=20, thickness=18, line=dict(color=_GRID, width=1), color=[_BLUE, _SKY, _TEAL, "#60a5fa", _GREEN, _ORANGE, _BLUE, _TEAL, _SKY]),
-        link=dict(source=list(range(len(labels) - 1)), target=list(range(1, len(labels))), value=[4] * (len(labels) - 1), color=["rgba(37,99,235,0.18)"] * (len(labels) - 1)),
+        node=dict(label=labels, pad=20, thickness=17, line=dict(color=_GRID, width=1), color=[_BLUE, _TEAL, _BLUE_ALT, _GREEN, _AMBER, _BLUE_DARK, _BLUE, _TEAL]),
+        link=dict(source=list(range(len(labels) - 1)), target=list(range(1, len(labels))), value=[4] * (len(labels) - 1), color=["rgba(30,58,138,0.20)"] * (len(labels) - 1)),
     ))
-    return _apply_base(fig, "Figure 8 · Complete Workflow", height=360)
+    return _apply_base(fig, "REGPLEX Workflow", height=410)
