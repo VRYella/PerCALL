@@ -28,12 +28,13 @@ The method is training-free and uses no learned model weights.
 
 ## Illustrated Workflow
 
-```svg
 <svg width="980" height="160" viewBox="0 0 980 160" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="REGPLEX workflow">
+  <title>REGPLEX workflow diagram</title>
+  <desc>Workflow: DNA to mono, di and tri perplexity; multi-scale analysis; layer consensus; ensemble ConsensusLPC; Kadane-driven valleys.</desc>
   <defs>
     <style>
       .n{fill:#fff;stroke:#1E3A8A;stroke-width:1.5;rx:10}
-      .t{font:600 12px Inter,Arial;fill:#0f172a}
+      .t{font:600 12px Arial,sans-serif;fill:#0f172a}
       .a{stroke:#0F766E;stroke-width:2;marker-end:url(#m)}
     </style>
     <marker id="m" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#0F766E"/></marker>
@@ -52,7 +53,6 @@ The method is training-free and uses no learned model weights.
   <line class="a" x1="630" y1="74" x2="660" y2="74"/>
   <line class="a" x1="790" y1="74" x2="820" y2="74"/>
 </svg>
-```
 
 ## Installation
 

@@ -4,6 +4,7 @@ import argparse
 import io
 import math
 import warnings
+from collections import deque
 from dataclasses import dataclass
 from typing import Iterable
 
@@ -125,6 +126,11 @@ def _window_medians(arr: np.ndarray, window: int) -> np.ndarray:
 
 
 def _compute_entropy_perplexity(indices: np.ndarray, n_states: int) -> np.ndarray:
+    """Return window-wise perplexity from discrete state indices.
+
+    indices: (n_windows, n_events_per_window) encoded symbols per window.
+    n_states: size of the symbol alphabet (4 mono, 16 di, 64 tri).
+    """
     if len(indices) == 0:
         return np.array([], dtype=np.float32)
     counts = np.zeros((len(indices), n_states), dtype=np.int16)
@@ -274,6 +280,7 @@ def _percentile_scale(arr: np.ndarray) -> np.ndarray:
 
 
 def _normalize(arr: np.ndarray, method: str) -> np.ndarray:
+    """Normalize one LPC profile with percentile or robust z-score scaling."""
     return _percentile_scale(arr) if method == "percentile" else _robust_normalize(arr)
 
 
@@ -319,20 +326,19 @@ def bounded_min_mean(arr: np.ndarray, min_len: int, max_len: int) -> tuple[int |
     pref[1:] = np.cumsum(arr)
     best_mean = np.inf
     best_i = best_j = None
-    dq: list[int] = []
-    head = 0
+    dq: deque[int] = deque()
     for j in range(n):
         i_min = j - max_len + 1
         i_max = j - min_len + 1
         if i_max < 0:
             continue
-        while len(dq) > head and pref[dq[-1]] >= pref[i_max]:
+        while dq and pref[dq[-1]] >= pref[i_max]:
             dq.pop()
         dq.append(i_max)
-        while len(dq) > head and dq[head] < i_min:
-            head += 1
-        if len(dq) > head:
-            i = dq[head]
+        while dq and dq[0] < i_min:
+            dq.popleft()
+        if dq:
+            i = dq[0]
             mean = (pref[j + 1] - pref[i]) / (j - i + 1)
             if mean < best_mean:
                 best_mean = mean
@@ -454,6 +460,12 @@ def valley_statistics(
     layer_support_fraction = layer_hits / len(LAYERS)
 
     length_signal = end - start + 1
+    # ValleyScore terms:
+    # - contrast: mean ConsensusLPC inside the valley (depth of local complexity collapse)
+    # - persistence: fraction of valley positions with ConsensusLPC > 0
+    # - area: integrated positive ConsensusLPC mass across the valley
+    # - scale_support_fraction / layer_support_fraction: cross-scale and cross-layer agreement
+    # +1 on area keeps very small-but-supported valleys from collapsing to zero score.
     valley_score_raw = contrast * persistence * (area + 1.0) * scale_support_fraction * (layer_support_fraction + EPSILON)
 
     start_nt, end_nt = _nucleotide_bounds(start, end, len(seq), p_window)

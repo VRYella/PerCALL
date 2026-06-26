@@ -136,7 +136,11 @@ def plot_consensus_lpc(consensus_lpc: np.ndarray, domains: list[dict]) -> go.Fig
     return _apply_base(fig, "Final Ensemble ConsensusLPC")
 
 
-def plot_kadane_domains(consensus_lpc: np.ndarray, domains: list[dict], kadane_core: tuple[int | None, int | None]) -> go.Figure:
+def plot_kadane_domains(
+    consensus_lpc: np.ndarray,
+    domains: list[dict],
+    kadane_core: tuple[int | None, int | None] = (None, None),
+) -> go.Figure:
     if len(consensus_lpc) == 0:
         return _empty_figure("Kadane Core and Expanded Valleys")
     x = np.arange(len(consensus_lpc))
@@ -168,8 +172,8 @@ def plot_scale_support_heatmap(lpc_profiles: dict[str, dict[int, np.ndarray]], d
                     row.append(float("nan"))
                     continue
                 seg = arr[s0: s1 + 1]
-                finite = seg[np.isfinite(seg)]
-                row.append(float(np.mean(finite)) if finite.size else float("nan"))
+                finite_vals = seg[np.isfinite(seg)]
+                row.append(float(np.mean(finite_vals)) if finite_vals.size else float("nan"))
         z.append(row)
 
     fig = go.Figure(

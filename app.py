@@ -444,7 +444,6 @@ def _render_about() -> None:
 def main() -> None:
     _load_styles()
     _render_topbar()
-    st.toggle("Theme toggle", key="theme_toggle", help="Reserved for upcoming dark-theme support")
     active_tab = _render_nav()
 
     results: list[AnalysisResult] = st.session_state.get("results", [])
