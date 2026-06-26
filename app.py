@@ -18,14 +18,20 @@ from motif_engine import annotate_domains, compile_motifs, iupac_to_regex
 from regplex_core import (
     DEFAULT_SCALES,
     ENSEMBLE_METHOD,
+    FLANK_WINDOW,
     LANDSCAPE_METHOD,
     MAX_CANDIDATE,
     MAX_DOMAIN,
     MERGE_GAP,
     MIN_CANDIDATE,
     MIN_DOMAIN,
+    NMS_OVERLAP_THRESHOLD,
     NORMALIZATION_METHOD,
     PERPLEXITY_WINDOW,
+    PERSISTENCE_THRESHOLD,
+    SG_POLY_ORDER,
+    SG_WINDOW_LENGTH,
+    TOP_N_DISPLAY,
     AnalysisResult,
     analyze_sequence,
     domains_dataframe,
@@ -45,6 +51,7 @@ from visualization import (
     plot_multiscale_landscapes,
     plot_perplexity_layers,
     plot_scale_support_heatmap,
+    plot_smoothed_perplexity,
 )
 
 st.set_page_config(page_title="REGPLEX", layout="wide", initial_sidebar_state="collapsed")
@@ -54,7 +61,7 @@ _README_URL = "https://github.com/VRYella/PerCALL#readme"
 
 PLOT_CONFIG = {
     "displaylogo": False,
-    "toImageButtonOptions": {"format": "svg", "filename": "regplex_v10_figure", "scale": 2},
+    "toImageButtonOptions": {"format": "svg", "filename": "regplex_v11_figure", "scale": 2},
     "modeBarButtonsToAdd": ["resetScale2d"],
 }
 
@@ -112,7 +119,7 @@ def _render_topbar() -> None:
         f"""
         <div class="regplex-topbar">
           <div class="regplex-topbar-inner">
-            <div class="brand">{_svg_logo()}<div><h1>REGPLEX</h1><span>v10 · Hierarchical Perplexity Ensemble</span></div></div>
+            <div class="brand">{_svg_logo()}<div><h1>REGPLEX</h1><span>v11 · Signal-Processing Valley Detection</span></div></div>
             <div class="top-links">
               <a href="https://github.com/VRYella/PerCALL" target="_blank" rel="noopener noreferrer">GitHub</a>
               <a href="{_README_URL}" target="_blank" rel="noopener noreferrer">Documentation</a>
@@ -180,18 +187,20 @@ def _render_home() -> None:
     <div class="hero-brand">REGPLEX</div>
     <div class="hero-subtitle">
       <span class="hero-subtitle-line">Publication-grade Perplexity Valley Discovery</span>
-      <span class="hero-subtitle-line">with a Three-layer Information Ensemble</span>
+      <span class="hero-subtitle-line">with Signal-Processing Candidate Refinement</span>
     </div>
     <p class="hero-desc">
-      REGPLEX v10 computes mononucleotide, dinucleotide and trinucleotide perplexity once,
-      builds multi-scale local contrast profiles, and integrates evidence into an explainable
-      ConsensusLPC signal for robust regulatory valley detection.
+      REGPLEX v11 computes mononucleotide, dinucleotide and trinucleotide perplexity once,
+      applies Savitzky–Golay smoothing to preserve valley shape, builds multi-scale local contrast
+      profiles, generates candidate valleys, refines each with Kadane's algorithm, then filters by
+      persistence ≥ 80 %, adaptive prominence, and non-maximum suppression to produce a concise
+      list of high-confidence regulatory valleys.
     </p>
     <div class="hero-chips">
-      <span class="hero-chip">Mono/Di/Tri observers</span>
+      <span class="hero-chip">Savitzky–Golay smoothing</span>
       <span class="hero-chip">Multi-scale consensus</span>
-      <span class="hero-chip">Transparent support metrics</span>
-      <span class="hero-chip">Kadane-guided valley boundaries</span>
+      <span class="hero-chip">Persistence ≥ 80 %</span>
+      <span class="hero-chip">Non-maximum suppression</span>
     </div>
   </div>
   <div class="hero-right">{image_html}</div>
@@ -214,7 +223,7 @@ def _render_home() -> None:
 
 
 def _render_analysis() -> None:
-    _render_html_block("<div class='card'><h3>REGPLEX v10 Analysis</h3><p>Upload FASTA and configure the hierarchical ensemble.</p></div>")
+    _render_html_block("<div class='card'><h3>REGPLEX v11 Analysis</h3><p>Upload FASTA and configure the signal-processing detection pipeline.</p></div>")
 
     default_text = st.session_state.get("input_fasta_text", "")
     upload = st.file_uploader("Upload FASTA", type=["fasta", "fa", "fna", "txt"], key="analysis_file")
@@ -240,21 +249,38 @@ def _render_analysis() -> None:
         with m3:
             _metric_card("Total length", f"{total_len:,} bp")
 
+    st.markdown("#### Perplexity & Smoothing")
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         perplexity_window = st.number_input("Perplexity window", 4, 50, PERPLEXITY_WINDOW)
-        landscape_method = st.selectbox("Landscape method", ["mean", "median"], index=0 if LANDSCAPE_METHOD == "mean" else 1)
+        sg_window_length = st.number_input("SG window length (odd)", 5, 101, SG_WINDOW_LENGTH, step=2)
     with c2:
+        sg_poly_order = st.number_input("SG polynomial order", 1, 9, SG_POLY_ORDER)
+        landscape_method = st.selectbox("Landscape method", ["mean", "median"], index=0 if LANDSCAPE_METHOD == "mean" else 1)
+    with c3:
         scales_text = st.text_input("Scales (comma-separated)", value=",".join(str(s) for s in DEFAULT_SCALES))
         normalization_method = st.selectbox("Layer normalization", ["robust_z", "percentile"], index=0 if NORMALIZATION_METHOD == "robust_z" else 1)
-    with c3:
-        ensemble_method = st.selectbox("Final ensemble", ["median", "trimmed_mean"], index=0 if ENSEMBLE_METHOD == "median" else 1)
-        min_candidate = st.number_input("Min candidate (bp)", 10, 500, MIN_CANDIDATE)
-        max_candidate = st.number_input("Max candidate (bp)", int(min_candidate), 10000, max(int(min_candidate), MAX_CANDIDATE))
     with c4:
+        ensemble_method = st.selectbox("Final ensemble", ["median", "trimmed_mean"], index=0 if ENSEMBLE_METHOD == "median" else 1)
+
+    st.markdown("#### Detection & Filtering")
+    d1, d2, d3, d4 = st.columns(4)
+    with d1:
+        min_candidate = st.number_input("Kadane min length (bp)", 10, 500, MIN_CANDIDATE)
+        max_candidate = st.number_input("Kadane max length (bp)", int(min_candidate), 10000, max(int(min_candidate), MAX_CANDIDATE))
+    with d2:
         min_domain = st.number_input("Min valley length (bp)", 20, 10000, MIN_DOMAIN)
         max_domain = st.number_input("Max valley length (bp)", int(min_domain), 50000, max(int(min_domain), MAX_DOMAIN))
-        merge_gap = st.number_input("Merge gap (bp)", 0, 500, MERGE_GAP)
+    with d3:
+        persistence_threshold = st.slider("Persistence threshold", 0.0, 1.0, PERSISTENCE_THRESHOLD, 0.05,
+                                           help="Hard filter: fraction of valley positions with ConsensusLPC > 0")
+        nms_overlap = st.slider("NMS overlap threshold", 0.1, 1.0, NMS_OVERLAP_THRESHOLD, 0.05,
+                                 help="Suppress overlapping valleys above this overlap fraction")
+    with d4:
+        merge_gap = st.number_input("Merge gap (bp)", 0, 500, MERGE_GAP,
+                                     help="Merge valleys within this genomic gap after NMS")
+        top_n = st.number_input("Top N valleys to display", 1, 500, TOP_N_DISPLAY,
+                                 help="Default display limit; use Show All to see every valley")
 
     motif_text = st.text_area("Motifs (Regex/IUPAC, one per line)", height=160, key="analysis_motifs")
     motif_rows = _validate_motifs(motif_text)
@@ -267,7 +293,7 @@ def _render_analysis() -> None:
 
     run_col, reset_col, example_col = st.columns([2, 1, 1])
     with run_col:
-        run_clicked = st.button("Run REGPLEX v10", type="primary", width="stretch")
+        run_clicked = st.button("Run REGPLEX v11", type="primary", width="stretch")
     with reset_col:
         if st.button("Reset", width="stretch"):
             for key in ["results", "domains_df", "runtime", "input_fasta_text", "motif_text"]:
@@ -301,17 +327,27 @@ def _render_analysis() -> None:
             "min_domain": int(min_domain),
             "max_domain": int(max_domain),
             "merge_gap": int(merge_gap),
+            "sg_window_length": int(sg_window_length),
+            "sg_poly_order": int(sg_poly_order),
+            "persistence_threshold": float(persistence_threshold),
+            "nms_overlap": float(nms_overlap),
         }
 
-        with st.status("Running hierarchical ensemble analysis...", expanded=True) as status:
+        with st.status("Running v11 signal-processing valley detection...", expanded=True) as status:
             for step in [
                 "Step 1 · Mono/Di/Tri perplexity (single pass)",
-                "Step 2 · Multi-scale landscapes",
-                "Step 3 · Three-window local contrast",
-                "Step 4 · Layer consensus",
-                "Step 5 · Ensemble ConsensusLPC",
-                "Step 6 · Kadane core + expansion + merge",
-                "Step 7 · Explainability report + motifs",
+                "Step 2 · Savitzky–Golay smoothing",
+                "Step 3 · Multi-scale landscapes",
+                "Step 4 · Three-window local contrast (LPC)",
+                "Step 5 · Layer consensus",
+                "Step 6 · Ensemble ConsensusLPC",
+                "Step 7 · Candidate valley generation",
+                "Step 8 · Kadane refinement per candidate",
+                "Step 9 · Persistence filter (≥ 80 %)",
+                "Step 10 · Adaptive prominence filter",
+                "Step 11 · Non-maximum suppression",
+                "Step 12 · Valley merging + ranking",
+                "Step 13 · Motif annotation",
             ]:
                 st.write(step)
             try:
@@ -323,6 +359,7 @@ def _render_analysis() -> None:
             st.session_state["domains_df"] = domains_dataframe(results)
             st.session_state["runtime"] = runtime_seconds
             st.session_state["motif_text"] = motif_text
+            st.session_state["top_n"] = int(top_n)
             status.update(label="Analysis complete", state="complete")
 
 
@@ -352,12 +389,13 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
     st.caption(f"Representative support: {support}")
 
     tabs = st.tabs([
+        "Raw & Smoothed",
         "Layer Perplexity",
         "Layer Landscapes",
         "Layer Consensus",
         "ConsensusLPC",
         "Support",
-        "Kadane",
+        "Kadane & Candidates",
         "Ranking",
         "Motifs",
         "Downloads",
@@ -365,8 +403,15 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
 
     scales = result.params.get("resolved_scales", [])
     with tabs[0]:
-        _show_figure(plot_perplexity_layers(result.mono, result.di, result.tri), f"layers-{selected_seq}")
+        _show_figure(
+            plot_smoothed_perplexity(result.mono, result.di, result.tri,
+                                     result.smoothed_mono, result.smoothed_di, result.smoothed_tri,
+                                     result.domains),
+            f"smooth-{selected_seq}",
+        )
     with tabs[1]:
+        _show_figure(plot_perplexity_layers(result.mono, result.di, result.tri), f"layers-{selected_seq}")
+    with tabs[2]:
         layer_tabs = st.tabs(["Mono", "Di", "Tri"])
         with layer_tabs[0]:
             _show_figure(plot_multiscale_landscapes(result.landscapes["mono"], result.domains, "Mono"), f"land-mono-{selected_seq}")
@@ -374,47 +419,53 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
             _show_figure(plot_multiscale_landscapes(result.landscapes["di"], result.domains, "Di"), f"land-di-{selected_seq}")
         with layer_tabs[2]:
             _show_figure(plot_multiscale_landscapes(result.landscapes["tri"], result.domains, "Tri"), f"land-tri-{selected_seq}")
-    with tabs[2]:
-        _show_figure(plot_layer_consensus(result.layer_consensus, result.domains), f"layer-cons-{selected_seq}")
     with tabs[3]:
-        _show_figure(plot_consensus_lpc(result.consensus_lpc, result.domains), f"cons-{selected_seq}")
+        _show_figure(plot_layer_consensus(result.layer_consensus, result.domains), f"layer-cons-{selected_seq}")
     with tabs[4]:
-        _show_figure(plot_scale_support_heatmap(result.lpc_profiles, result.domains, scales), f"support-{selected_seq}")
+        _show_figure(plot_consensus_lpc(result.consensus_lpc, result.domains), f"cons-{selected_seq}")
     with tabs[5]:
-        _show_figure(plot_kadane_domains(result.consensus_lpc, result.domains, result.kadane_core), f"kadane-{selected_seq}")
+        _show_figure(plot_scale_support_heatmap(result.lpc_profiles, result.domains, scales), f"support-{selected_seq}")
     with tabs[6]:
-        _show_figure(plot_domain_ranking(result.domains), f"rank-{selected_seq}")
-        display_cols = [
-            "ID",
-            "Start",
-            "End",
-            "Length",
-            "Contrast",
-            "Persistence",
-            "Area",
-            "MonoSupport",
-            "DiSupport",
-            "TriSupport",
-            "OverallSupport",
-            "ValleyScore",
-            "MotifCount",
-            "Motifs",
-        ]
-        st.dataframe(selected_df[display_cols], width="stretch", hide_index=True)
+        _show_figure(plot_kadane_domains(result.consensus_lpc, result.domains, result.kadane_core,
+                                          result.candidates), f"kadane-{selected_seq}")
     with tabs[7]:
-        _show_figure(plot_motif_architecture(selected_df.to_dict("records")), f"motifs-{selected_seq}")
+        _show_figure(plot_domain_ranking(result.domains), f"rank-{selected_seq}")
+
+        # v11 display columns per spec (Step 13)
+        display_cols = [
+            col for col in [
+                "Rank", "Start", "End", "Length",
+                "MeanPerplexity", "MinPerplexity", "MaxPerplexity",
+                "MeanLPC", "MaxLPC", "Prominence", "Area", "Persistence",
+                "ScaleSupport", "MonoSupport", "DiSupport", "TriSupport",
+                "Variance", "GC%", "ValleyScore", "Motifs", "Sequence",
+            ]
+            if col in selected_df.columns
+        ]
+
+        # Top-N display (Step 12)
+        top_n = int(st.session_state.get("top_n", TOP_N_DISPLAY))
+        show_all = st.toggle(f"Show all {len(selected_df)} valleys", value=False, key="show_all_valleys")
+        display_df = selected_df if show_all else selected_df.nsmallest(top_n, "Rank")
+        st.caption(
+            f"Displaying {'all' if show_all else f'top {min(top_n, len(selected_df))}'} of {len(selected_df)} valleys, "
+            f"ranked by ValleyScore."
+        )
+        st.dataframe(display_df[display_cols], width="stretch", hide_index=True)
     with tabs[8]:
+        _show_figure(plot_motif_architecture(selected_df.to_dict("records")), f"motifs-{selected_seq}")
+    with tabs[9]:
         c1, c2, c3 = st.columns(3)
         with c1:
-            st.download_button("CSV", export_table(selected_df, "csv"), "regplex_v10_valleys.csv", "text/csv", width="stretch")
-            st.download_button("Excel", export_table(selected_df, "xlsx"), "regplex_v10_valleys.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", width="stretch")
-            st.download_button("BED", export_bed(selected_df), "regplex_v10_valleys.bed", "text/plain", width="stretch")
+            st.download_button("CSV", export_table(selected_df, "csv"), "regplex_v11_valleys.csv", "text/csv", width="stretch")
+            st.download_button("Excel", export_table(selected_df, "xlsx"), "regplex_v11_valleys.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", width="stretch")
+            st.download_button("BED", export_bed(selected_df), "regplex_v11_valleys.bed", "text/plain", width="stretch")
         with c2:
-            st.download_button("GFF", export_gff(selected_df, gff3=False), "regplex_v10_valleys.gff", "text/plain", width="stretch")
-            st.download_button("GFF3", export_gff(selected_df, gff3=True), "regplex_v10_valleys.gff3", "text/plain", width="stretch")
-            st.download_button("FASTA", export_fasta(selected_df), "regplex_v10_valleys.fasta", "text/plain", width="stretch")
+            st.download_button("GFF", export_gff(selected_df, gff3=False), "regplex_v11_valleys.gff", "text/plain", width="stretch")
+            st.download_button("GFF3", export_gff(selected_df, gff3=True), "regplex_v11_valleys.gff3", "text/plain", width="stretch")
+            st.download_button("FASTA", export_fasta(selected_df), "regplex_v11_valleys.fasta", "text/plain", width="stretch")
         with c3:
-            st.download_button("JSON", export_table(selected_df, "json"), "regplex_v10_valleys.json", "application/json", width="stretch")
+            st.download_button("JSON", export_table(selected_df, "json"), "regplex_v11_valleys.json", "application/json", width="stretch")
 
 
 def _render_motifs(df: pd.DataFrame) -> None:
@@ -436,14 +487,14 @@ def _render_about() -> None:
     _render_html_block(
         """
         <div class="card">
-          <h3>REGPLEX v10 Scientific Hypothesis</h3>
-          <p>Regulatory regions are low-complexity genomic intervals that remain contrastive across independent information layers (mono/di/tri) and across multiple observation scales.</p>
+          <h3>REGPLEX v11 Scientific Hypothesis</h3>
+          <p>Regulatory regions are low-complexity genomic intervals that remain contrastive across independent information layers (mono/di/tri) and across multiple observation scales. A biologically meaningful valley must persist across the majority of evaluated positions (persistence ≥ 80 %) and be distinctly prominent relative to its genomic context.</p>
           <h3>Algorithm Overview</h3>
-          <p>Each layer computes perplexity once, derives scale-specific three-window local contrast profiles, and forms a robust layer consensus. The final ConsensusLPC is the median/trimmed-mean ensemble across layer consensuses, followed by bounded Kadane core detection, boundary expansion, and valley merging.</p>
+          <p>Each layer computes perplexity once, then a Savitzky–Golay filter (window 21, order 3) preserves valley shape while removing local noise. Multi-scale landscapes are built from the smoothed profiles; three-window LPC profiles are derived per scale and normalized, then median-combined to a layer consensus. The final ConsensusLPC is the median/trimmed-mean across layers. Candidate valleys are all contiguous positive runs; each is refined by a bounded Kadane search. Candidates are then filtered by persistence (≥ 0.80, hard), adaptive prominence (lower quartile), and non-maximum suppression (50 % overlap). Nearby survivors are merged (gap &lt; 25 bp) and ranked by the composite ValleyScore.</p>
         </div>
         """
     )
-    _show_figure(plot_algorithm_workflow(), "workflow-v10")
+    _show_figure(plot_algorithm_workflow(), "workflow-v11")
 
 
 def main() -> None:
@@ -466,7 +517,7 @@ def main() -> None:
         _render_about()
 
     st.markdown("---")
-    st.markdown("REGPLEX v10 · Hierarchical Ensemble Platform · MIT License")
+    st.markdown("REGPLEX v11 · Signal-Processing Valley Detection · MIT License")
 
 
 if __name__ == "__main__":
