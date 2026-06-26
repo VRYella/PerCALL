@@ -3,8 +3,13 @@ from __future__ import annotations
 import base64
 import html
 import re
+import sys
 import time
 from pathlib import Path
+
+# Ensure local modules (regplex_core, motif_engine, visualization) are importable
+# on all deployment environments including Streamlit Cloud.
+sys.path.insert(0, str(Path(__file__).parent))
 
 import pandas as pd
 import streamlit as st
