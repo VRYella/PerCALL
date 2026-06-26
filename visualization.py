@@ -9,13 +9,12 @@ _TEXT = "#1f2937"
 _MUTED = "#475569"
 _BLUE = "#1E3A8A"
 _TEAL = "#0F766E"
-_GREEN = "#16A34A"
+_GREEN = "#10B981"
 _AMBER = "#F59E0B"
 _CRIMSON = "#DC2626"
-_BLUE_ALT = "#2563eb"
-_BLUE_DARK = "#1d4ed8"
 
-_SCALE_COLORS = [_BLUE, _TEAL, _GREEN, _AMBER, _CRIMSON, _BLUE_ALT, _BLUE_DARK, _MUTED]
+_LAYER_COLORS = {"mono": _BLUE, "di": _TEAL, "tri": _GREEN}
+_SCALE_COLORS = [_BLUE, _TEAL, _GREEN, _AMBER, _CRIMSON, "#2563eb", "#1d4ed8", _MUTED]
 
 _BASE_LAYOUT = dict(
     paper_bgcolor=_BG,
@@ -29,259 +28,226 @@ _BASE_LAYOUT = dict(
 
 def _apply_base(fig: go.Figure, title: str, height: int = 360) -> go.Figure:
     fig.update_layout(**_BASE_LAYOUT, title=title, height=height)
-    fig.update_xaxes(
-        showgrid=True, gridcolor=_GRID, zeroline=False,
-        linecolor=_GRID, tickfont=dict(color=_MUTED),
-    )
-    fig.update_yaxes(
-        showgrid=True, gridcolor=_GRID, zeroline=False,
-        linecolor=_GRID, tickfont=dict(color=_MUTED),
-    )
+    fig.update_xaxes(showgrid=True, gridcolor=_GRID, zeroline=False, linecolor=_GRID, tickfont=dict(color=_MUTED))
+    fig.update_yaxes(showgrid=True, gridcolor=_GRID, zeroline=False, linecolor=_GRID, tickfont=dict(color=_MUTED))
     return fig
 
 
 def _empty_figure(title: str) -> go.Figure:
     fig = go.Figure()
-    fig.add_annotation(
-        text="No data available", x=0.5, y=0.5,
-        xref="paper", yref="paper", showarrow=False,
-    )
+    fig.add_annotation(text="No data available", x=0.5, y=0.5, xref="paper", yref="paper", showarrow=False)
     return _apply_base(fig, title)
 
 
 def _valley_bounds(domain: dict) -> tuple[int, int]:
-    return (
-        int(domain.get("Signal_Start", domain.get("Start", 0))),
-        int(domain.get("Signal_End", domain.get("End", 0))),
-    )
+    return int(domain.get("Signal_Start", domain.get("Start", 0))), int(domain.get("Signal_End", domain.get("End", 0)))
 
 
-# ---------------------------------------------------------------------------
-# 1 — Raw Perplexity
-# ---------------------------------------------------------------------------
-def plot_p1_profile(p1: np.ndarray) -> go.Figure:
-    if len(p1) == 0:
-        return _empty_figure("Perplexity Profile (P1)")
-    x = np.arange(len(p1))
+def plot_perplexity_layers(mono: np.ndarray, di: np.ndarray, tri: np.ndarray) -> go.Figure:
+    if len(di) == 0:
+        return _empty_figure("Layer Perplexity Profiles")
+    x = np.arange(len(di))
     fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=x, y=p1, mode="lines", name="P1",
-        line=dict(color=_BLUE, width=1.9),
-    ))
-    fig.update_layout(xaxis_title="Signal position", yaxis_title="P1")
-    return _apply_base(fig, "Perplexity Profile (P1)")
+    for name, arr in (("Mono", mono), ("Di", di), ("Tri", tri)):
+        if len(arr) == 0:
+            continue
+        fig.add_trace(
+            go.Scatter(
+                x=x[: len(arr)],
+                y=arr,
+                mode="lines",
+                name=f"{name} Perplexity",
+                line=dict(color=_LAYER_COLORS[name.lower()], width=1.8),
+                opacity=0.9,
+            )
+        )
+    fig.update_layout(xaxis_title="Signal position", yaxis_title="Perplexity")
+    return _apply_base(fig, "Layer Perplexity Profiles", height=390)
 
 
-# ---------------------------------------------------------------------------
-# 2 — Multi-scale Landscapes
-# ---------------------------------------------------------------------------
-def plot_multiscale_landscapes(
-    landscapes: dict, domains: list[dict]
-) -> go.Figure:
+def plot_multiscale_landscapes(landscapes: dict[int, np.ndarray], domains: list[dict], layer_name: str) -> go.Figure:
     if not landscapes:
-        return _empty_figure("Multi-scale Perplexity Landscapes")
-    n = max((len(v) for v in landscapes.values()), default=0)
-    if n == 0:
-        return _empty_figure("Multi-scale Perplexity Landscapes")
+        return _empty_figure(f"{layer_name} Multi-scale Landscapes")
     fig = go.Figure()
     for i, s in enumerate(sorted(landscapes)):
         arr = landscapes[s]
-        col = _SCALE_COLORS[i % len(_SCALE_COLORS)]
-        fig.add_trace(go.Scatter(
-            x=np.arange(len(arr)), y=arr,
-            mode="lines", name=f"{s} bp",
-            line=dict(color=col, width=1.8), opacity=0.85,
-        ))
+        fig.add_trace(
+            go.Scatter(
+                x=np.arange(len(arr)),
+                y=arr,
+                mode="lines",
+                name=f"{s} bp",
+                line=dict(color=_SCALE_COLORS[i % len(_SCALE_COLORS)], width=1.6),
+                opacity=0.85,
+            )
+        )
     for d in domains:
         s0, s1 = _valley_bounds(d)
-        fig.add_vrect(
-            x0=s0, x1=s1,
-            fillcolor="rgba(30,58,138,0.10)", line_width=0,
+        fig.add_vrect(x0=s0, x1=s1, fillcolor="rgba(30,58,138,0.10)", line_width=0)
+    fig.update_layout(xaxis_title="Signal position", yaxis_title=f"{layer_name} landscape perplexity")
+    return _apply_base(fig, f"{layer_name} Multi-scale Landscapes", height=400)
+
+
+def plot_layer_consensus(layer_consensus: dict[str, np.ndarray], domains: list[dict]) -> go.Figure:
+    if not layer_consensus:
+        return _empty_figure("Layer Consensus LPC")
+    fig = go.Figure()
+    for layer, arr in layer_consensus.items():
+        x = np.arange(len(arr))
+        pos = np.where(arr > 0, arr, 0)
+        fig.add_trace(
+            go.Scatter(
+                x=x,
+                y=pos,
+                mode="lines",
+                name=f"{layer.capitalize()} Consensus",
+                line=dict(color=_LAYER_COLORS.get(layer, _MUTED), width=1.8),
+            )
         )
-    fig.update_layout(
-        xaxis_title="Signal position",
-        yaxis_title="Landscape perplexity",
-    )
-    return _apply_base(fig, "Multi-scale Perplexity Landscapes", height=400)
+    for d in domains:
+        s0, s1 = _valley_bounds(d)
+        fig.add_vrect(x0=s0, x1=s1, fillcolor="rgba(30,58,138,0.08)", line_width=0)
+    fig.update_layout(xaxis_title="Signal position", yaxis_title="Normalized LPC")
+    return _apply_base(fig, "Layer Consensus LPC", height=390)
 
 
-# ---------------------------------------------------------------------------
-# 3 — Consensus LPC
-# ---------------------------------------------------------------------------
-def plot_consensus_lpc(
-    consensus_lpc: np.ndarray, domains: list[dict]
-) -> go.Figure:
+def plot_consensus_lpc(consensus_lpc: np.ndarray, domains: list[dict]) -> go.Figure:
     if len(consensus_lpc) == 0:
-        return _empty_figure("Consensus LPC")
+        return _empty_figure("ConsensusLPC")
     x = np.arange(len(consensus_lpc))
     pos = np.where(consensus_lpc > 0, consensus_lpc, 0)
     fig = go.Figure()
     fig.add_hline(y=0, line=dict(color=_GRID, dash="dot"))
-    fig.add_trace(go.Scatter(
-        x=x, y=pos, mode="lines", name="Consensus LPC",
-        line=dict(color=_GREEN, width=1.9),
-        fill="tozeroy", fillcolor="rgba(22,163,74,0.14)",
-    ))
+    fig.add_trace(
+        go.Scatter(
+            x=x,
+            y=pos,
+            mode="lines",
+            name="ConsensusLPC",
+            line=dict(color=_GREEN, width=2),
+            fill="tozeroy",
+            fillcolor="rgba(16,185,129,0.15)",
+        )
+    )
     for d in domains:
         s0, s1 = _valley_bounds(d)
-        fig.add_vrect(
-            x0=s0, x1=s1,
-            fillcolor="rgba(30,58,138,0.16)",
-            line_color=_BLUE, opacity=0.30,
-        )
-    fig.update_layout(xaxis_title="Signal position", yaxis_title="Consensus LPC")
-    return _apply_base(fig, "Consensus LPC")
+        fig.add_vrect(x0=s0, x1=s1, fillcolor="rgba(30,58,138,0.16)", line_color=_BLUE, opacity=0.30)
+    fig.update_layout(xaxis_title="Signal position", yaxis_title="ConsensusLPC")
+    return _apply_base(fig, "Final Ensemble ConsensusLPC")
 
 
-# ---------------------------------------------------------------------------
-# 4 — Kadane Segments
-# ---------------------------------------------------------------------------
 def plot_kadane_domains(
-    consensus_lpc: np.ndarray, domains: list[dict]
+    consensus_lpc: np.ndarray,
+    domains: list[dict],
+    kadane_core: tuple[int | None, int | None] = (None, None),
 ) -> go.Figure:
     if len(consensus_lpc) == 0:
-        return _empty_figure("Kadane Segments")
+        return _empty_figure("Kadane Core and Expanded Valleys")
     x = np.arange(len(consensus_lpc))
     fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=x, y=consensus_lpc, mode="lines", name="Consensus LPC",
-        line=dict(color="rgba(31,41,55,0.35)", width=1.15),
-    ))
+    fig.add_trace(go.Scatter(x=x, y=consensus_lpc, mode="lines", name="ConsensusLPC", line=dict(color="rgba(31,41,55,0.35)", width=1.2)))
     for domain in domains:
         s0, s1 = _valley_bounds(domain)
-        fig.add_trace(go.Scatter(
-            x=np.arange(s0, s1 + 1),
-            y=consensus_lpc[s0: s1 + 1],
-            mode="lines",
-            name=domain.get("ID", "Valley"),
-            line=dict(color=_BLUE, width=2.5),
-            showlegend=False,
-        ))
-    fig.update_layout(xaxis_title="Signal position", yaxis_title="Consensus LPC")
-    return _apply_base(fig, "Kadane Segments")
+        fig.add_vrect(x0=s0, x1=s1, fillcolor="rgba(30,58,138,0.13)", line_width=0)
+    ks, ke = kadane_core
+    if ks is not None and ke is not None:
+        fig.add_vrect(x0=ks, x1=ke, fillcolor="rgba(245,158,11,0.25)", line_color=_AMBER, annotation_text="Kadane core", annotation_position="top left")
+    fig.update_layout(xaxis_title="Signal position", yaxis_title="ConsensusLPC")
+    return _apply_base(fig, "Kadane Core and Expanded Valleys")
 
 
-# ---------------------------------------------------------------------------
-# 5 — Scale Support Heatmap
-# ---------------------------------------------------------------------------
-def plot_scale_support_heatmap(
-    lpc_profiles: dict, domains: list[dict], scales: list[int]
-) -> go.Figure:
+def plot_scale_support_heatmap(lpc_profiles: dict[str, dict[int, np.ndarray]], domains: list[dict], scales: list[int]) -> go.Figure:
     if not domains or not lpc_profiles:
-        return _empty_figure("Scale Support Heatmap")
+        return _empty_figure("Scale and Layer Support")
     valley_ids = [d.get("ID", f"PV_{i:06d}") for i, d in enumerate(domains, 1)]
+    x_labels = [f"{layer}:{sc}bp" for layer in ("mono", "di", "tri") for sc in scales]
     z: list[list[float]] = []
     for d in domains:
         s0, s1 = _valley_bounds(d)
         row: list[float] = []
-        for sc in scales:
-            lpc = lpc_profiles.get(sc)
-            if lpc is None or s1 >= len(lpc):
-                row.append(float("nan"))
-                continue
-            seg = lpc[s0: s1 + 1]
-            finite = seg[np.isfinite(seg)]
-            row.append(float(np.mean(finite)) if finite.size > 0 else float("nan"))
+        for layer in ("mono", "di", "tri"):
+            for sc in scales:
+                arr = lpc_profiles.get(layer, {}).get(sc)
+                if arr is None or s1 >= len(arr):
+                    row.append(float("nan"))
+                    continue
+                seg = arr[s0: s1 + 1]
+                finite_vals = seg[np.isfinite(seg)]
+                row.append(float(np.mean(finite_vals)) if finite_vals.size else float("nan"))
         z.append(row)
-    fig = go.Figure(go.Heatmap(
-        z=z,
-        x=[f"{sc} bp" for sc in scales],
-        y=valley_ids,
-        colorscale=[[0.0, "#cbd5e1"], [0.5, _TEAL], [1.0, _BLUE]],
-        colorbar=dict(title="Mean LPC"),
-        zmid=0,
-        hovertemplate=(
-            "Valley: %{y}<br>Scale: %{x}<br>Mean LPC: %{z:.4f}<extra></extra>"
-        ),
-    ))
-    fig.update_layout(xaxis_title="Observation scale", yaxis_title="Valley")
+
+    fig = go.Figure(
+        go.Heatmap(
+            z=z,
+            x=x_labels,
+            y=valley_ids,
+            colorscale=[[0.0, "#e2e8f0"], [0.5, _TEAL], [1.0, _BLUE]],
+            zmid=0,
+            colorbar=dict(title="Mean LPC"),
+            hovertemplate="Valley: %{y}<br>Layer/Scale: %{x}<br>Mean LPC: %{z:.4f}<extra></extra>",
+        )
+    )
+    fig.update_layout(xaxis_title="Layer / Scale", yaxis_title="Valley")
     h = max(320, 60 + 30 * len(domains))
-    return _apply_base(fig, "Scale Support Heatmap", height=h)
+    return _apply_base(fig, "Scale and Layer Support", height=h)
 
 
-# ---------------------------------------------------------------------------
-# 6 — Valley Ranking
-# ---------------------------------------------------------------------------
 def plot_domain_ranking(domains: list[dict]) -> go.Figure:
     if not domains:
         return _empty_figure("Valley Ranking")
     ranked = sorted(domains, key=lambda d: d.get("ValleyScore", 0.0), reverse=True)
-    fig = go.Figure(go.Bar(
-        x=[d.get("ID", "PV") for d in ranked],
-        y=[d.get("ValleyScore", 0.0) for d in ranked],
-        marker=dict(
-            color=[d.get("MeanLPC", 0.0) for d in ranked],
-            colorscale=[[0.0, "#cbd5e1"], [0.5, _TEAL], [1.0, _BLUE]],
-            colorbar=dict(title="Mean LPC"),
-        ),
-        customdata=np.array(
-            [[d.get("Length", 0), d.get("Persistence", 0.0),
-              d.get("ScaleSupport", 0.0)] for d in ranked],
-            dtype=object,
-        ),
-        hovertemplate=(
-            "%{x}<br>ValleyScore %{y:.4f}<br>Length %{customdata[0]} bp"
-            "<br>Persistence %{customdata[1]:.4f}"
-            "<br>ScaleSupport %{customdata[2]:.4f}<extra></extra>"
-        ),
-    ))
+    fig = go.Figure(
+        go.Bar(
+            x=[d.get("ID", "PV") for d in ranked],
+            y=[d.get("ValleyScore", 0.0) for d in ranked],
+            marker=dict(color=[d.get("Contrast", 0.0) for d in ranked], colorscale=[[0.0, "#cbd5e1"], [0.5, _TEAL], [1.0, _BLUE]], colorbar=dict(title="Contrast")),
+            customdata=np.array([[d.get("Length", 0), d.get("ScaleSupport", "0/0"), d.get("LayerSupport", "0/0")] for d in ranked], dtype=object),
+            hovertemplate="%{x}<br>ValleyScore %{y:.4f}<br>Length %{customdata[0]} bp<br>ScaleSupport %{customdata[1]}<br>LayerSupport %{customdata[2]}<extra></extra>",
+        )
+    )
     fig.update_layout(xaxis_title="Valley ID", yaxis_title="Valley Score")
     return _apply_base(fig, "Valley Ranking", height=390)
 
 
-# ---------------------------------------------------------------------------
-# 7 — Motif Architecture
-# ---------------------------------------------------------------------------
 def plot_motif_architecture(domains: list[dict]) -> go.Figure:
     if not domains:
         return _empty_figure("Motif Mapping")
-    ranked = sorted(
-        domains, key=lambda d: d.get("MotifCount", 0), reverse=True
+    ranked = sorted(domains, key=lambda d: d.get("MotifCount", 0), reverse=True)
+    fig = go.Figure(
+        go.Bar(
+            x=[d.get("ID", "PV") for d in ranked],
+            y=[d.get("MotifCount", 0) for d in ranked],
+            marker=dict(color=_TEAL),
+            customdata=[d.get("Motifs", "") or "—" for d in ranked],
+            hovertemplate="%{x}<br>MotifCount %{y}<br>%{customdata}<extra></extra>",
+        )
     )
-    fig = go.Figure(go.Bar(
-        x=[d.get("ID", "PV") for d in ranked],
-        y=[d.get("MotifCount", 0) for d in ranked],
-        marker=dict(color=_TEAL),
-        customdata=[d.get("Motifs", "") or "—" for d in ranked],
-        hovertemplate="%{x}<br>MotifCount %{y}<br>%{customdata}<extra></extra>",
-    ))
     fig.update_layout(xaxis_title="Valley ID", yaxis_title="Motif count")
     return _apply_base(fig, "Motif Mapping", height=360)
 
 
-# ---------------------------------------------------------------------------
-# 8 — Complete Workflow
-# ---------------------------------------------------------------------------
 def plot_algorithm_workflow() -> go.Figure:
     labels = [
-        "DNA sequence",
-        "P1 (10-mer dinucleotide perplexity)",
-        "Multi-scale Landscapes [25–400 bp]",
-        "Per-scale Three-window LPC",
-        "Normalized LPC Profiles",
-        "Consensus LPC (nanmedian)",
-        "Bounded Kadane + Valley Expansion",
-        "Valley Merging",
+        "DNA",
+        "Mono Perplexity",
+        "Di Perplexity",
+        "Tri Perplexity",
+        "Multi-scale Landscapes",
+        "Three-window LPC",
+        "Layer Consensus",
+        "Ensemble ConsensusLPC",
+        "Bounded Kadane",
+        "Expansion + Merge",
         "Perplexity Valleys",
         "Motif Annotation",
     ]
+    colors = [_BLUE, _BLUE, _TEAL, _GREEN, _AMBER, _AMBER, _BLUE, _TEAL, _BLUE, _GREEN, _BLUE, _TEAL]
     n = len(labels)
-    colors = [
-        _BLUE, _TEAL, _BLUE_ALT, _GREEN, _AMBER,
-        _BLUE_DARK, _TEAL, _BLUE, _TEAL, _GREEN,
-    ]
-    fig = go.Figure(go.Sankey(
-        arrangement="snap",
-        node=dict(
-            label=labels, pad=18, thickness=16,
-            line=dict(color=_GRID, width=1),
-            color=colors[:n],
-        ),
-        link=dict(
-            source=list(range(n - 1)),
-            target=list(range(1, n)),
-            value=[4] * (n - 1),
-            color=["rgba(30,58,138,0.18)"] * (n - 1),
-        ),
-    ))
-    return _apply_base(fig, "REGPLEX v9 Workflow", height=460)
+    fig = go.Figure(
+        go.Sankey(
+            arrangement="snap",
+            node=dict(label=labels, pad=18, thickness=16, line=dict(color=_GRID, width=1), color=colors[:n]),
+            link=dict(source=list(range(n - 1)), target=list(range(1, n)), value=[4] * (n - 1), color=["rgba(30,58,138,0.18)"] * (n - 1)),
+        )
+    )
+    return _apply_base(fig, "REGPLEX v10 Workflow", height=470)
