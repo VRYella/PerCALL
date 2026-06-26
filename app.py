@@ -43,6 +43,9 @@ st.set_page_config(page_title="REGPLEX", layout="wide", initial_sidebar_state="c
 
 # Navigation labels used throughout.
 _NAV_ITEMS = ["Home", "Analysis", "Results", "Motifs", "About"]
+_README_URL = "https://github.com/VRYella/PerCALL#readme"
+_CITATION_URL = "https://github.com/VRYella/PerCALL#citation"
+_NATURE_PACKAGE_URL = "https://github.com/VRYella/PerCALL/blob/main/NATURE_SUBMISSION_PACKAGE.md"
 
 PLOT_CONFIG = {
     "displaylogo": False,
@@ -91,14 +94,15 @@ def _load_styles() -> None:
     except FileNotFoundError:
         st.error("styles.css not found. Please ensure styles.css exists in the same directory as app.py.")
         return
-    st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
+    _render_html_block(f"<style>{css}</style>")
 
 
-def _render_html(body: str) -> None:
+def _render_html_block(body: str) -> None:
+    rendered = body.strip()
     if hasattr(st, "html"):
-        st.html(body)
+        st.html(rendered)
     else:
-        st.markdown(body, unsafe_allow_html=True)
+        st.markdown(rendered, unsafe_allow_html=True)
 
 
 def _jump_to_nav(label: str) -> None:
@@ -128,7 +132,7 @@ def _render_nav() -> int:
 
 
 def _show_figure(fig, key: str) -> None:
-    st.plotly_chart(fig, use_container_width=True, config=PLOT_CONFIG, key=key)
+    st.plotly_chart(fig, width="stretch", config=PLOT_CONFIG, key=key)
 
 
 def _run_analysis(fasta_text: str, params: dict, motif_text: str) -> tuple[list[AnalysisResult], float]:
@@ -144,7 +148,7 @@ def _run_analysis(fasta_text: str, params: dict, motif_text: str) -> tuple[list[
 
 
 def _render_topbar() -> None:
-    st.markdown(
+    _render_html_block(
         f"""
         <div class="regplex-topbar">
           <div class="regplex-topbar-inner">
@@ -157,28 +161,25 @@ def _render_topbar() -> None:
             </div>
             <div class="top-links">
               <span>Workflow UI</span>
-              <a href="https://github.com/VRYella/PerCALL" target="_blank">GitHub</a>
-              <a href="https://github.com/VRYella/PerCALL#readme" target="_blank">Documentation</a>
-              <a href="https://github.com/VRYella/PerCALL#citation" target="_blank">Citation</a>
+              <a href="https://github.com/VRYella/PerCALL" target="_blank" rel="noopener noreferrer">GitHub</a>
+              <a href="{_README_URL}" target="_blank" rel="noopener noreferrer">Documentation</a>
+              <a href="{_NATURE_PACKAGE_URL}" target="_blank" rel="noopener noreferrer">Nature Package</a>
             </div>
           </div>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
 
 def _metric_card(label: str, value: str) -> None:
-    st.markdown(
+    _render_html_block(
         f"<div class='metric-card'><div class='metric-label'>{label}</div><div class='metric-value'>{value}</div></div>",
-        unsafe_allow_html=True,
     )
 
 
 def _render_empty(message: str) -> None:
-    st.markdown(
+    _render_html_block(
         f"<div class='empty-state'>{_svg_empty()}<div>{message}</div></div>",
-        unsafe_allow_html=True,
     )
 
 
@@ -280,21 +281,23 @@ def _render_home() -> None:
 """
     hero_right = f'<div class="hero-right">{img_html}</div>'
 
-    _render_html(f'<div class="hero-section">{hero_left}{hero_right}</div>')
+    _render_html_block(
+        f'<div class="hero-section">{hero_left}{hero_right}</div>',
+    )
 
     # ── Action buttons (Streamlit widgets below hero columns) ──
     b1, b2, b3, b4 = st.columns([1.6, 1.2, 1.2, 1.2])
     with b1:
-        if st.button("Run Analysis", key="home_start_analysis", use_container_width=True, type="primary"):
+        if st.button("Run Analysis", key="home_start_analysis", width="stretch", type="primary"):
             _jump_to_nav("Analysis")
     with b2:
-        if st.button("Load Example", key="home_load_example", use_container_width=True):
+        if st.button("Load Example", key="home_load_example", width="stretch"):
             st.session_state["input_fasta_text"] = _load_example_text()
             _jump_to_nav("Analysis")
     with b3:
-        st.link_button("Documentation", "https://github.com/VRYella/PerCALL#readme", use_container_width=True)
+        st.link_button("Documentation", _README_URL, width="stretch")
     with b4:
-        st.link_button("GitHub", "https://github.com/VRYella/PerCALL", use_container_width=True)
+        st.link_button("GitHub", "https://github.com/VRYella/PerCALL", width="stretch")
 
     # ── Quick workflow card ──
     steps = [
@@ -314,14 +317,13 @@ def _render_home() -> None:
         if i < len(steps) - 1:
             steps_html += f'<div class="workflow-arrow">{_SVG_ARROW}</div>'
 
-    st.markdown(
+    _render_html_block(
         f"""
         <div class="workflow-card">
           <div class="workflow-title">Quick Workflow</div>
           <div class="workflow-steps">{steps_html}</div>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
 
@@ -344,10 +346,9 @@ def _validate_motifs(motif_text: str) -> list[dict]:
 
 
 def _render_analysis() -> None:
-    st.markdown(
+    _render_html_block(
         "<div class='card'><h3>Analysis Input</h3>"
-        "<p>Upload FASTA or paste sequence text.</p></div>",
-        unsafe_allow_html=True,
+        "<p>Upload FASTA or paste sequence text.</p></div>"
     )
 
     default_text = st.session_state.get("input_fasta_text", "")
@@ -478,16 +479,16 @@ def _render_analysis() -> None:
                 f" → invalid regex</div>"
                 for row in motif_rows
             ]
-            st.markdown("".join(status_lines), unsafe_allow_html=True)
+            _render_html_block("".join(status_lines))
 
     b1, b2, b3 = st.columns([1.5, 1, 1])
     with b1:
         run_clicked = st.button(
             "Run Analysis", key="analysis_run",
-            type="primary", use_container_width=True,
+            type="primary", width="stretch",
         )
     with b2:
-        if st.button("Reset", key="analysis_reset", use_container_width=True):
+        if st.button("Reset", key="analysis_reset", width="stretch"):
             for key in [
                 "results", "domains_df", "runtime",
                 "input_fasta_text", "motif_text",
@@ -496,7 +497,7 @@ def _render_analysis() -> None:
             st.rerun()
     with b3:
         if st.button(
-            "Load Example", key="analysis_load_example", use_container_width=True
+            "Load Example", key="analysis_load_example", width="stretch"
         ):
             st.session_state["input_fasta_text"] = _load_example_text()
             st.rerun()
@@ -629,7 +630,7 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
         try:
             event = st.dataframe(
                 filtered[display_cols],
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
                 on_select="rerun",
                 selection_mode="single-row",
@@ -644,7 +645,7 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
                 "(requires a Streamlit runtime with selection-enabled dataframe events)."
             )
             st.dataframe(
-                filtered[display_cols], use_container_width=True,
+                filtered[display_cols], width="stretch",
                 hide_index=True, key="results_valley_table_static",
             )
 
@@ -666,48 +667,47 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
             st.download_button(
                 "CSV", export_table(selected_df, "csv"),
                 "regplex_valleys.csv", "text/csv",
-                use_container_width=True, key="dl_csv",
+                width="stretch", key="dl_csv",
             )
             st.download_button(
                 "Excel", export_table(selected_df, "xlsx"),
                 "regplex_valleys.xlsx",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True, key="dl_xlsx",
+                width="stretch", key="dl_xlsx",
             )
             st.download_button(
                 "BED", export_bed(selected_df),
                 "regplex_valleys.bed", "text/plain",
-                use_container_width=True, key="dl_bed",
+                width="stretch", key="dl_bed",
             )
         with c2:
             st.download_button(
                 "GFF", export_gff(selected_df, gff3=False),
                 "regplex_valleys.gff", "text/plain",
-                use_container_width=True, key="dl_gff",
+                width="stretch", key="dl_gff",
             )
             st.download_button(
                 "GFF3", export_gff(selected_df, gff3=True),
                 "regplex_valleys.gff3", "text/plain",
-                use_container_width=True, key="dl_gff3",
+                width="stretch", key="dl_gff3",
             )
             st.download_button(
                 "FASTA", export_fasta(selected_df),
                 "regplex_valleys.fasta", "text/plain",
-                use_container_width=True, key="dl_fasta",
+                width="stretch", key="dl_fasta",
             )
         with c3:
             st.download_button(
                 "JSON", export_table(selected_df, "json"),
                 "regplex_valleys.json", "application/json",
-                use_container_width=True, key="dl_json",
+                width="stretch", key="dl_json",
             )
 
 
 def _render_motifs(df: pd.DataFrame) -> None:
-    st.markdown(
+    _render_html_block(
         "<div class='card'><h3>Motif Editor</h3>"
-        "<p>Enter one motif per line (Regex or IUPAC).</p></div>",
-        unsafe_allow_html=True,
+        "<p>Enter one motif per line (Regex or IUPAC).</p></div>"
     )
     motif_text = st.text_area(
         "Motif editor",
@@ -725,28 +725,27 @@ def _render_motifs(df: pd.DataFrame) -> None:
         label = row["Regex"] if row["Status"] == "valid" else "invalid regex"
         safe_motif = html.escape(row["Motif"])
         safe_label = html.escape(label)
-        st.markdown(f"<div class='{klass} mono'>{safe_motif} → {safe_label}</div>", unsafe_allow_html=True)
+        _render_html_block(f"<div class='{klass} mono'>{safe_motif} → {safe_label}</div>")
 
     if not df.empty:
         st.markdown("---")
         st.subheader("Detected motifs on genome")
-        st.dataframe(df[["ID", "Sequence_ID", "MotifCount", "Motifs"]], use_container_width=True, hide_index=True)
+        st.dataframe(df[["ID", "Sequence_ID", "MotifCount", "Motifs"]], width="stretch", hide_index=True)
 
 
 def _render_about() -> None:
-    st.markdown(
+    _render_html_block(
         """
         <div class="card">
           <h3>Scientific Workflow</h3>
           <p>DNA → P1 (once) → Multi-scale Landscapes → Per-scale LPC →
           Consensus LPC → Kadane + Expansion → Merging → Valleys → Motifs</p>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
     _show_figure(plot_algorithm_workflow(), "workflow")
 
-    st.markdown(
+    _render_html_block(
         """
         <div class="card">
           <h3>Algorithm — REGPLEX v9 Multi-scale Consensus</h3>
@@ -771,11 +770,10 @@ def _render_about() -> None:
             defines a Perplexity Valley.
           </p>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
-    st.markdown(
+    _render_html_block(
         """
         <div class="card">
           <h3>Parameter Reference</h3>
@@ -796,28 +794,32 @@ def _render_about() -> None:
               Valleys closer than this are merged into one domain.</div>
           </div>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
-    st.markdown(
+    _render_html_block(
         """
         <div class="card">
-          <h3>Citation</h3>
+          <h3>Nature-style submission package</h3>
           <div class="mono" style="background:var(--surface-2);padding:0.75rem;border-radius:10px;">
-            REGPLEX v9: Multi-scale Perplexity Valley Framework
+            Methods · Reporting Summary · Code Availability · Data Availability
           </div>
+          <p style="margin-top:0.85rem;">
+            A journal-ready Nature-format methods package is available in the repository:
+            <a href="https://github.com/VRYella/PerCALL/blob/main/NATURE_SUBMISSION_PACKAGE.md" target="_blank" rel="noopener noreferrer">
+              NATURE_SUBMISSION_PACKAGE.md
+            </a>
+          </p>
           <h3 style="margin-top:1rem;">References</h3>
           <ul>
-            <li><a href="https://genome.ucsc.edu" target="_blank">UCSC Genome Browser</a></li>
-            <li><a href="https://www.ensembl.org" target="_blank">Ensembl Genome Browser</a></li>
-            <li><a href="https://alphafold.ebi.ac.uk" target="_blank">AlphaFold DB</a></li>
-            <li><a href="https://igv.org/web/release/latest/webapp" target="_blank">IGV-Web</a></li>
-            <li><a href="https://www.nature.com/nmeth/" target="_blank">Nature Methods</a></li>
+            <li>Shannon CE. A mathematical theory of communication. Bell System Technical Journal (1948).</li>
+            <li>Bentley JL. Programming Pearls: algorithm design techniques. Communications of the ACM (1984).</li>
+            <li>Rousseeuw PJ, Croux C. Alternatives to the median absolute deviation. Journal of the American Statistical Association (1993).</li>
+            <li>Harris CR et al. Array programming with NumPy. Nature (2020).</li>
+            <li>McKinney W. Data structures for statistical computing in Python. Proceedings of the 9th Python in Science Conference (2010).</li>
           </ul>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
 
@@ -843,7 +845,7 @@ def main() -> None:
 
     st.markdown("---")
     st.markdown(
-        "REGPLEX v9 · [Citation](https://github.com/VRYella/PerCALL#citation) · "
+        f"REGPLEX v9 · [Citation]({_CITATION_URL}) · "
         "[GitHub](https://github.com/VRYella/PerCALL) · MIT License · "
         "[Contact](https://github.com/VRYella)"
     )

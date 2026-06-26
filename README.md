@@ -128,3 +128,9 @@ Downloads include: CSV · Excel (.xlsx) · BED · GFF · GFF3 · FASTA · JSON
 - `styles.css` — UI design system
 - `REGPLEX_Local.ipynb` — Jupyter notebook interface
 - `examples/` — Example FASTA files
+
+## Citation
+
+For manuscript-ready submission text, see:
+
+- [`NATURE_SUBMISSION_PACKAGE.md`](NATURE_SUBMISSION_PACKAGE.md) — Methods, Reporting Summary, Code Availability, Data Availability, and references
