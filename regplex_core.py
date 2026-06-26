@@ -5,11 +5,12 @@ import io
 import math
 import warnings
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Iterable
 
 import numpy as np
 import pandas as pd
+from scipy.signal import savgol_filter
 
 # ---------------------------
 # Tunable scientific defaults
@@ -19,11 +20,17 @@ DEFAULT_SCALES = [25, 50, 100, 200, 400]
 LANDSCAPE_METHOD = "mean"  # mean | median
 NORMALIZATION_METHOD = "robust_z"  # robust_z | percentile
 ENSEMBLE_METHOD = "median"  # median | trimmed_mean
-MIN_CANDIDATE = 50
-MAX_CANDIDATE = 1000
-MIN_DOMAIN = 50
-MAX_DOMAIN = 1000
-MERGE_GAP = 25
+MIN_CANDIDATE = 50      # Kadane refinement minimum length (bp)
+MAX_CANDIDATE = 1000    # Kadane refinement maximum length (bp)
+MIN_DOMAIN = 50         # Final valley minimum length (bp)
+MAX_DOMAIN = 1000       # Final valley maximum length (bp)
+MERGE_GAP = 25          # Gap for post-NMS valley merging (bp)
+SG_WINDOW_LENGTH = 21   # Savitzky-Golay window length (must be odd)
+SG_POLY_ORDER = 3       # Savitzky-Golay polynomial order
+PERSISTENCE_THRESHOLD = 0.80  # Hard persistence filter (fraction of positions with ConsensusLPC > 0)
+NMS_OVERLAP_THRESHOLD = 0.50  # Non-maximum suppression overlap fraction
+TOP_N_DISPLAY = 20      # Default number of top valleys to display
+FLANK_WINDOW = 100      # Flanking window size for prominence computation (bp)
 EPSILON = 1e-9
 
 LAYERS = ("mono", "di", "tri")
@@ -42,10 +49,14 @@ class AnalysisResult:
     mono: np.ndarray
     di: np.ndarray
     tri: np.ndarray
+    smoothed_mono: np.ndarray
+    smoothed_di: np.ndarray
+    smoothed_tri: np.ndarray
     landscapes: dict[str, dict[int, np.ndarray]]
     lpc_profiles: dict[str, dict[int, np.ndarray]]
     layer_consensus: dict[str, np.ndarray]
     consensus_lpc: np.ndarray
+    candidates: list[tuple[int, int]]
     domains: list[dict]
     params: dict
     kadane_core: tuple[int | None, int | None]
@@ -182,6 +193,47 @@ def compute_tri_perplexity(seq: str, window: int = PERPLEXITY_WINDOW) -> np.ndar
     p = _compute_entropy_perplexity(tri, 64)
     p[windows_n.any(axis=1)] = np.nan
     return p
+
+
+def smooth_perplexity(
+    arr: np.ndarray,
+    window_length: int = SG_WINDOW_LENGTH,
+    poly_order: int = SG_POLY_ORDER,
+) -> np.ndarray:
+    """Apply a single Savitzky-Golay pass to a perplexity profile.
+
+    Preserves valley position, depth and boundary shape while removing local
+    noise.  NaN positions are reconstructed via linear interpolation before
+    smoothing, then restored after.  If the array is too short for the
+    requested window, the original array is returned unchanged.
+    """
+    n = len(arr)
+    if n == 0:
+        return arr.copy()
+
+    # Ensure window_length is odd and does not exceed the array length.
+    wl = min(window_length, n)
+    if wl % 2 == 0:
+        wl -= 1
+    # polynomial order must be strictly less than window length
+    po = min(poly_order, wl - 1)
+    if wl < 3 or po < 1:
+        return arr.astype(np.float32)
+
+    finite_mask = np.isfinite(arr)
+    if not np.any(finite_mask):
+        return arr.copy()
+
+    # Interpolate NaN so savgol_filter receives a complete array.
+    work = arr.astype(np.float64)
+    if not np.all(finite_mask):
+        xp = np.flatnonzero(finite_mask)
+        fp = arr[finite_mask].astype(np.float64)
+        work = np.interp(np.arange(n, dtype=np.float64), xp, fp)
+
+    smoothed = savgol_filter(work, wl, po).astype(np.float32)
+    smoothed[~finite_mask] = np.nan
+    return smoothed
 
 
 def build_landscapes(arr: np.ndarray, scales: list[int], method: str = LANDSCAPE_METHOD) -> dict[int, np.ndarray]:
@@ -412,6 +464,195 @@ def _nucleotide_bounds(signal_start: int, signal_end: int, seq_len: int, p_windo
     return start, end
 
 
+# ---------------------------------------------------------------------------
+# Candidate generation (Step 4)
+# ---------------------------------------------------------------------------
+
+def _generate_candidate_valleys(consensus_lpc: np.ndarray) -> list[tuple[int, int]]:
+    """Return all contiguous positive runs in consensus_lpc as raw candidates.
+
+    No size filtering is applied here; Kadane refinement handles size bounds.
+    """
+    candidates: list[tuple[int, int]] = []
+    positive = np.isfinite(consensus_lpc) & (consensus_lpc > 0)
+    n = len(consensus_lpc)
+    i = 0
+    while i < n:
+        if not positive[i]:
+            i += 1
+            continue
+        j = i
+        while j + 1 < n and positive[j + 1]:
+            j += 1
+        candidates.append((i, j))
+        i = j + 1
+    return candidates
+
+
+# ---------------------------------------------------------------------------
+# Kadane refinement (Step 5)
+# ---------------------------------------------------------------------------
+
+def _refine_with_kadane(
+    consensus_lpc: np.ndarray,
+    cand_start: int,
+    cand_end: int,
+    min_len: int,
+    max_len: int,
+) -> tuple[int | None, int | None]:
+    """Find the strongest contiguous core inside a candidate valley.
+
+    Returns refined (start, end) with length in [min_len, max_len], or
+    (None, None) if no valid core exists.
+    """
+    seg = -consensus_lpc[cand_start: cand_end + 1].astype(np.float64)
+    seg_len = len(seg)
+    if seg_len < min_len:
+        return None, None
+    s, e, mv = bounded_min_mean(seg, min_len=min_len, max_len=min(max_len, seg_len))
+    if s is None or not np.isfinite(mv):
+        # Fall back: use the whole candidate capped to max_len
+        s, e = 0, min(seg_len - 1, max_len - 1)
+        if e - s + 1 < min_len:
+            return None, None
+    return cand_start + s, cand_start + e
+
+
+# ---------------------------------------------------------------------------
+# Persistence filter (Step 6)
+# ---------------------------------------------------------------------------
+
+def _compute_persistence(consensus_lpc: np.ndarray, start: int, end: int) -> float:
+    """Fraction of positions inside [start, end] with ConsensusLPC > 0."""
+    seg = consensus_lpc[start: end + 1]
+    finite = seg[np.isfinite(seg)]
+    if finite.size == 0:
+        return 0.0
+    return float(np.mean(finite > 0))
+
+
+# ---------------------------------------------------------------------------
+# Prominence (Step 7)
+# ---------------------------------------------------------------------------
+
+def _compute_prominence(
+    avg_perplexity: np.ndarray,
+    start: int,
+    end: int,
+    flank_window: int = FLANK_WINDOW,
+) -> float:
+    """Compute prominence using the average perplexity signal.
+
+    Prominence = mean(flanks) - min(valley).
+    Uses the mean of the raw perplexity averaged across mono/di/tri layers so
+    that deep valleys (low perplexity relative to surrounding sequence) score
+    high.
+    """
+    n = len(avg_perplexity)
+    left_flank = avg_perplexity[max(0, start - flank_window): start]
+    right_flank = avg_perplexity[end + 1: min(n, end + 1 + flank_window)]
+
+    flanks = np.concatenate([left_flank, right_flank])
+    flanks_f = flanks[np.isfinite(flanks)]
+    background = float(np.mean(flanks_f)) if flanks_f.size else float("nan")
+
+    valley_seg = avg_perplexity[start: end + 1]
+    valley_f = valley_seg[np.isfinite(valley_seg)]
+    valley_min = float(np.min(valley_f)) if valley_f.size else float("nan")
+
+    if not (np.isfinite(background) and np.isfinite(valley_min)):
+        return 0.0
+    return max(0.0, background - valley_min)
+
+
+# ---------------------------------------------------------------------------
+# Non-maximum suppression (Step 9)
+# ---------------------------------------------------------------------------
+
+def _overlap_fraction(a_start: int, a_end: int, b_start: int, b_end: int) -> float:
+    """Symmetric overlap fraction: intersection / min(length_a, length_b)."""
+    inter_start = max(a_start, b_start)
+    inter_end = min(a_end, b_end)
+    if inter_start > inter_end:
+        return 0.0
+    inter_len = inter_end - inter_start + 1
+    min_len = min(a_end - a_start + 1, b_end - b_start + 1)
+    return inter_len / max(min_len, 1)
+
+
+def _apply_nms(
+    candidates: list[dict],
+    overlap_threshold: float = NMS_OVERLAP_THRESHOLD,
+) -> list[dict]:
+    """Non-maximum suppression on a list of scored candidate dicts.
+
+    Each dict must have keys: Signal_Start, Signal_End, ValleyScore_raw.
+    Returns a list without mutually overlapping duplicates, keeping the
+    highest-scoring candidate within each overlapping group.
+    """
+    if not candidates:
+        return []
+    sorted_cands = sorted(candidates, key=lambda d: d["ValleyScore_raw"], reverse=True)
+    kept: list[dict] = []
+    for cand in sorted_cands:
+        cs, ce = cand["Signal_Start"], cand["Signal_End"]
+        suppressed = False
+        for kand in kept:
+            ks, ke = kand["Signal_Start"], kand["Signal_End"]
+            if _overlap_fraction(cs, ce, ks, ke) >= overlap_threshold:
+                suppressed = True
+                break
+        if not suppressed:
+            kept.append(cand)
+    return kept
+
+
+# ---------------------------------------------------------------------------
+# Merge (Step 10)
+# ---------------------------------------------------------------------------
+
+def _merge_valleys(intervals: list[tuple[int, int]], gap: int) -> list[tuple[int, int]]:
+    if not intervals:
+        return []
+    merged = [sorted(intervals)[0]]
+    for start, end in sorted(intervals)[1:]:
+        ps, pe = merged[-1]
+        if start <= pe + gap:
+            merged[-1] = (ps, max(pe, end))
+        else:
+            merged.append((start, end))
+    return merged
+
+
+# ---------------------------------------------------------------------------
+# Layer support helpers
+# ---------------------------------------------------------------------------
+
+def _layer_support_counts(
+    lpc_profiles: dict[str, dict[int, np.ndarray]], start: int, end: int
+) -> tuple[dict[str, tuple[int, int]], int, int]:
+    layer_support: dict[str, tuple[int, int]] = {}
+    total_support = 0
+    total_possible = 0
+    for layer in LAYERS:
+        profiles = lpc_profiles.get(layer, {})
+        layer_total = len(profiles)
+        layer_hits = 0
+        for lpc in profiles.values():
+            seg = lpc[start: end + 1]
+            finite = seg[np.isfinite(seg)]
+            if finite.size > 0 and float(np.mean(finite)) > 0:
+                layer_hits += 1
+        layer_support[layer] = (layer_hits, layer_total)
+        total_support += layer_hits
+        total_possible += layer_total
+    return layer_support, total_support, total_possible
+
+
+# ---------------------------------------------------------------------------
+# Valley statistics (Step 13 columns)
+# ---------------------------------------------------------------------------
+
 def valley_statistics(
     valley_index: int,
     start: int,
@@ -422,9 +663,11 @@ def valley_statistics(
     lpc_profiles: dict[str, dict[int, np.ndarray]],
     layer_consensus: dict[str, np.ndarray],
     consensus_lpc: np.ndarray,
+    avg_perplexity: np.ndarray,
     seq: str,
     p_window: int,
     kadane_core: tuple[int | None, int | None],
+    prominence: float = 0.0,
 ) -> dict:
     sl = slice(start, end + 1)
     mono_seg = mono[sl]
@@ -436,14 +679,30 @@ def valley_statistics(
         finite = arr[np.isfinite(arr)]
         return float(np.mean(finite)) if finite.size else float("nan")
 
+    def _fmin(arr: np.ndarray) -> float:
+        finite = arr[np.isfinite(arr)]
+        return float(np.min(finite)) if finite.size else float("nan")
+
+    def _fmax(arr: np.ndarray) -> float:
+        finite = arr[np.isfinite(arr)]
+        return float(np.max(finite)) if finite.size else float("nan")
+
     mono_mean = _fmean(mono_seg)
     di_mean = _fmean(di_seg)
     tri_mean = _fmean(tri_seg)
 
+    # Mean/Min/Max perplexity (average across the three layers per position)
+    avg_seg = avg_perplexity[sl]
+    mean_perplexity = _fmean(avg_seg)
+    min_perplexity = _fmin(avg_seg)
+    max_perplexity = _fmax(avg_seg)
+
     finite_cons = cons_seg[np.isfinite(cons_seg)]
-    contrast = float(np.mean(finite_cons)) if finite_cons.size else 0.0
+    mean_lpc = float(np.mean(finite_cons)) if finite_cons.size else 0.0
+    max_lpc = float(np.max(finite_cons)) if finite_cons.size else 0.0
     persistence = float(np.mean(finite_cons > 0)) if finite_cons.size else 0.0
     area = float(np.sum(np.maximum(finite_cons, 0.0))) if finite_cons.size else 0.0
+    variance = float(np.var(finite_cons)) if finite_cons.size > 1 else 0.0
 
     layer_support, support_hits, support_total = _layer_support_counts(lpc_profiles, start, end)
     scale_support_fraction = (support_hits / support_total) if support_total else 0.0
@@ -460,20 +719,26 @@ def valley_statistics(
     layer_support_fraction = layer_hits / len(LAYERS)
 
     length_signal = end - start + 1
-    # ValleyScore terms:
-    # - contrast: mean ConsensusLPC inside the valley (depth of local complexity collapse)
-    # - persistence: fraction of valley positions with ConsensusLPC > 0
-    # - area: integrated positive ConsensusLPC mass across the valley
-    # - scale_support_fraction / layer_support_fraction: cross-scale and cross-layer agreement
-    # +1 on area keeps very small-but-supported valleys from collapsing to zero score.
-    valley_score_raw = contrast * persistence * (area + 1.0) * scale_support_fraction * (layer_support_fraction + EPSILON)
+    # v11 ValleyScore = MeanLPC × Persistence × ScaleSupport × Area × log(Length) × 1/(Variance+ε)
+    log_length = math.log(max(length_signal, 1))
+    valley_score_raw = (
+        mean_lpc
+        * persistence
+        * scale_support_fraction
+        * (area + 1.0)
+        * log_length
+        * (1.0 / (variance + EPSILON))
+    )
 
     start_nt, end_nt = _nucleotide_bounds(start, end, len(seq), p_window)
     sequence = seq[start_nt: end_nt + 1]
     gc = (sequence.count("G") + sequence.count("C")) / max(len(sequence), 1)
 
     k_start, k_end = kadane_core
-    core_overlap = bool(k_start is not None and k_end is not None and not (end < k_start or start > k_end))
+    core_overlap = bool(
+        k_start is not None and k_end is not None
+        and not (end < k_start or start > k_end)
+    )
 
     return {
         "ID": f"PV_{valley_index:06d}",
@@ -483,12 +748,23 @@ def valley_statistics(
         "Start": int(start_nt),
         "End": int(end_nt),
         "Length": int(end_nt - start_nt + 1),
+        # Perplexity
+        "MeanPerplexity": mean_perplexity,
+        "MinPerplexity": min_perplexity,
+        "MaxPerplexity": max_perplexity,
         "MeanMono": mono_mean,
         "MeanDi": di_mean,
         "MeanTri": tri_mean,
-        "Contrast": float(contrast),
+        # LPC / signal quality
+        "MeanLPC": float(mean_lpc),
+        "MaxLPC": float(max_lpc),
+        "Contrast": float(mean_lpc),        # legacy alias kept for visualizations
+        "ConsensusPeak": float(max_lpc),    # legacy alias
+        "Prominence": float(prominence),
         "Persistence": float(persistence),
         "Area": float(area),
+        "Variance": float(variance),
+        # Support
         "MonoSupport": f"{layer_support['mono'][0]}/{layer_support['mono'][1]}",
         "DiSupport": f"{layer_support['di'][0]}/{layer_support['di'][1]}",
         "TriSupport": f"{layer_support['tri'][0]}/{layer_support['tri'][1]}",
@@ -497,8 +773,8 @@ def valley_statistics(
         "LayerSupport": f"{layer_hits}/{len(LAYERS)}",
         "LayerSupportFraction": float(layer_support_fraction),
         "OverallSupport": f"{support_hits}/{support_total}",
+        # Scoring
         "ValleyScore_raw": float(valley_score_raw),
-        "ConsensusPeak": float(np.max(finite_cons)) if finite_cons.size else 0.0,
         "GC%": float(gc),
         "KadaneCoreOverlap": core_overlap,
         "Sequence": sequence,
@@ -516,8 +792,16 @@ def normalize_valley_score(domains: list[dict]) -> list[dict]:
         d["ValleyScore"] = float(raw[i])
         d["ValleyScoreNormalized"] = float(norm[i])
         d.pop("ValleyScore_raw", None)
+    # Assign rank (1 = best)
+    ranked = sorted(range(len(domains)), key=lambda idx: domains[idx]["ValleyScore"], reverse=True)
+    for rank, idx in enumerate(ranked, 1):
+        domains[idx]["Rank"] = rank
     return domains
 
+
+# ---------------------------------------------------------------------------
+# Main v11 domain-finding pipeline
+# ---------------------------------------------------------------------------
 
 def find_domains(
     mono: np.ndarray,
@@ -530,66 +814,152 @@ def find_domains(
     min_domain: int = MIN_DOMAIN,
     max_domain: int = MAX_DOMAIN,
     merge_gap: int = MERGE_GAP,
+    persistence_threshold: float = PERSISTENCE_THRESHOLD,
+    nms_overlap: float = NMS_OVERLAP_THRESHOLD,
     p_window: int = PERPLEXITY_WINDOW,
-) -> tuple[list[dict], tuple[int | None, int | None]]:
+) -> tuple[list[dict], list[tuple[int, int]], tuple[int | None, int | None]]:
+    """v11 candidate → refine → filter → NMS → merge pipeline.
+
+    Returns (domains, raw_candidates, global_kadane_core).
+    """
     n = len(consensus_lpc)
     if n == 0:
-        return [], (None, None)
+        return [], [], (None, None)
 
-    # Step 6: bounded Kadane-like core detection executed once on ConsensusLPC.
-    work = -consensus_lpc.astype(np.float64)
-    work[~np.isfinite(work)] = np.nan
-    finite = np.isfinite(work)
-    if not np.any(finite):
-        return [], (None, None)
+    # Build position-wise average perplexity for prominence computation.
+    layers_arr = [a for a in (mono, di, tri) if len(a) > 0]
+    if layers_arr:
+        n_ref = min(len(a) for a in layers_arr)
+        stacked = np.full((len(layers_arr), n_ref), np.nan, dtype=np.float64)
+        for i, a in enumerate(layers_arr):
+            stacked[i, :] = a[:n_ref].astype(np.float64)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            avg_perplexity = np.nanmean(stacked, axis=0).astype(np.float32)
+        # Pad to consensus_lpc length if shorter.
+        if len(avg_perplexity) < n:
+            pad = np.full(n - len(avg_perplexity), np.nan, dtype=np.float32)
+            avg_perplexity = np.concatenate([avg_perplexity, pad])
+    else:
+        avg_perplexity = np.full(n, np.nan, dtype=np.float32)
 
-    core_start = core_end = None
-    best_score = np.inf
-    i = 0
-    while i < n:
-        if not finite[i]:
-            i += 1
+    # ── Step 4: Generate candidate valleys (all positive runs) ────────────
+    raw_candidates = _generate_candidate_valleys(consensus_lpc)
+
+    # ── Step 5: Kadane refinement per candidate ────────────────────────────
+    refined: list[tuple[int, int]] = []
+    global_best_score: float = np.inf
+    global_kadane_core: tuple[int | None, int | None] = (None, None)
+
+    for cand_start, cand_end in raw_candidates:
+        rs, re = _refine_with_kadane(
+            consensus_lpc, cand_start, cand_end, min_domain, max_domain
+        )
+        if rs is None or re is None:
             continue
-        j = i
-        while j < n and finite[j]:
-            j += 1
-        seg = work[i:j]
-        if len(seg) >= min_domain:
-            s, e, mv = bounded_min_mean(seg, min_len=min_domain, max_len=max_domain)
-            if s is not None and np.isfinite(mv) and mv < best_score:
-                best_score = mv
-                core_start, core_end = i + s, i + e
-        i = j
+        refined.append((rs, re))
+        # Track global best (most negative mean of -LPC = highest mean LPC)
+        seg_neg = -consensus_lpc[rs: re + 1].astype(np.float64)
+        finite_neg = seg_neg[np.isfinite(seg_neg)]
+        if finite_neg.size > 0:
+            mn = float(np.mean(finite_neg))
+            if mn < global_best_score:
+                global_best_score = mn
+                global_kadane_core = (rs, re)
 
-    intervals: list[tuple[int, int]] = []
-    if core_start is not None and core_end is not None and best_score < 0:
-        intervals.append(_expand_valley(consensus_lpc, core_start, core_end))
+    if not refined:
+        return [], raw_candidates, global_kadane_core
 
-    intervals.extend(_split_positive_runs(consensus_lpc))
-    merged = [(s, e) for s, e in _merge_valleys(intervals, merge_gap) if e - s + 1 >= min_domain]
+    # ── Step 6: Persistence filter (hard) ─────────────────────────────────
+    after_persistence: list[tuple[int, int]] = [
+        (s, e)
+        for s, e in refined
+        if _compute_persistence(consensus_lpc, s, e) >= persistence_threshold
+    ]
 
+    if not after_persistence:
+        return [], raw_candidates, global_kadane_core
+
+    # ── Step 7: Prominence filter (adaptive) ──────────────────────────────
+    prominences = [
+        _compute_prominence(avg_perplexity, s, e)
+        for s, e in after_persistence
+    ]
+    prom_arr = np.array(prominences, dtype=np.float64)
+    # Adaptive threshold: lower quartile of the observed prominence distribution.
+    # Discards the bottom 25 % — removes the weakest valleys while keeping
+    # the majority.
+    if prom_arr.size > 1:
+        adaptive_threshold = float(np.nanpercentile(prom_arr, 25))
+    else:
+        adaptive_threshold = 0.0
+
+    after_prominence: list[tuple[int, int, float]] = [
+        (s, e, prom)
+        for (s, e), prom in zip(after_persistence, prominences)
+        if prom >= adaptive_threshold
+    ]
+
+    if not after_prominence:
+        return [], raw_candidates, global_kadane_core
+
+    # ── Steps 8–11: Score each candidate ──────────────────────────────────
+    scored_dicts: list[dict] = []
+    for s, e, prom in after_prominence:
+        d = valley_statistics(
+            valley_index=0,  # placeholder; reassigned after NMS
+            start=s,
+            end=e,
+            mono=mono,
+            di=di,
+            tri=tri,
+            lpc_profiles=lpc_profiles,
+            layer_consensus=layer_consensus,
+            consensus_lpc=consensus_lpc,
+            avg_perplexity=avg_perplexity,
+            seq=seq,
+            p_window=p_window,
+            kadane_core=global_kadane_core,
+            prominence=prom,
+        )
+        scored_dicts.append(d)
+
+    # ── Step 9: Non-maximum suppression ───────────────────────────────────
+    after_nms = _apply_nms(scored_dicts, overlap_threshold=nms_overlap)
+
+    # ── Step 10: Merge nearby valleys ─────────────────────────────────────
+    nms_intervals = [(d["Signal_Start"], d["Signal_End"]) for d in after_nms]
+    merged_intervals = _merge_valleys(nms_intervals, merge_gap)
+
+    # Reassemble final domain stats for merged intervals.
     domains: list[dict] = []
-    for idx, (s, e) in enumerate(merged, 1):
+    for idx, (s, e) in enumerate(merged_intervals, 1):
+        if e - s + 1 < min_domain:
+            continue
         if e - s + 1 > max_domain:
             e = s + max_domain - 1
-        domains.append(
-            valley_statistics(
-                valley_index=idx,
-                start=s,
-                end=e,
-                mono=mono,
-                di=di,
-                tri=tri,
-                lpc_profiles=lpc_profiles,
-                layer_consensus=layer_consensus,
-                consensus_lpc=consensus_lpc,
-                seq=seq,
-                p_window=p_window,
-                kadane_core=(core_start, core_end),
-            )
+        prom = _compute_prominence(avg_perplexity, s, e)
+        d = valley_statistics(
+            valley_index=idx,
+            start=s,
+            end=e,
+            mono=mono,
+            di=di,
+            tri=tri,
+            lpc_profiles=lpc_profiles,
+            layer_consensus=layer_consensus,
+            consensus_lpc=consensus_lpc,
+            avg_perplexity=avg_perplexity,
+            seq=seq,
+            p_window=p_window,
+            kadane_core=global_kadane_core,
+            prominence=prom,
         )
+        domains.append(d)
+
+    # Sort by genomic position before scoring normalization.
     domains.sort(key=lambda d: d["Signal_Start"])
-    return normalize_valley_score(domains), (core_start, core_end)
+    return normalize_valley_score(domains), raw_candidates, global_kadane_core
 
 
 def _resolve_scales(scales: list[int] | None) -> list[int]:
@@ -599,6 +969,19 @@ def _resolve_scales(scales: list[int] | None) -> list[int]:
 
 
 def analyze_sequence(sequence_id: str, seq: str, **kwargs) -> AnalysisResult:
+    """v11 analysis pipeline.
+
+    Steps
+    -----
+    1. Mono / Di / Tri perplexity (single pass, unchanged from v10).
+    2. Savitzky-Golay smoothing on each perplexity profile (applied once).
+    3. Multi-scale landscapes from smoothed profiles.
+    4. Three-window Local Perplexity Contrast (LPC) at each scale.
+    5. Layer consensus (median across scales, normalized).
+    6. Ensemble ConsensusLPC (median / trimmed-mean across layers).
+    7–11. Candidate generation → Kadane refinement → Persistence filter →
+          Prominence filter → NMS → Merge → Rank.
+    """
     params = {
         "perplexity_window": int(kwargs.get("perplexity_window", PERPLEXITY_WINDOW)),
         "scales": kwargs.get("scales", None),
@@ -610,22 +993,33 @@ def analyze_sequence(sequence_id: str, seq: str, **kwargs) -> AnalysisResult:
         "min_domain": int(kwargs.get("min_domain", MIN_DOMAIN)),
         "max_domain": int(kwargs.get("max_domain", MAX_DOMAIN)),
         "merge_gap": int(kwargs.get("merge_gap", MERGE_GAP)),
+        "sg_window_length": int(kwargs.get("sg_window_length", SG_WINDOW_LENGTH)),
+        "sg_poly_order": int(kwargs.get("sg_poly_order", SG_POLY_ORDER)),
+        "persistence_threshold": float(kwargs.get("persistence_threshold", PERSISTENCE_THRESHOLD)),
+        "nms_overlap": float(kwargs.get("nms_overlap", NMS_OVERLAP_THRESHOLD)),
     }
     scales = _resolve_scales(params["scales"])
     params["resolved_scales"] = scales
 
-    # Step 1: one-pass layer computations.
+    # Step 1: one-pass layer perplexity computations (unchanged from v10).
     mono = compute_mono_perplexity(seq, params["perplexity_window"])
     di = compute_di_perplexity(seq, params["perplexity_window"])
     tri = compute_tri_perplexity(seq, params["perplexity_window"])
 
-    # Step 2–4: multi-scale and per-layer consensus.
-    layer_signals = {"mono": mono, "di": di, "tri": tri}
+    # Step 2: Savitzky-Golay smoothing — applied once per profile.
+    smoothed_mono = smooth_perplexity(mono, params["sg_window_length"], params["sg_poly_order"])
+    smoothed_di = smooth_perplexity(di, params["sg_window_length"], params["sg_poly_order"])
+    smoothed_tri = smooth_perplexity(tri, params["sg_window_length"], params["sg_poly_order"])
+
+    # Steps 3–6: multi-scale landscapes from smoothed profiles, LPC, consensus.
+    smoothed_signals = {"mono": smoothed_mono, "di": smoothed_di, "tri": smoothed_tri}
     landscapes: dict[str, dict[int, np.ndarray]] = {}
     lpc_profiles: dict[str, dict[int, np.ndarray]] = {}
     layer_consensus: dict[str, np.ndarray] = {}
     for layer in LAYERS:
-        landscapes[layer] = build_landscapes(layer_signals[layer], scales, params["landscape_method"])
+        landscapes[layer] = build_landscapes(
+            smoothed_signals[layer], scales, params["landscape_method"]
+        )
         lpc_profiles[layer] = {
             s: _compute_scale_lpc(
                 landscapes[layer][s],
@@ -640,11 +1034,11 @@ def analyze_sequence(sequence_id: str, seq: str, **kwargs) -> AnalysisResult:
             normalization=params["normalization_method"],
         )
 
-    # Step 5: final ensemble consensus.
+    # Step 6 (ensemble): final ConsensusLPC.
     consensus_lpc = build_ensemble_consensus(layer_consensus, method=params["ensemble_method"])
 
-    # Step 6–8: one-pass core detection + expanded valley reporting.
-    domains, kadane_core = find_domains(
+    # Steps 7–11: v11 detection pipeline.
+    domains, raw_candidates, kadane_core = find_domains(
         mono=mono,
         di=di,
         tri=tri,
@@ -655,6 +1049,8 @@ def analyze_sequence(sequence_id: str, seq: str, **kwargs) -> AnalysisResult:
         min_domain=params["min_domain"],
         max_domain=params["max_domain"],
         merge_gap=params["merge_gap"],
+        persistence_threshold=params["persistence_threshold"],
+        nms_overlap=params["nms_overlap"],
         p_window=params["perplexity_window"],
     )
     for d in domains:
@@ -666,10 +1062,14 @@ def analyze_sequence(sequence_id: str, seq: str, **kwargs) -> AnalysisResult:
         mono=mono,
         di=di,
         tri=tri,
+        smoothed_mono=smoothed_mono,
+        smoothed_di=smoothed_di,
+        smoothed_tri=smoothed_tri,
         landscapes=landscapes,
         lpc_profiles=lpc_profiles,
         layer_consensus=layer_consensus,
         consensus_lpc=consensus_lpc,
+        candidates=raw_candidates,
         domains=domains,
         params=params,
         kadane_core=kadane_core,
@@ -722,8 +1122,9 @@ def export_gff(df: pd.DataFrame, gff3: bool = False) -> bytes:
         attr = (
             f"ID={row['ID']};"
             f"ValleyScore={row['ValleyScore']:.4f};"
-            f"Contrast={row['Contrast']:.4f};"
+            f"MeanLPC={row.get('MeanLPC', row.get('Contrast', 0.0)):.4f};"
             f"Persistence={row['Persistence']:.4f};"
+            f"Prominence={row.get('Prominence', 0.0):.4f};"
             f"Area={row['Area']:.4f};"
             f"ScaleSupport={row['ScaleSupport']};"
             f"LayerSupport={row['LayerSupport']};"
@@ -749,7 +1150,7 @@ def export_gff(df: pd.DataFrame, gff3: bool = False) -> bytes:
 
 
 def cli() -> None:
-    parser = argparse.ArgumentParser(description="REGPLEX v10 — hierarchical perplexity ensemble")
+    parser = argparse.ArgumentParser(description="REGPLEX v11 — hierarchical perplexity ensemble with biological valley detection")
     parser.add_argument("fasta", help="Input FASTA file")
     parser.add_argument("--out", default="regplex_valleys.csv", help="Output CSV path")
     parser.add_argument(
@@ -773,6 +1174,13 @@ def cli() -> None:
         default=ENSEMBLE_METHOD,
         choices=["median", "trimmed_mean"],
     )
+    parser.add_argument("--sg-window", type=int, default=SG_WINDOW_LENGTH, help="Savitzky-Golay window length (odd)")
+    parser.add_argument("--sg-order", type=int, default=SG_POLY_ORDER, help="Savitzky-Golay polynomial order")
+    parser.add_argument("--persistence", type=float, default=PERSISTENCE_THRESHOLD, help="Persistence threshold (0–1)")
+    parser.add_argument("--nms-overlap", type=float, default=NMS_OVERLAP_THRESHOLD, help="NMS overlap fraction (0–1)")
+    parser.add_argument("--min-domain", type=int, default=MIN_DOMAIN, help="Minimum valley length (bp)")
+    parser.add_argument("--max-domain", type=int, default=MAX_DOMAIN, help="Maximum valley length (bp)")
+    parser.add_argument("--merge-gap", type=int, default=MERGE_GAP, help="Gap for post-NMS merging (bp)")
     args = parser.parse_args()
 
     with open(args.fasta, encoding="utf-8") as handle:
@@ -788,6 +1196,13 @@ def cli() -> None:
             landscape_method=args.landscape_method,
             normalization_method=args.normalization_method,
             ensemble_method=args.ensemble_method,
+            sg_window_length=args.sg_window,
+            sg_poly_order=args.sg_order,
+            persistence_threshold=args.persistence,
+            nms_overlap=args.nms_overlap,
+            min_domain=args.min_domain,
+            max_domain=args.max_domain,
+            merge_gap=args.merge_gap,
         )
         for header, sequence in records
     ]
