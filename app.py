@@ -5,7 +5,6 @@ import html
 import re
 import time
 from pathlib import Path
-from textwrap import dedent
 
 import pandas as pd
 import streamlit as st
@@ -99,7 +98,7 @@ def _load_styles() -> None:
 
 
 def _render_html_block(body: str) -> None:
-    rendered = dedent(body).strip()
+    rendered = body.strip()
     if hasattr(st, "html"):
         st.html(rendered)
     else:
