@@ -1,59 +1,58 @@
-# REGPLEX v9
+# REGPLEX
 
-**Multi-scale Perplexity Valley Framework for DNA Regulatory Region Discovery**
+<p align="center">
+  <img src="regplexlogo.png" alt="REGPLEX logo" width="340" />
+</p>
 
-REGPLEX v9 is a training-free, species-independent framework for discovering
-**Perplexity Valleys (PVs)**: continuous genomic regions where sequence
-uncertainty is consistently lower than the surrounding DNA *across multiple
-observation scales*.
+<p align="center"><strong>Hierarchical Perplexity Ensemble for Explainable Regulatory Valley Discovery</strong></p>
 
-## Core pipeline
+## Scientific Motivation
 
+REGPLEX v10 models genomic complexity as three independent information-theoretic observers:
+
+- **Mononucleotide perplexity**: composition and GC/AT structure
+- **Dinucleotide perplexity**: local dependency and structural organization (primary layer)
+- **Trinucleotide perplexity**: higher-order sequence grammar
+
+The method is training-free and uses no learned model weights.
+
+## Algorithm
+
+1. Compute mono/di/tri perplexity **once**.
+2. Build multi-scale landscapes (default: 25, 50, 100, 200, 400 bp) using rolling mean or median.
+3. At each scale, compute three-window local perplexity contrast (upstream/spacer/candidate/spacer/downstream).
+4. Normalize each scale LPC within each layer (robust z-score or percentile), then median-combine to layer consensus.
+5. Ensemble layer consensuses to final **ConsensusLPC** (median or trimmed mean).
+6. Run bounded Kadane core detection once on ConsensusLPC, expand boundaries while signal stays positive, merge overlaps.
+7. Report valley support and intermediate metrics for full explainability.
+
+## Illustrated Workflow
+
+```svg
+<svg width="980" height="160" viewBox="0 0 980 160" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="REGPLEX workflow">
+  <defs>
+    <style>
+      .n{fill:#fff;stroke:#1E3A8A;stroke-width:1.5;rx:10}
+      .t{font:600 12px Inter,Arial;fill:#0f172a}
+      .a{stroke:#0F766E;stroke-width:2;marker-end:url(#m)}
+    </style>
+    <marker id="m" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#0F766E"/></marker>
+  </defs>
+  <rect class="n" x="20" y="50" width="110" height="48"/><text class="t" x="44" y="79">DNA</text>
+  <rect class="n" x="160" y="16" width="120" height="34"/><text class="t" x="174" y="37">Mono</text>
+  <rect class="n" x="160" y="62" width="120" height="34"/><text class="t" x="178" y="83">Di</text>
+  <rect class="n" x="160" y="108" width="120" height="34"/><text class="t" x="175" y="129">Tri</text>
+  <rect class="n" x="310" y="50" width="140" height="48"/><text class="t" x="326" y="79">Multi-scale</text>
+  <rect class="n" x="480" y="50" width="150" height="48"/><text class="t" x="507" y="79">Layer consensus</text>
+  <rect class="n" x="660" y="50" width="130" height="48"/><text class="t" x="679" y="79">ConsensusLPC</text>
+  <rect class="n" x="820" y="50" width="140" height="48"/><text class="t" x="840" y="79">Kadane → Valleys</text>
+  <line class="a" x1="130" y1="74" x2="160" y2="74"/>
+  <line class="a" x1="280" y1="74" x2="310" y2="74"/>
+  <line class="a" x1="450" y1="74" x2="480" y2="74"/>
+  <line class="a" x1="630" y1="74" x2="660" y2="74"/>
+  <line class="a" x1="790" y1="74" x2="820" y2="74"/>
+</svg>
 ```
-DNA sequence
-↓
-10-mer dinucleotide perplexity (P1) — computed exactly once
-↓
-Multi-scale Landscapes (default: 25 / 50 / 100 / 200 / 400 bp)
-↓
-Per-scale Three-window LPC (upstream = downstream = scale, spacer = scale÷2)
-↓
-Robust z-score normalisation of each LPC profile
-↓
-Consensus LPC (nanmedian across normalised profiles)
-↓
-Bounded Kadane valley core detection + natural boundary expansion
-↓
-Valley merging
-↓
-Quality metrics + valley score
-↓
-Optional motif annotation (IUPAC/regex; valleys only)
-```
-
-## Scientific definitions
-
-At each observation scale *s*, for every genomic position:
-
-- `upstream = s`, `spacer = s÷2`, `candidate = max(s, 50)`, `downstream = s`
-- `LPC_up  = UpstreamMean  − CandidateMean`
-- `LPC_down = DownstreamMean − CandidateMean`
-- Reject if `LPC_up ≤ 0` or `LPC_down ≤ 0`
-- `LPC = min(LPC_up, LPC_down)`
-
-Each LPC profile is independently normalised by robust z-score:
-
-```
-z = (x − median) / (MAD × 1.4826)
-```
-
-The **Consensus LPC** is the position-wise nanmedian of all normalised profiles.
-
-Valley quality metrics:
-
-- `Persistence   = fraction of valley positions with ConsensusLPC > 0`
-- `ScaleSupport  = fraction of scales with mean raw LPC > 0 inside the valley`
-- `ValleyScore   = MeanLPC × Persistence × ScaleSupport × log(Length) × 1/(Variance+ε)`
 
 ## Installation
 
@@ -63,74 +62,85 @@ cd PerCALL
 pip install -r requirements.txt
 ```
 
-## Usage
+## Quick Start
 
-### Streamlit app
+### Web interface
 
 ```bash
 streamlit run app.py
 ```
 
-### Command line
+### CLI
 
 ```bash
-python regplex_core.py examples/ecoli.fasta --out regplex_valleys.csv
-python regplex_core.py examples/ecoli.fasta --base-scale 200 --landscape-method median
+python regplex_core.py examples/ecoli.fasta --out regplex_v10_valleys.csv
+python regplex_core.py examples/ecoli.fasta --scales 25,50,100,200,400 --landscape-method median --normalization-method robust_z --ensemble-method median
 ```
+
+## Notebook
+
+- `REGPLEX_Local.ipynb` contains a 15-section scientific walkthrough aligned to v10.
+
+## Examples
+
+- `examples/ecoli.fasta`
+- `examples/human_promoters.fasta`
 
 ## Outputs
 
-Downloads include: CSV · Excel (.xlsx) · BED · GFF · GFF3 · FASTA · JSON
+Core valley fields include:
 
-## Reported columns
+- Coordinates and length
+- `Contrast`, `Persistence`, `Area`
+- `MonoSupport`, `DiSupport`, `TriSupport`
+- `ScaleSupport`, `LayerSupport`, `OverallSupport`
+- `ValleyScore`, `ValleyScoreNormalized`
+- motif annotations and sequence extraction
 
-| Column | Description |
-|---|---|
-| ID | Valley identifier (PV_XXXXXX) |
-| Sequence_ID | Source sequence name |
-| Start / End / Length | Nucleotide coordinates (0-based) |
-| MeanP1 / MinimumP1 / MaximumP1 | P1 statistics inside the valley |
-| Variance / SD / CV | P1 variability |
-| MeanBackground | Mean P1 in flanking regions |
-| MeanLPC / MaximumLPC | Consensus LPC statistics |
-| AreaUnderValley | Sum of positive ConsensusLPC |
-| Persistence | Fraction of valley with ConsensusLPC > 0 |
-| ScaleSupport | Fraction of scales supporting the valley |
-| NScales | Total number of observation scales used |
-| ValleyScore / ValleyScoreNormalized | Raw and normalised valley scores |
-| GC% | GC content of the valley sequence |
-| MotifCount / Motifs | Motif annotation results |
-| Sequence | DNA sequence of the valley |
+Formats: CSV, Excel, BED, GFF/GFF3, FASTA, JSON.
 
-## Visualizations (Plotly, SVG/PNG/PDF export)
+## Figures
 
-1. Perplexity Profile (P1)
-2. Multi-scale Perplexity Landscapes
-3. Scale Support Heatmap
-4. Consensus LPC
-5. Kadane Segments
-6. Valley Ranking
-7. Motif Architecture
-8. Complete Workflow (Sankey)
+The UI generates publication-ready Plotly figures:
 
-## REGPLEX v9 interface
+1. Layer perplexity profiles (mono/di/tri)
+2. Per-layer multi-scale landscapes
+3. Layer consensus LPC
+4. Ensemble ConsensusLPC
+5. Scale/layer support heatmap
+6. Kadane core with expanded valleys
+7. Valley ranking
+8. Motif architecture
+9. Workflow diagram
 
-- Full-width, no-sidebar layout with fixed top navigation
-- Pages: Home · Analysis · Results · Motifs · About
-- New parameter controls: Base scale · Custom scales · Merge gap · Min/Max candidate
+## Performance
 
-## Repository layout
-
-- `app.py` — Streamlit application
-- `regplex_core.py` — Multi-scale analysis engine
-- `motif_engine.py` — IUPAC/regex motif scanner
-- `visualization.py` — Plotly figure library
-- `styles.css` — UI design system
-- `REGPLEX_Local.ipynb` — Jupyter notebook interface
-- `examples/` — Example FASTA files
+- Fully NumPy/Pandas-based computation
+- Prefix-sum accelerated rolling means
+- Single-pass layer signal computation
+- No repeated raw perplexity calculations
 
 ## Citation
 
-For manuscript-ready submission text, see:
+If you use REGPLEX in research, cite this repository and include algorithm version (`v10`) in methods.
 
-- [`NATURE_SUBMISSION_PACKAGE.md`](NATURE_SUBMISSION_PACKAGE.md) — Methods, Reporting Summary, Code Availability, Data Availability, and references
+## License
+
+MIT
+
+## Contributing
+
+Contributions are welcome. Please open an issue with:
+
+- biological question
+- expected behavior
+- reproducible FASTA example
+
+## Screenshots
+
+Run the Streamlit app and capture:
+
+- Home hero + workflow
+- Analysis controls
+- Results tabs (ConsensusLPC, support, ranking)
+- About scientific workflow page
