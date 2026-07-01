@@ -22,9 +22,9 @@ NORMALIZATION_METHOD = "robust_z"  # robust_z | percentile
 ENSEMBLE_METHOD = "median"  # median | trimmed_mean
 MIN_CANDIDATE = 100     # Kadane refinement minimum length (bp)
 MAX_CANDIDATE = 1000    # Kadane refinement maximum length (bp)
-MIN_DOMAIN = 100        # Final valley minimum length (bp); nucleotide output ≥ 100 mer
+MIN_DOMAIN = 100        # Final valley minimum length (bp); nucleotide output ≥ 100 mer (recommended: 150 bp)
 MAX_DOMAIN = 1000       # Final valley maximum length (bp)
-MERGE_GAP = 25          # Gap for post-NMS valley merging (bp)
+MERGE_GAP = 50          # Gap for post-NMS valley merging (bp)
 SG_WINDOW_LENGTH = 21   # Savitzky-Golay window length (must be odd)
 SG_POLY_ORDER = 3       # Savitzky-Golay polynomial order
 PERSISTENCE_THRESHOLD = 0.80  # Hard persistence filter (fraction of positions with ConsensusLPC > 0)
@@ -32,6 +32,12 @@ NMS_OVERLAP_THRESHOLD = 0.50  # Non-maximum suppression overlap fraction
 TOP_N_DISPLAY = 20      # Default number of top valleys to display
 FLANK_WINDOW = 100      # Flanking window size for prominence computation (bp)
 EPSILON = 1e-9
+
+# VPI (Valley Persistence Index) parameters — v12 biological domain detector
+MAX_INTERNAL_GAP = 20          # Max bp gap to fill inside VPI candidate runs
+VPI_CANDIDATE_THRESHOLD = 0.6  # VPI threshold for candidate generation and persistence scoring
+VPI_EXPAND_THRESHOLD = 0.3     # VPI threshold for left/right valley expansion
+VPI_PERSISTENCE_SCORE_THRESHOLD = 0.80  # Min fraction of valley positions with VPI >= VPI_CANDIDATE_THRESHOLD
 
 LAYERS = ("mono", "di", "tri")
 _LAYER_LABELS = {"mono": "Mono", "di": "Di", "tri": "Tri"}
@@ -60,6 +66,7 @@ class AnalysisResult:
     domains: list[dict]
     params: dict
     kadane_core: tuple[int | None, int | None]
+    vpi: np.ndarray = field(default_factory=lambda: np.array([], dtype=np.float32))
 
 
 def parse_fasta(text: str) -> list[tuple[str, str]]:
@@ -439,6 +446,131 @@ def _split_positive_runs(consensus_lpc: np.ndarray) -> list[tuple[int, int]]:
     return runs
 
 
+# ---------------------------------------------------------------------------
+# v12 VPI (Valley Persistence Index) engine
+# ---------------------------------------------------------------------------
+
+def _compute_vpi(lpc_profiles: dict[str, dict[int, np.ndarray]], n: int) -> np.ndarray:
+    """Compute Valley Persistence Index for each signal position.
+
+    VPI[i] = (number of scale×layer combinations with LPC[i] > 0) / (total combinations).
+    A VPI of 1.0 means all scales and layers support a valley at that position.
+    """
+    support = np.zeros(n, dtype=np.float64)
+    total = 0
+    for layer in LAYERS:
+        for lpc in lpc_profiles.get(layer, {}).values():
+            end = min(len(lpc), n)
+            finite_pos = np.isfinite(lpc[:end]) & (lpc[:end] > 0)
+            support[:end] += finite_pos.astype(np.float64)
+            total += 1
+    if total == 0:
+        return np.zeros(n, dtype=np.float32)
+    return (support / total).astype(np.float32)
+
+
+def _fill_gaps_vectorized(mask: np.ndarray, max_gap: int) -> np.ndarray:
+    """Fill internal gaps shorter than max_gap in a boolean mask (fully vectorized).
+
+    Only fills gaps that are bounded by True on both sides; boundary gaps are
+    never filled.  Uses cumulative-sum index marking — no loops over positions.
+    """
+    if max_gap <= 0 or not np.any(mask):
+        return mask.astype(bool).copy()
+    n = len(mask)
+    filled = mask.astype(bool).copy()
+    # Detect False-run boundaries by padding with True on each end.
+    padded = np.concatenate([[True], filled, [True]])
+    delta = np.diff(padded.view(np.int8))          # length = n+1
+    false_starts = np.flatnonzero(delta < 0)       # first position of each False run (orig coords)
+    false_ends = np.flatnonzero(delta > 0) - 1     # last position of each False run (orig coords)
+    if false_starts.size == 0:
+        return filled
+    # Only fill runs that are (a) internal and (b) short enough.
+    is_internal = (false_starts > 0) & (false_ends < n - 1)
+    gap_lengths = false_ends - false_starts + 1
+    to_fill = is_internal & (gap_lengths <= max_gap)
+    fs = false_starts[to_fill]
+    fe = false_ends[to_fill]
+    if fs.size > 0:
+        marker = np.zeros(n + 1, dtype=np.int32)
+        np.add.at(marker, fs, 1)
+        np.add.at(marker, fe + 1, -1)
+        filled |= np.cumsum(marker[:n]).astype(bool)
+    return filled
+
+
+def _generate_vpi_candidates(
+    vpi: np.ndarray,
+    max_gap: int = MAX_INTERNAL_GAP,
+    threshold: float = VPI_CANDIDATE_THRESHOLD,
+) -> list[tuple[int, int]]:
+    """Generate candidate valleys from VPI >= threshold runs with gap tolerance.
+
+    Gaps shorter than max_gap inside a high-VPI region are bridged before
+    extracting connected components.  No per-nucleotide loops.
+    """
+    n = len(vpi)
+    if n == 0:
+        return []
+    mask = vpi >= threshold
+    if not np.any(mask):
+        return []
+    filled = _fill_gaps_vectorized(mask, max_gap)
+    padded = np.concatenate([[False], filled, [False]])
+    changes = np.diff(padded.astype(np.int8))
+    starts = np.flatnonzero(changes > 0)
+    ends = np.flatnonzero(changes < 0) - 1
+    return [(int(s), int(e)) for s, e in zip(starts, ends)]
+
+
+def _expand_valley_vpi(
+    vpi: np.ndarray,
+    consensus_lpc: np.ndarray,
+    core_start: int,
+    core_end: int,
+    expand_threshold: float = VPI_EXPAND_THRESHOLD,
+) -> tuple[int, int]:
+    """Expand valley boundaries while VPI > expand_threshold OR ConsensusLPC > 0.
+
+    Stops at the first position where both conditions fail simultaneously.
+    Fully vectorized using array index operations.
+    """
+    n = len(vpi)
+    expand_cond = (vpi > expand_threshold) | (np.isfinite(consensus_lpc) & (consensus_lpc > 0))
+
+    # Left expansion: find first False scanning backwards from core_start-1
+    if core_start == 0:
+        left = 0
+    else:
+        rev = expand_cond[:core_start][::-1]
+        false_in_rev = np.flatnonzero(~rev)
+        left = 0 if false_in_rev.size == 0 else (core_start - int(false_in_rev[0]))
+
+    # Right expansion: find first False scanning forward from core_end+1
+    if core_end >= n - 1:
+        right = n - 1
+    else:
+        fwd = expand_cond[core_end + 1:]
+        false_positions = np.flatnonzero(~fwd)
+        right = n - 1 if false_positions.size == 0 else (core_end + int(false_positions[0]))
+
+    return left, right
+
+
+def _compute_vpi_persistence(
+    vpi: np.ndarray,
+    start: int,
+    end: int,
+    threshold: float = VPI_CANDIDATE_THRESHOLD,
+) -> float:
+    """Fraction of positions in [start, end] with VPI >= threshold."""
+    seg = vpi[start: end + 1]
+    if seg.size == 0:
+        return 0.0
+    return float(np.mean(seg >= threshold))
+
+
 def _layer_support_counts(lpc_profiles: dict[str, dict[int, np.ndarray]], start: int, end: int) -> tuple[dict[str, tuple[int, int]], int, int]:
     layer_support: dict[str, tuple[int, int]] = {}
     total_support = 0
@@ -668,6 +800,7 @@ def valley_statistics(
     p_window: int,
     kadane_core: tuple[int | None, int | None],
     prominence: float = 0.0,
+    valley_kadane_core: tuple[int | None, int | None] = (None, None),
 ) -> dict:
     sl = slice(start, end + 1)
     mono_seg = mono[sl]
@@ -719,13 +852,13 @@ def valley_statistics(
     layer_support_fraction = layer_hits / len(LAYERS)
 
     length_signal = end - start + 1
-    # v11 ValleyScore = MeanLPC × Persistence × ScaleSupport × Area × log(Length) × 1/(Variance+ε)
+    # v12 ValleyScore = MeanLPC × Persistence × ScaleSupport × Prominence × log(Length) × 1/(Variance+ε)
     log_length = math.log(max(length_signal, 1))
     valley_score_raw = (
         mean_lpc
         * persistence
         * scale_support_fraction
-        * (area + 1.0)
+        * prominence
         * log_length
         * (1.0 / (variance + EPSILON))
     )
@@ -739,6 +872,9 @@ def valley_statistics(
         k_start is not None and k_end is not None
         and not (end < k_start or start > k_end)
     )
+
+    # Per-valley Kadane core (for visualization — boundaries come from expansion)
+    vk_start, vk_end = valley_kadane_core
 
     return {
         "ID": f"PV_{valley_index:06d}",
@@ -777,6 +913,9 @@ def valley_statistics(
         "ValleyScore_raw": float(valley_score_raw),
         "GC%": float(gc),
         "KadaneCoreOverlap": core_overlap,
+        # Per-valley Kadane core (visualization only; final bounds from VPI expansion)
+        "KadaneCoreStart": int(vk_start) if vk_start is not None else None,
+        "KadaneCoreEnd": int(vk_end) if vk_end is not None else None,
         "Sequence": sequence,
     }
 
@@ -800,7 +939,7 @@ def normalize_valley_score(domains: list[dict]) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Main v11 domain-finding pipeline
+# Main v12 domain-finding pipeline
 # ---------------------------------------------------------------------------
 
 def find_domains(
@@ -817,8 +956,19 @@ def find_domains(
     persistence_threshold: float = PERSISTENCE_THRESHOLD,
     nms_overlap: float = NMS_OVERLAP_THRESHOLD,
     p_window: int = PERPLEXITY_WINDOW,
+    vpi: np.ndarray | None = None,
+    vpi_candidate_threshold: float = VPI_CANDIDATE_THRESHOLD,
+    vpi_expand_threshold: float = VPI_EXPAND_THRESHOLD,
+    vpi_persistence_score_threshold: float = VPI_PERSISTENCE_SCORE_THRESHOLD,
+    max_internal_gap: int = MAX_INTERNAL_GAP,
 ) -> tuple[list[dict], list[tuple[int, int]], tuple[int | None, int | None]]:
-    """v11 candidate → refine → filter → NMS → merge pipeline.
+    """v12 VPI-driven biological domain detection pipeline.
+
+    Candidate → VPI expansion → ConsensusLPC persistence → VPI persistence →
+    Prominence (75th pct) → Score → NMS → Merge → Final Valleys.
+
+    Kadane is used only to identify the best core region for visualization;
+    final valley boundaries come from VPI-based expansion.
 
     Returns (domains, raw_candidates, global_kadane_core).
     """
@@ -836,78 +986,89 @@ def find_domains(
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)
             avg_perplexity = np.nanmean(stacked, axis=0).astype(np.float32)
-        # Pad to consensus_lpc length if shorter.
         if len(avg_perplexity) < n:
             pad = np.full(n - len(avg_perplexity), np.nan, dtype=np.float32)
             avg_perplexity = np.concatenate([avg_perplexity, pad])
     else:
         avg_perplexity = np.full(n, np.nan, dtype=np.float32)
 
-    # ── Step 4: Generate candidate valleys (all positive runs) ────────────
-    raw_candidates = _generate_candidate_valleys(consensus_lpc)
+    # Compute VPI if not supplied externally.
+    if vpi is None or len(vpi) != n:
+        vpi = _compute_vpi(lpc_profiles, n)
 
-    # ── Step 5: Kadane refinement per candidate ────────────────────────────
-    refined: list[tuple[int, int]] = []
+    # ── Step 4: VPI-based candidate generation with gap tolerance ──────────
+    raw_candidates = _generate_vpi_candidates(vpi, max_internal_gap, vpi_candidate_threshold)
+
+    # ── Step 5: Expand each candidate then find Kadane core (viz only) ─────
+    # tuple: (exp_start, exp_end, cand_start, cand_end, kadane_start, kadane_end)
+    expanded: list[tuple[int, int, int, int, int | None, int | None]] = []
     global_best_score: float = np.inf
     global_kadane_core: tuple[int | None, int | None] = (None, None)
 
     for cand_start, cand_end in raw_candidates:
-        rs, re = _refine_with_kadane(
-            consensus_lpc, cand_start, cand_end, min_domain, max_domain
+        # Expand left/right using VPI and ConsensusLPC signal.
+        exp_start, exp_end = _expand_valley_vpi(
+            vpi, consensus_lpc, cand_start, cand_end, vpi_expand_threshold
         )
-        if rs is None or re is None:
+        if exp_end - exp_start + 1 < min_domain:
             continue
-        refined.append((rs, re))
-        # Track global best (most negative mean of -LPC = highest mean LPC)
-        seg_neg = -consensus_lpc[rs: re + 1].astype(np.float64)
-        finite_neg = seg_neg[np.isfinite(seg_neg)]
-        if finite_neg.size > 0:
-            mn = float(np.mean(finite_neg))
-            if mn < global_best_score:
-                global_best_score = mn
-                global_kadane_core = (rs, re)
+        # Kadane identifies the best core for visualization — NOT the final boundary.
+        ks, ke = _refine_with_kadane(consensus_lpc, exp_start, exp_end, min_domain, max_domain)
+        if ks is not None and ke is not None:
+            seg_neg = -consensus_lpc[ks: ke + 1].astype(np.float64)
+            finite_neg = seg_neg[np.isfinite(seg_neg)]
+            if finite_neg.size > 0:
+                mn = float(np.mean(finite_neg))
+                if mn < global_best_score:
+                    global_best_score = mn
+                    global_kadane_core = (ks, ke)
+        expanded.append((exp_start, exp_end, cand_start, cand_end, ks, ke))
 
-    if not refined:
+    if not expanded:
         return [], raw_candidates, global_kadane_core
 
-    # ── Step 6: Persistence filter (hard) ─────────────────────────────────
-    after_persistence: list[tuple[int, int]] = [
-        (s, e)
-        for s, e in refined
+    # ── Step 6a: ConsensusLPC persistence filter on expanded valley (hard) ─
+    after_persistence: list[tuple[int, int, int, int, int | None, int | None]] = [
+        (s, e, cs, ce, ks, ke)
+        for s, e, cs, ce, ks, ke in expanded
         if _compute_persistence(consensus_lpc, s, e) >= persistence_threshold
     ]
-
     if not after_persistence:
         return [], raw_candidates, global_kadane_core
 
-    # ── Step 7: Prominence filter (adaptive) ──────────────────────────────
+    # ── Step 6b: VPI persistence filter on the VPI core (hard) ───────────
+    # Applied to the pre-expansion VPI candidate — the high-VPI core that
+    # triggered the valley.  Expansion intentionally adds lower-VPI shoulders;
+    # the quality gate must target the core, not the shoulders.
+    after_vpi_pers: list[tuple[int, int, int, int, int | None, int | None]] = [
+        (s, e, cs, ce, ks, ke)
+        for s, e, cs, ce, ks, ke in after_persistence
+        if _compute_vpi_persistence(vpi, cs, ce, vpi_candidate_threshold) >= vpi_persistence_score_threshold
+    ]
+    if not after_vpi_pers:
+        return [], raw_candidates, global_kadane_core
+
+    # ── Step 7: Prominence filter (75th percentile — biological contrast) ─
     prominences = [
         _compute_prominence(avg_perplexity, s, e)
-        for s, e in after_persistence
+        for s, e, cs, ce, ks, ke in after_vpi_pers
     ]
     prom_arr = np.array(prominences, dtype=np.float64)
-    # Adaptive threshold: lower quartile of the observed prominence distribution.
-    # Discards the bottom 25 % — removes the weakest valleys while keeping
-    # the majority.
-    if prom_arr.size > 1:
-        adaptive_threshold = float(np.nanpercentile(prom_arr, 25))
-    else:
-        adaptive_threshold = 0.0
+    adaptive_threshold = float(np.nanpercentile(prom_arr, 75)) if prom_arr.size > 1 else 0.0
 
-    after_prominence: list[tuple[int, int, float]] = [
-        (s, e, prom)
-        for (s, e), prom in zip(after_persistence, prominences)
+    after_prominence: list[tuple[int, int, int | None, int | None, float]] = [
+        (s, e, ks, ke, prom)
+        for (s, e, cs, ce, ks, ke), prom in zip(after_vpi_pers, prominences)
         if prom >= adaptive_threshold
     ]
-
     if not after_prominence:
         return [], raw_candidates, global_kadane_core
 
     # ── Steps 8–11: Score each candidate ──────────────────────────────────
     scored_dicts: list[dict] = []
-    for s, e, prom in after_prominence:
+    for s, e, ks, ke, prom in after_prominence:
         d = valley_statistics(
-            valley_index=0,  # placeholder; reassigned after NMS
+            valley_index=0,
             start=s,
             end=e,
             mono=mono,
@@ -921,6 +1082,7 @@ def find_domains(
             p_window=p_window,
             kadane_core=global_kadane_core,
             prominence=prom,
+            valley_kadane_core=(ks, ke),
         )
         scored_dicts.append(d)
 
@@ -939,6 +1101,7 @@ def find_domains(
         if e - s + 1 > max_domain:
             e = s + max_domain - 1
         prom = _compute_prominence(avg_perplexity, s, e)
+        ks, ke = _refine_with_kadane(consensus_lpc, s, e, min_domain, max_domain)
         d = valley_statistics(
             valley_index=idx,
             start=s,
@@ -954,6 +1117,7 @@ def find_domains(
             p_window=p_window,
             kadane_core=global_kadane_core,
             prominence=prom,
+            valley_kadane_core=(ks, ke),
         )
         domains.append(d)
 
@@ -969,7 +1133,7 @@ def _resolve_scales(scales: list[int] | None) -> list[int]:
 
 
 def analyze_sequence(sequence_id: str, seq: str, **kwargs) -> AnalysisResult:
-    """v11 analysis pipeline.
+    """v12 analysis pipeline.
 
     Steps
     -----
@@ -979,8 +1143,9 @@ def analyze_sequence(sequence_id: str, seq: str, **kwargs) -> AnalysisResult:
     4. Three-window Local Perplexity Contrast (LPC) at each scale.
     5. Layer consensus (median across scales, normalized).
     6. Ensemble ConsensusLPC (median / trimmed-mean across layers).
-    7–11. Candidate generation → Kadane refinement → Persistence filter →
-          Prominence filter → NMS → Merge → Rank.
+    7. Valley Persistence Index (VPI) across all scale×layer combinations.
+    8–14. VPI candidates → gap-fill → expand → ConsensusLPC persistence →
+          VPI persistence → Prominence (75th pct) → Score → NMS → Merge → Rank.
     """
     params = {
         "perplexity_window": int(kwargs.get("perplexity_window", PERPLEXITY_WINDOW)),
@@ -1037,7 +1202,10 @@ def analyze_sequence(sequence_id: str, seq: str, **kwargs) -> AnalysisResult:
     # Step 6 (ensemble): final ConsensusLPC.
     consensus_lpc = build_ensemble_consensus(layer_consensus, method=params["ensemble_method"])
 
-    # Steps 7–11: v11 detection pipeline.
+    # Step 7: Valley Persistence Index across all scale×layer combinations.
+    vpi = _compute_vpi(lpc_profiles, len(consensus_lpc))
+
+    # Steps 8–14: v12 detection pipeline.
     domains, raw_candidates, kadane_core = find_domains(
         mono=mono,
         di=di,
@@ -1052,6 +1220,7 @@ def analyze_sequence(sequence_id: str, seq: str, **kwargs) -> AnalysisResult:
         persistence_threshold=params["persistence_threshold"],
         nms_overlap=params["nms_overlap"],
         p_window=params["perplexity_window"],
+        vpi=vpi,
     )
     for d in domains:
         d["Sequence_ID"] = sequence_id
@@ -1073,6 +1242,7 @@ def analyze_sequence(sequence_id: str, seq: str, **kwargs) -> AnalysisResult:
         domains=domains,
         params=params,
         kadane_core=kadane_core,
+        vpi=vpi,
     )
 
 
@@ -1150,7 +1320,7 @@ def export_gff(df: pd.DataFrame, gff3: bool = False) -> bytes:
 
 
 def cli() -> None:
-    parser = argparse.ArgumentParser(description="REGPLEX v11 — hierarchical perplexity ensemble with biological valley detection")
+    parser = argparse.ArgumentParser(description="REGPLEX v12 — VPI-driven biological domain detector")
     parser.add_argument("fasta", help="Input FASTA file")
     parser.add_argument("--out", default="regplex_valleys.csv", help="Output CSV path")
     parser.add_argument(
