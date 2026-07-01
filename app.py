@@ -255,7 +255,7 @@ def _render_analysis() -> None:
     with p1:
         min_domain = st.number_input(
             "Min valley length (bp)",
-            min_value=100, max_value=10000, value=MIN_DOMAIN,
+            min_value=MIN_DOMAIN, max_value=10000, value=MIN_DOMAIN,
             help="Minimum output region size in nucleotides (≥ 100 mer guaranteed)",
         )
     with p2:
@@ -304,7 +304,7 @@ def _render_analysis() -> None:
             "landscape_method": LANDSCAPE_METHOD,
             "normalization_method": NORMALIZATION_METHOD,
             "ensemble_method": ENSEMBLE_METHOD,
-            "min_candidate": int(min_domain),
+            "min_candidate": MIN_CANDIDATE,
             "max_candidate": MAX_CANDIDATE,
             "min_domain": int(min_domain),
             "max_domain": MAX_DOMAIN,
@@ -326,7 +326,9 @@ def _render_analysis() -> None:
             st.session_state["runtime"] = runtime_seconds
             st.session_state["motif_text"] = motif_text
             st.session_state["top_n"] = int(top_n)
-            status.update(label=f"✅ Analysis complete — {len(results)} sequence(s) processed", state="complete")
+            n_seqs = len(results)
+            seq_word = "sequence" if n_seqs == 1 else "sequences"
+            status.update(label=f"✅ Analysis complete — {n_seqs} {seq_word} processed", state="complete")
 
 
 def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
