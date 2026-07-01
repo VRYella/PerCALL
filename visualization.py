@@ -296,8 +296,10 @@ def plot_vpi_profile(
     """Valley Persistence Profile — primary interpretation figure for v12.
 
     Plots ConsensusLPC (left axis) and VPI (right axis, 0–1) on the same
-    figure, with final valley extents, per-valley Kadane cores and the global
-    best Kadane core highlighted.
+    figure, with final valley extents and per-valley Kadane cores highlighted.
+    Note: per-valley Kadane cores are shown for visualization only — they
+    represent the best core region identified by Kadane scoring and do NOT
+    determine final valley boundaries (those come from VPI expansion).
     """
     if len(consensus_lpc) == 0:
         return _empty_figure("Valley Persistence Profile (VPI)")

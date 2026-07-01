@@ -455,6 +455,12 @@ def _compute_vpi(lpc_profiles: dict[str, dict[int, np.ndarray]], n: int) -> np.n
 
     VPI[i] = (number of scale×layer combinations with LPC[i] > 0) / (total combinations).
     A VPI of 1.0 means all scales and layers support a valley at that position.
+
+    Args:
+        lpc_profiles: nested dict {layer_name: {scale: lpc_array}}.
+        n: signal length (number of positions to evaluate).
+    Returns:
+        np.ndarray of shape (n,) with dtype float32, values in [0, 1].
     """
     support = np.zeros(n, dtype=np.float64)
     total = 0
@@ -474,6 +480,12 @@ def _fill_gaps_vectorized(mask: np.ndarray, max_gap: int) -> np.ndarray:
 
     Only fills gaps that are bounded by True on both sides; boundary gaps are
     never filled.  Uses cumulative-sum index marking — no loops over positions.
+
+    Args:
+        mask: boolean array of shape (n,).
+        max_gap: maximum number of False positions to bridge.
+    Returns:
+        np.ndarray of shape (n,) dtype bool with short internal gaps filled.
     """
     if max_gap <= 0 or not np.any(mask):
         return mask.astype(bool).copy()
@@ -535,6 +547,15 @@ def _expand_valley_vpi(
 
     Stops at the first position where both conditions fail simultaneously.
     Fully vectorized using array index operations.
+
+    Args:
+        vpi: VPI array of shape (n,) dtype float32.
+        consensus_lpc: ConsensusLPC array of shape (n,) dtype float32.
+        core_start: first position of the high-VPI core (inclusive).
+        core_end: last position of the high-VPI core (inclusive).
+        expand_threshold: VPI threshold below which expansion stops (default 0.3).
+    Returns:
+        Tuple (expanded_start, expanded_end) with final boundary positions.
     """
     n = len(vpi)
     expand_cond = (vpi > expand_threshold) | (np.isfinite(consensus_lpc) & (consensus_lpc > 0))
@@ -852,7 +873,7 @@ def valley_statistics(
     layer_support_fraction = layer_hits / len(LAYERS)
 
     length_signal = end - start + 1
-    # v12 ValleyScore = MeanLPC × Persistence × ScaleSupport × Prominence × log(Length) × 1/(Variance+ε)
+    # v12 raw score = MeanLPC × Persistence × ScaleSupport × Prominence × log(Length) × 1/(Variance+ε)
     log_length = math.log(max(length_signal, 1))
     valley_score_raw = (
         mean_lpc
