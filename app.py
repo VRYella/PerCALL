@@ -48,6 +48,7 @@ from visualization import (
     plot_motif_architecture,
     plot_scale_support_heatmap,
     plot_smoothed_perplexity,
+    plot_vpi_profile,
 )
 
 st.set_page_config(page_title="REGPLEX", layout="wide", initial_sidebar_state="collapsed")
@@ -115,7 +116,7 @@ def _render_topbar() -> None:
         f"""
         <div class="regplex-topbar">
           <div class="regplex-topbar-inner">
-            <div class="brand">{_svg_logo()}<div><h1>REGPLEX</h1><span>v11 · Signal-Processing Valley Detection</span></div></div>
+            <div class="brand">{_svg_logo()}<div><h1>REGPLEX</h1><span>v12 · Biological Domain Detector</span></div></div>
             <div class="top-links">
               <a href="https://github.com/VRYella/PerCALL" target="_blank" rel="noopener noreferrer">GitHub</a>
               <a href="{_README_URL}" target="_blank" rel="noopener noreferrer">Documentation</a>
@@ -358,6 +359,7 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
 
     tabs = st.tabs([
         "📈 Perplexity",
+        "🌊 VPI Profile",
         "🎯 ConsensusLPC",
         "🌡️ Scale Support",
         "🏆 Valley Ranking",
@@ -374,13 +376,18 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
             f"smooth-{selected_seq}",
         )
     with tabs[1]:
-        _show_figure(plot_consensus_lpc(result.consensus_lpc, result.domains), f"cons-{selected_seq}")
+        _show_figure(
+            plot_vpi_profile(result.consensus_lpc, result.vpi, result.domains, result.kadane_core),
+            f"vpi-{selected_seq}",
+        )
     with tabs[2]:
-        _show_figure(plot_scale_support_heatmap(result.lpc_profiles, result.domains, scales), f"support-{selected_seq}")
+        _show_figure(plot_consensus_lpc(result.consensus_lpc, result.domains), f"cons-{selected_seq}")
     with tabs[3]:
+        _show_figure(plot_scale_support_heatmap(result.lpc_profiles, result.domains, scales), f"support-{selected_seq}")
+    with tabs[4]:
         _show_figure(plot_domain_ranking(result.domains), f"rank-{selected_seq}")
 
-        # v11 display columns per spec (Step 13)
+        # v12 display columns
         display_cols = [
             col for col in [
                 "Rank", "Start", "End", "Length",
@@ -392,7 +399,7 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
             if col in selected_df.columns
         ]
 
-        # Top-N display (Step 12)
+        # Top-N display
         top_n = int(st.session_state.get("top_n", TOP_N_DISPLAY))
         show_all = st.toggle(f"Show all {len(selected_df)} valleys", value=False, key="show_all_valleys")
         display_df = selected_df if show_all else selected_df.nsmallest(top_n, "Rank")
@@ -401,20 +408,20 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
             f"ranked by ValleyScore."
         )
         st.dataframe(display_df[display_cols], width="stretch", hide_index=True)
-    with tabs[4]:
-        _show_figure(plot_motif_architecture(selected_df.to_dict("records")), f"motifs-{selected_seq}")
     with tabs[5]:
+        _show_figure(plot_motif_architecture(selected_df.to_dict("records")), f"motifs-{selected_seq}")
+    with tabs[6]:
         c1, c2, c3 = st.columns(3)
         with c1:
-            st.download_button("CSV", export_table(selected_df, "csv"), "regplex_v11_valleys.csv", "text/csv", width="stretch")
-            st.download_button("Excel", export_table(selected_df, "xlsx"), "regplex_v11_valleys.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", width="stretch")
-            st.download_button("BED", export_bed(selected_df), "regplex_v11_valleys.bed", "text/plain", width="stretch")
+            st.download_button("CSV", export_table(selected_df, "csv"), "regplex_v12_valleys.csv", "text/csv", width="stretch")
+            st.download_button("Excel", export_table(selected_df, "xlsx"), "regplex_v12_valleys.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", width="stretch")
+            st.download_button("BED", export_bed(selected_df), "regplex_v12_valleys.bed", "text/plain", width="stretch")
         with c2:
-            st.download_button("GFF", export_gff(selected_df, gff3=False), "regplex_v11_valleys.gff", "text/plain", width="stretch")
-            st.download_button("GFF3", export_gff(selected_df, gff3=True), "regplex_v11_valleys.gff3", "text/plain", width="stretch")
-            st.download_button("FASTA", export_fasta(selected_df), "regplex_v11_valleys.fasta", "text/plain", width="stretch")
+            st.download_button("GFF", export_gff(selected_df, gff3=False), "regplex_v12_valleys.gff", "text/plain", width="stretch")
+            st.download_button("GFF3", export_gff(selected_df, gff3=True), "regplex_v12_valleys.gff3", "text/plain", width="stretch")
+            st.download_button("FASTA", export_fasta(selected_df), "regplex_v12_valleys.fasta", "text/plain", width="stretch")
         with c3:
-            st.download_button("JSON", export_table(selected_df, "json"), "regplex_v11_valleys.json", "application/json", width="stretch")
+            st.download_button("JSON", export_table(selected_df, "json"), "regplex_v12_valleys.json", "application/json", width="stretch")
 
 
 def _render_motifs(df: pd.DataFrame) -> None:
@@ -437,9 +444,10 @@ def _render_about() -> None:
         """
         <div class="card">
           <h3>🧬 Scientific Hypothesis</h3>
-          <p>Regulatory regions are <strong>low-complexity</strong> genomic intervals that remain contrastive across independent information layers (mono/di/tri) and across multiple observation scales. A biologically meaningful valley must persist across the majority of evaluated positions (<strong>persistence ≥ 80 %</strong>) and be distinctly prominent relative to its genomic context.</p>
+          <p>Regulatory regions are <strong>low-complexity</strong> genomic intervals that remain contrastive across independent information layers (mono/di/tri) and across multiple observation scales. A biologically meaningful domain must persist across the majority of evaluated positions (<strong>VPI ≥ 0.6 at ≥ 80 % of positions</strong>) and be distinctly prominent relative to its genomic context.</p>
           <h3 style="margin-top:1rem">⚙️ Algorithm Overview</h3>
-          <p>Each layer computes perplexity once, then a <strong>Savitzky–Golay filter</strong> (window 21, order 3) preserves valley shape while removing local noise. Multi-scale landscapes are built from the smoothed profiles; three-window <strong>LPC profiles</strong> are derived per scale, normalized, then median-combined to a layer consensus. The final ConsensusLPC is the median across layers. Candidate valleys are all contiguous positive runs; each is refined by a <strong>bounded Kadane search</strong>. Candidates are then filtered by persistence (≥ 0.80), adaptive prominence (lower quartile), and <strong>non-maximum suppression</strong> (50 % overlap). Nearby survivors are merged (gap &lt; 25 bp) and ranked by the composite ValleyScore.</p>
+          <p>Each layer computes perplexity once, then a <strong>Savitzky–Golay filter</strong> (window 21, order 3) preserves valley shape while removing local noise. Multi-scale landscapes are built from the smoothed profiles; three-window <strong>LPC profiles</strong> are derived per scale, normalized, then median-combined to a layer consensus. The final ConsensusLPC is the median across layers.</p>
+          <p>The <strong>Valley Persistence Index (VPI)</strong> is computed per position as the fraction of all scale×layer combinations with LPC > 0. Candidates are generated from VPI ≥ 0.6 runs with internal gaps ≤ 20 bp bridged. Each candidate is expanded left/right while VPI > 0.3 or ConsensusLPC > 0. Kadane's algorithm identifies the best core region <em>for visualization only</em> — final boundaries always come from expansion. Candidates are then filtered by ConsensusLPC persistence (≥ 0.80), VPI persistence (≥ 0.80), and <strong>adaptive prominence (75th percentile)</strong>. After <strong>NMS</strong> and merging (gap &lt; 50 bp), valleys are ranked by the composite ValleyScore = MeanLPC × Persistence × ScaleSupport × Prominence × log(Length) × 1/(Variance+ε).</p>
         </div>
         """
     )
@@ -466,7 +474,7 @@ def main() -> None:
         _render_about()
 
     st.markdown("---")
-    st.markdown("**REGPLEX v11** · Signal-Processing Valley Detection · MIT License")
+    st.markdown("**REGPLEX v12** · Biological Domain Detector · MIT License")
 
 
 if __name__ == "__main__":

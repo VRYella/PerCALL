@@ -287,6 +287,96 @@ def plot_motif_architecture(domains: list[dict]) -> go.Figure:
     return _apply_base(fig, "Motif Mapping", height=360)
 
 
+def plot_vpi_profile(
+    consensus_lpc: np.ndarray,
+    vpi: np.ndarray,
+    domains: list[dict],
+    kadane_core: tuple[int | None, int | None] = (None, None),
+) -> go.Figure:
+    """Valley Persistence Profile — primary interpretation figure for v12.
+
+    Plots ConsensusLPC (left axis) and VPI (right axis, 0–1) on the same
+    figure, with final valley extents and per-valley Kadane cores highlighted.
+    Note: per-valley Kadane cores are shown for visualization only — they
+    represent the best core region identified by Kadane scoring and do NOT
+    determine final valley boundaries (those come from VPI expansion).
+    """
+    if len(consensus_lpc) == 0:
+        return _empty_figure("Valley Persistence Profile (VPI)")
+
+    x = np.arange(len(consensus_lpc))
+    fig = go.Figure()
+
+    # ConsensusLPC — positive region only, filled
+    pos_lpc = np.where(np.isfinite(consensus_lpc) & (consensus_lpc > 0), consensus_lpc, 0.0)
+    fig.add_trace(go.Scatter(
+        x=x, y=pos_lpc,
+        mode="lines", name="ConsensusLPC",
+        line=dict(color=_GREEN, width=2),
+        fill="tozeroy", fillcolor="rgba(16,185,129,0.15)",
+    ))
+
+    # VPI on secondary axis
+    if len(vpi) > 0:
+        xv = np.arange(len(vpi))
+        fig.add_trace(go.Scatter(
+            x=xv, y=vpi.astype(float),
+            mode="lines", name="VPI",
+            line=dict(color=_AMBER, width=2, dash="dash"),
+            yaxis="y2",
+            opacity=0.85,
+        ))
+        # Threshold reference lines (as traces on y2)
+        n_pts = len(vpi)
+        fig.add_trace(go.Scatter(
+            x=[0, n_pts - 1], y=[0.6, 0.6],
+            mode="lines", name="VPI ≥ 0.6 (candidate)",
+            line=dict(color=_AMBER, dash="dot", width=1),
+            yaxis="y2", showlegend=True, opacity=0.7,
+        ))
+        fig.add_trace(go.Scatter(
+            x=[0, n_pts - 1], y=[0.3, 0.3],
+            mode="lines", name="VPI ≥ 0.3 (expand)",
+            line=dict(color=_CRIMSON, dash="dot", width=1),
+            yaxis="y2", showlegend=True, opacity=0.7,
+        ))
+
+    # Final valleys
+    for domain in domains:
+        s0, s1 = _valley_bounds(domain)
+        fig.add_vrect(x0=s0, x1=s1, fillcolor="rgba(30,58,138,0.16)", line_color=_BLUE, line_width=1, opacity=0.6)
+        # Per-valley Kadane core (visualization only)
+        ks = domain.get("KadaneCoreStart")
+        ke = domain.get("KadaneCoreEnd")
+        if ks is not None and ke is not None:
+            fig.add_vrect(x0=ks, x1=ke, fillcolor="rgba(245,158,11,0.22)", line_width=0)
+
+    # Global best Kadane core
+    ks_g, ke_g = kadane_core
+    if ks_g is not None and ke_g is not None:
+        fig.add_vrect(
+            x0=ks_g, x1=ke_g,
+            fillcolor="rgba(245,158,11,0.32)",
+            line_color=_AMBER, line_width=1.5,
+            annotation_text="Best Kadane core",
+            annotation_position="top left",
+        )
+
+    fig.update_layout(
+        xaxis_title="Signal position",
+        yaxis_title="ConsensusLPC",
+        yaxis2=dict(
+            title="VPI (0–1)",
+            overlaying="y",
+            side="right",
+            range=[0.0, 1.05],
+            showgrid=False,
+            tickfont=dict(color=str(_AMBER)),
+        ),
+    )
+    return _apply_base(fig, "Valley Persistence Profile (VPI)", height=430)
+
+
 def plot_algorithm_workflow() -> go.Figure:
     labels = [
         "DNA",
@@ -298,20 +388,24 @@ def plot_algorithm_workflow() -> go.Figure:
         "Three-window LPC",
         "Layer Consensus",
         "Ensemble ConsensusLPC",
-        "Candidate Valleys",
-        "Kadane Refinement",
-        "Persistence Filter (≥ 80 %)",
-        "Prominence Filter",
-        "Non-Maximum Suppression",
-        "Merged Valleys",
+        "Valley Persistence Index (VPI)",
+        "Gap-Tolerant Candidates (VPI ≥ 0.6)",
+        "VPI Expansion (VPI > 0.3)",
+        "Kadane Core (viz only)",
+        "ConsensusLPC Persistence Filter",
+        "VPI Persistence Filter (≥ 80 %)",
+        "Prominence Filter (75th pct)",
+        "Score & NMS",
+        "Merged Domains",
         "Motif Annotation",
     ]
     colors = [
         _BLUE, _BLUE, _TEAL, _GREEN,
         _AMBER,
         _AMBER, _AMBER, _BLUE, _TEAL,
-        _GREEN, _GREEN, _CRIMSON, _CRIMSON, _CRIMSON,
-        _BLUE, _TEAL,
+        _AMBER,
+        _GREEN, _GREEN, _AMBER, _CRIMSON, _CRIMSON, _CRIMSON,
+        _CRIMSON, _BLUE, _TEAL,
     ]
     n = len(labels)
     fig = go.Figure(
@@ -321,4 +415,4 @@ def plot_algorithm_workflow() -> go.Figure:
             link=dict(source=list(range(n - 1)), target=list(range(1, n)), value=[4] * (n - 1), color=["rgba(30,58,138,0.15)"] * (n - 1)),
         )
     )
-    return _apply_base(fig, "REGPLEX v11 Workflow", height=520)
+    return _apply_base(fig, "REGPLEX v12 Workflow", height=560)
