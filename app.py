@@ -237,7 +237,7 @@ def _render_home() -> None:
       REGPLEX v12 uses dinucleotide perplexity as the primary detection signal,
       applies Savitzky–Golay smoothing, builds multi-scale local contrast profiles,
       generates candidates from Di consensus LPC, refines each with Kadane's algorithm,
-      then filters by persistence ≥ 80 %, prominence, non-maximum suppression, and merging.
+      then filters by persistence ≥ 80%, prominence, non-maximum suppression, and merging.
       Mono and Tri layers remain as interpretability support only.
     </p>
     <div class="hero-chips">

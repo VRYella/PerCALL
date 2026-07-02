@@ -636,7 +636,7 @@ def _resolve_operating_mode(mode: str | None) -> str:
     return resolved
 
 
-def _di_scale_support_counts(di_lpc_profiles: dict[int, np.ndarray], start: int, end: int) -> tuple[int, int]:
+def _count_di_scale_support(di_lpc_profiles: dict[int, np.ndarray], start: int, end: int) -> tuple[int, int]:
     total = len(di_lpc_profiles)
     hits = 0
     for lpc in di_lpc_profiles.values():
@@ -867,7 +867,7 @@ def candidate_statistics(
     area = float(np.sum(np.maximum(finite_cons, 0.0))) if finite_cons.size else 0.0
 
     layer_support, support_hits, support_total = _layer_support_counts(support_lpc_profiles, start, end)
-    di_hits, di_total = _di_scale_support_counts(scoring_lpc_profiles, start, end)
+    di_hits, di_total = _count_di_scale_support(scoring_lpc_profiles, start, end)
     scale_support_fraction = (di_hits / di_total) if di_total else 0.0
 
     layer_hits = 0
@@ -957,7 +957,7 @@ def valley_statistics(
     variance = float(np.var(finite_cons)) if finite_cons.size > 1 else 0.0
 
     layer_support, support_hits, support_total = _layer_support_counts(support_lpc_profiles, start, end)
-    di_hits, di_total = _di_scale_support_counts(scoring_lpc_profiles, start, end)
+    di_hits, di_total = _count_di_scale_support(scoring_lpc_profiles, start, end)
     scale_support_fraction = (di_hits / di_total) if di_total else 0.0
 
     layer_hits = 0
@@ -1275,7 +1275,7 @@ def analyze_sequence(sequence_id: str, seq: str, **kwargs) -> AnalysisResult:
         "core_window_downstream": _parse_optional_int(kwargs.get("core_window_downstream", None)),
         "reference_point": _parse_optional_int(kwargs.get("reference_point", 0)),
     }
-    mode = _resolve_operating_mode(str(params["mode"]))
+    mode = _resolve_operating_mode(params["mode"])
     params["resolved_mode"] = mode
     scales = _resolve_scales(params["scales"])
     params["resolved_scales"] = scales

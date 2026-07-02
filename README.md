@@ -16,7 +16,7 @@ Mononucleotide and Trinucleotide perplexities are retained as auxiliary evidence
 
 ### Why dinucleotide is primary
 
-- Dinucleotide statistics directly encode nearest-neighbour stacking interactions.
+- Dinucleotide statistics directly encode nearest-neighbor stacking interactions.
 - These interactions are strongly linked to local duplex stability.
 - Promoter architecture and DNA structural organization are reflected in short-range pair dependencies.
 - Empirical benchmarking showed no substantial independent discriminatory gain from Mono/Tri in core valley calling.
