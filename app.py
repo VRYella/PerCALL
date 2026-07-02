@@ -56,6 +56,7 @@ st.set_page_config(page_title="REGPLEX", layout="wide", initial_sidebar_state="c
 _NAV_ITEMS = ["Home", "Analysis", "Results", "Motifs", "About"]
 _README_URL = "https://github.com/VRYella/PerCALL#readme"
 
+# non-B DNA motifs: A/T homopolymer tracts, G/C homopolymer tracts, G-quadruplex-like and C-quadruplex-like patterns
 _DEFAULT_NON_B_DNA_MOTIFS = (
     "A{7}|T{7}",
     "G{7}|C{7}",
@@ -63,6 +64,8 @@ _DEFAULT_NON_B_DNA_MOTIFS = (
     "C{3,5}[ACGT]{1,7}C{3,5}[ACGT]{1,7}C{3,5}[ACGT]{1,7}C{3,5}",
 )
 
+# Promoter motifs in IUPAC order:
+# TATA-box, Initiator, TCT-element, BREu, BREd, XCPE1, DRE, MTE, DPE, Pause Button
 _DEFAULT_PROMOTER_IUPAC_MOTIFS = (
     "TATAWAWR",
     "BBCABW",
@@ -88,7 +91,6 @@ _RESET_SESSION_KEYS = (
     "runtime",
     "input_fasta_text",
     "motif_text",
-    "custom_motif_text",
     "analysis_custom_motif_text",
     "motifs_custom_motif_text",
 )
@@ -194,6 +196,10 @@ def _combine_motif_text(custom_text: str) -> str:
     default_lines = [*_DEFAULT_NON_B_DNA_MOTIFS, *_DEFAULT_PROMOTER_IUPAC_MOTIFS]
     custom_lines = [line.strip() for line in custom_text.splitlines() if line.strip()]
     return "\n".join([*default_lines, *custom_lines])
+
+
+def _current_custom_motifs(primary_key: str, fallback_key: str) -> str:
+    return st.session_state.get(primary_key, st.session_state.get(fallback_key, ""))
 
 
 def _run_analysis(fasta_text: str, params: dict, motif_text: str) -> tuple[list[AnalysisResult], float]:
@@ -321,11 +327,10 @@ def _render_analysis() -> None:
 
     custom_motif_text = st.text_area(
         "Add more motifs (Regex/IUPAC, one per line)",
-        value=st.session_state.get("custom_motif_text", ""),
+        value=_current_custom_motifs("analysis_custom_motif_text", "motifs_custom_motif_text"),
         height=120,
         key="analysis_custom_motif_text",
     )
-    st.session_state["custom_motif_text"] = custom_motif_text
     motif_text = _combine_motif_text(custom_motif_text)
     motif_rows = _validate_motifs(motif_text)
     st.caption(f"Annotating with {len(motif_rows)} motif patterns (built-in + custom).")
@@ -381,7 +386,6 @@ def _render_analysis() -> None:
             st.session_state["domains_df"] = domains_dataframe(results)
             st.session_state["runtime"] = runtime_seconds
             st.session_state["motif_text"] = motif_text
-            st.session_state["custom_motif_text"] = custom_motif_text
             st.session_state["top_n"] = int(top_n)
             n_seqs = len(results)
             seq_word = "sequence" if n_seqs == 1 else "sequences"
@@ -491,11 +495,10 @@ def _render_motifs(df: pd.DataFrame) -> None:
         st.code("\n".join(_DEFAULT_PROMOTER_IUPAC_MOTIFS), language="text")
     custom_text = st.text_area(
         "Add more motifs",
-        value=st.session_state.get("custom_motif_text", ""),
+        value=_current_custom_motifs("motifs_custom_motif_text", "analysis_custom_motif_text"),
         height=220,
         key="motifs_custom_motif_text",
     )
-    st.session_state["custom_motif_text"] = custom_text
     motif_text = _combine_motif_text(custom_text)
     rows = _validate_motifs(motif_text)
     st.caption(f"Active motif patterns: {len(rows)} (built-in + custom).")
