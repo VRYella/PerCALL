@@ -172,7 +172,7 @@ def plot_consensus_lpc(consensus_lpc: np.ndarray, domains: list[dict]) -> go.Fig
         s0, s1 = _valley_bounds(d)
         fig.add_vrect(x0=s0, x1=s1, fillcolor="rgba(30,58,138,0.16)", line_color=_BLUE, opacity=0.30)
     fig.update_layout(xaxis_title="Signal position", yaxis_title="ConsensusLPC")
-    return _apply_base(fig, "Final Ensemble ConsensusLPC")
+    return _apply_base(fig, "Final ConsensusLPC")
 
 
 def plot_kadane_domains(
@@ -391,7 +391,7 @@ def plot_algorithm_workflow() -> go.Figure:
         "Multi-scale Landscapes",
         "Three-window LPC",
         "Layer Consensus",
-        "Ensemble ConsensusLPC",
+        "ConsensusLPC",
         "Candidate Valleys",
         "Kadane Refinement",
         "ConsensusLPC Persistence Filter",
@@ -415,4 +415,4 @@ def plot_algorithm_workflow() -> go.Figure:
             link=dict(source=list(range(n - 1)), target=list(range(1, n)), value=[4] * (n - 1), color=["rgba(30,58,138,0.15)"] * (n - 1)),
         )
     )
-    return _apply_base(fig, "REGPLEX v11 Workflow", height=520)
+    return _apply_base(fig, "REGPLEX v12 Workflow", height=520)

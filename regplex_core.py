@@ -20,6 +20,9 @@ DEFAULT_SCALES = [25, 50, 100, 200, 400]
 LANDSCAPE_METHOD = "mean"  # mean | median
 NORMALIZATION_METHOD = "robust_z"  # robust_z | percentile
 ENSEMBLE_METHOD = "median"  # median | trimmed_mean
+DEFAULT_MODE = "promoter"   # promoter | genome | ensemble
+CORE_WINDOW_UPSTREAM = 500
+CORE_WINDOW_DOWNSTREAM = 200
 MIN_CANDIDATE = 50      # Kadane refinement minimum length (bp)
 MAX_CANDIDATE = 1000    # Kadane refinement maximum length (bp)
 MIN_DOMAIN = 50         # Final valley minimum length (bp)
@@ -40,6 +43,7 @@ VPI_EXPAND_THRESHOLD = 0.3
 
 LAYERS = ("mono", "di", "tri")
 _LAYER_LABELS = {"mono": "Mono", "di": "Di", "tri": "Tri"}
+OPERATING_MODES = ("promoter", "genome", "ensemble")
 
 _IUPAC_DNA = set("ACGTN")
 _MAP = np.full(256, 4, dtype=np.uint8)
@@ -615,6 +619,51 @@ def _nucleotide_bounds(signal_start: int, signal_end: int, seq_len: int, p_windo
     return start, end
 
 
+def _parse_optional_int(value: int | str | None) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        token = value.strip().lower()
+        if token in {"", "none", "null", "na", "off"}:
+            return None
+    return int(value)
+
+
+def _resolve_operating_mode(mode: str | None) -> str:
+    resolved = (mode or DEFAULT_MODE).strip().lower()
+    if resolved not in OPERATING_MODES:
+        raise ValueError(f"Unsupported mode '{mode}'. Choose from {', '.join(OPERATING_MODES)}.")
+    return resolved
+
+
+def _di_scale_support_counts(di_lpc_profiles: dict[int, np.ndarray], start: int, end: int) -> tuple[int, int]:
+    total = len(di_lpc_profiles)
+    hits = 0
+    for lpc in di_lpc_profiles.values():
+        seg = lpc[start: end + 1]
+        finite = seg[np.isfinite(seg)]
+        if finite.size > 0 and float(np.mean(finite)) > 0:
+            hits += 1
+    return hits, total
+
+
+def _passes_positional_prior(
+    start: int,
+    end: int,
+    seq_len: int,
+    p_window: int,
+    reference_point: int | None,
+    core_window_upstream: int | None,
+    core_window_downstream: int | None,
+) -> bool:
+    if core_window_upstream is None or core_window_downstream is None or reference_point is None:
+        return True
+    start_nt, end_nt = _nucleotide_bounds(start, end, seq_len, p_window)
+    midpoint = (start_nt + end_nt) / 2.0
+    rel = midpoint - float(reference_point)
+    return (-float(core_window_upstream)) <= rel <= float(core_window_downstream)
+
+
 # ---------------------------------------------------------------------------
 # Candidate generation (Step 4)
 # ---------------------------------------------------------------------------
@@ -687,27 +736,25 @@ def _compute_persistence(consensus_lpc: np.ndarray, start: int, end: int) -> flo
 # ---------------------------------------------------------------------------
 
 def _compute_prominence(
-    avg_perplexity: np.ndarray,
+    signal: np.ndarray,
     start: int,
     end: int,
     flank_window: int = FLANK_WINDOW,
 ) -> float:
-    """Compute prominence using the average perplexity signal.
+    """Compute prominence using a perplexity signal.
 
     Prominence = mean(flanks) - min(valley).
-    Uses the mean of the raw perplexity averaged across mono/di/tri layers so
-    that deep valleys (low perplexity relative to surrounding sequence) score
-    high.
+    Deep valleys (low perplexity relative to surrounding sequence) score high.
     """
-    n = len(avg_perplexity)
-    left_flank = avg_perplexity[max(0, start - flank_window): start]
-    right_flank = avg_perplexity[end + 1: min(n, end + 1 + flank_window)]
+    n = len(signal)
+    left_flank = signal[max(0, start - flank_window): start]
+    right_flank = signal[end + 1: min(n, end + 1 + flank_window)]
 
     flanks = np.concatenate([left_flank, right_flank])
     flanks_f = flanks[np.isfinite(flanks)]
     background = float(np.mean(flanks_f)) if flanks_f.size else float("nan")
 
-    valley_seg = avg_perplexity[start: end + 1]
+    valley_seg = signal[start: end + 1]
     valley_f = valley_seg[np.isfinite(valley_seg)]
     valley_min = float(np.min(valley_f)) if valley_f.size else float("nan")
 
@@ -807,7 +854,8 @@ def _layer_support_counts(
 def candidate_statistics(
     start: int,
     end: int,
-    lpc_profiles: dict[str, dict[int, np.ndarray]],
+    support_lpc_profiles: dict[str, dict[int, np.ndarray]],
+    scoring_lpc_profiles: dict[int, np.ndarray],
     layer_consensus: dict[str, np.ndarray],
     consensus_lpc: np.ndarray,
 ) -> dict:
@@ -818,8 +866,9 @@ def candidate_statistics(
     persistence = float(np.mean(finite_cons > 0)) if finite_cons.size else 0.0
     area = float(np.sum(np.maximum(finite_cons, 0.0))) if finite_cons.size else 0.0
 
-    layer_support, support_hits, support_total = _layer_support_counts(lpc_profiles, start, end)
-    scale_support_fraction = (support_hits / support_total) if support_total else 0.0
+    layer_support, support_hits, support_total = _layer_support_counts(support_lpc_profiles, start, end)
+    di_hits, di_total = _di_scale_support_counts(scoring_lpc_profiles, start, end)
+    scale_support_fraction = (di_hits / di_total) if di_total else 0.0
 
     layer_hits = 0
     for layer in LAYERS:
@@ -839,13 +888,14 @@ def candidate_statistics(
         "PeakLPC": peak_lpc,
         "Area": area,
         "Persistence": persistence,
-        "ScaleSupport": f"{support_hits}/{support_total}",
+        "ScaleSupport": f"{di_hits}/{di_total}",
         "ScaleSupportFraction": float(scale_support_fraction),
         "LayerSupport": f"{layer_hits}/{len(LAYERS)}",
         "LayerSupportFraction": float(layer_support_fraction),
         "MonoSupport": f"{layer_support['mono'][0]}/{layer_support['mono'][1]}",
         "DiSupport": f"{layer_support['di'][0]}/{layer_support['di'][1]}",
         "TriSupport": f"{layer_support['tri'][0]}/{layer_support['tri'][1]}",
+        "OverallSupport": f"{support_hits}/{support_total}",
     }
 
 
@@ -860,10 +910,11 @@ def valley_statistics(
     mono: np.ndarray,
     di: np.ndarray,
     tri: np.ndarray,
-    lpc_profiles: dict[str, dict[int, np.ndarray]],
-    layer_consensus: dict[str, np.ndarray],
+    support_lpc_profiles: dict[str, dict[int, np.ndarray]],
+    scoring_lpc_profiles: dict[int, np.ndarray],
+    support_layer_consensus: dict[str, np.ndarray],
     consensus_lpc: np.ndarray,
-    avg_perplexity: np.ndarray,
+    scoring_signal: np.ndarray,
     seq: str,
     p_window: int,
     kadane_core: tuple[int | None, int | None],
@@ -892,8 +943,8 @@ def valley_statistics(
     di_mean = _fmean(di_seg)
     tri_mean = _fmean(tri_seg)
 
-    # Mean/Min/Max perplexity (average across the three layers per position)
-    avg_seg = avg_perplexity[sl]
+    # Mean/Min/Max perplexity on the scoring signal (Di in default modes)
+    avg_seg = scoring_signal[sl]
     mean_perplexity = _fmean(avg_seg)
     min_perplexity = _fmin(avg_seg)
     max_perplexity = _fmax(avg_seg)
@@ -905,12 +956,13 @@ def valley_statistics(
     area = float(np.sum(np.maximum(finite_cons, 0.0))) if finite_cons.size else 0.0
     variance = float(np.var(finite_cons)) if finite_cons.size > 1 else 0.0
 
-    layer_support, support_hits, support_total = _layer_support_counts(lpc_profiles, start, end)
-    scale_support_fraction = (support_hits / support_total) if support_total else 0.0
+    layer_support, support_hits, support_total = _layer_support_counts(support_lpc_profiles, start, end)
+    di_hits, di_total = _di_scale_support_counts(scoring_lpc_profiles, start, end)
+    scale_support_fraction = (di_hits / di_total) if di_total else 0.0
 
     layer_hits = 0
     for layer in LAYERS:
-        arr = layer_consensus.get(layer)
+        arr = support_layer_consensus.get(layer)
         if arr is None:
             continue
         seg = arr[sl]
@@ -920,7 +972,7 @@ def valley_statistics(
     layer_support_fraction = layer_hits / len(LAYERS)
 
     length_signal = end - start + 1
-    # v11 raw score = MeanLPC × Persistence × ScaleSupport × Area × log(Length) × 1/(Variance+ε)
+    # Raw score (di-derived support in v12 default modes).
     log_length = math.log(max(length_signal, 1))
     valley_score_raw = (
         mean_lpc
@@ -972,7 +1024,7 @@ def valley_statistics(
         "MonoSupport": f"{layer_support['mono'][0]}/{layer_support['mono'][1]}",
         "DiSupport": f"{layer_support['di'][0]}/{layer_support['di'][1]}",
         "TriSupport": f"{layer_support['tri'][0]}/{layer_support['tri'][1]}",
-        "ScaleSupport": f"{support_hits}/{support_total}",
+        "ScaleSupport": f"{di_hits}/{di_total}",
         "ScaleSupportFraction": float(scale_support_fraction),
         "LayerSupport": f"{layer_hits}/{len(LAYERS)}",
         "LayerSupportFraction": float(layer_support_fraction),
@@ -1007,16 +1059,18 @@ def normalize_valley_score(domains: list[dict]) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Main v11 domain-finding pipeline
+# Main domain-finding pipeline
 # ---------------------------------------------------------------------------
 
 def find_domains(
     mono: np.ndarray,
     di: np.ndarray,
     tri: np.ndarray,
-    lpc_profiles: dict[str, dict[int, np.ndarray]],
-    layer_consensus: dict[str, np.ndarray],
+    support_lpc_profiles: dict[str, dict[int, np.ndarray]],
+    support_layer_consensus: dict[str, np.ndarray],
     consensus_lpc: np.ndarray,
+    scoring_lpc_profiles: dict[int, np.ndarray],
+    scoring_signal: np.ndarray,
     seq: str,
     min_domain: int = MIN_DOMAIN,
     max_domain: int = MAX_DOMAIN,
@@ -1024,8 +1078,11 @@ def find_domains(
     persistence_threshold: float = PERSISTENCE_THRESHOLD,
     nms_overlap: float = NMS_OVERLAP_THRESHOLD,
     p_window: int = PERPLEXITY_WINDOW,
+    core_window_upstream: int | None = None,
+    core_window_downstream: int | None = None,
+    reference_point: int | None = None,
 ) -> tuple[list[dict], list[dict], tuple[int | None, int | None]]:
-    """v11 candidate → refinement → ranking pipeline.
+    """Candidate → refinement → ranking pipeline.
 
     ConsensusLPC candidates → Kadane refinement → persistence filter →
     adaptive prominence filter → score → NMS → merge → final valleys.
@@ -1034,26 +1091,22 @@ def find_domains(
     if n == 0:
         return [], [], (None, None)
 
-    # Build position-wise average perplexity for prominence computation.
-    layers_arr = [a for a in (mono, di, tri) if len(a) > 0]
-    if layers_arr:
-        n_ref = min(len(a) for a in layers_arr)
-        stacked = np.full((len(layers_arr), n_ref), np.nan, dtype=np.float64)
-        for i, a in enumerate(layers_arr):
-            stacked[i, :] = a[:n_ref].astype(np.float64)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", RuntimeWarning)
-            avg_perplexity = np.nanmean(stacked, axis=0).astype(np.float32)
-        if len(avg_perplexity) < n:
-            pad = np.full(n - len(avg_perplexity), np.nan, dtype=np.float32)
-            avg_perplexity = np.concatenate([avg_perplexity, pad])
-    else:
-        avg_perplexity = np.full(n, np.nan, dtype=np.float32)
+    prominence_signal = np.full(n, np.nan, dtype=np.float32)
+    if len(scoring_signal) > 0:
+        end = min(n, len(scoring_signal))
+        prominence_signal[:end] = scoring_signal[:end].astype(np.float32)
 
     # Step 4: generate all candidate valleys from positive ConsensusLPC runs.
     raw_candidate_intervals = _generate_candidate_valleys(consensus_lpc)
     raw_candidates = [
-        candidate_statistics(s, e, lpc_profiles, layer_consensus, consensus_lpc)
+        candidate_statistics(
+            s,
+            e,
+            support_lpc_profiles=support_lpc_profiles,
+            scoring_lpc_profiles=scoring_lpc_profiles,
+            layer_consensus=support_layer_consensus,
+            consensus_lpc=consensus_lpc,
+        )
         for s, e in raw_candidate_intervals
     ]
 
@@ -1088,7 +1141,7 @@ def find_domains(
 
     # Step 7: adaptive prominence filter.
     prominences = [
-        _compute_prominence(avg_perplexity, s, e)
+        _compute_prominence(prominence_signal, s, e)
         for s, e, ks, ke in after_persistence
     ]
     prom_arr = np.array(prominences, dtype=np.float64)
@@ -1112,10 +1165,11 @@ def find_domains(
             mono=mono,
             di=di,
             tri=tri,
-            lpc_profiles=lpc_profiles,
-            layer_consensus=layer_consensus,
+            support_lpc_profiles=support_lpc_profiles,
+            scoring_lpc_profiles=scoring_lpc_profiles,
+            support_layer_consensus=support_layer_consensus,
             consensus_lpc=consensus_lpc,
-            avg_perplexity=avg_perplexity,
+            scoring_signal=prominence_signal,
             seq=seq,
             p_window=p_window,
             kadane_core=global_kadane_core,
@@ -1130,6 +1184,16 @@ def find_domains(
 
     domains: list[dict] = []
     for idx, (s, e) in enumerate(merged_intervals, 1):
+        if not _passes_positional_prior(
+            s,
+            e,
+            seq_len=len(seq),
+            p_window=p_window,
+            reference_point=reference_point,
+            core_window_upstream=core_window_upstream,
+            core_window_downstream=core_window_downstream,
+        ):
+            continue
         if e - s + 1 < min_domain:
             continue
         ks = ke = None
@@ -1140,7 +1204,7 @@ def find_domains(
             s, e = ks, ke
         if _compute_persistence(consensus_lpc, s, e) < persistence_threshold:
             continue
-        prom = _compute_prominence(avg_perplexity, s, e)
+        prom = _compute_prominence(prominence_signal, s, e)
         if prom < adaptive_threshold:
             continue
         if ks is None or ke is None:
@@ -1152,10 +1216,11 @@ def find_domains(
             mono=mono,
             di=di,
             tri=tri,
-            lpc_profiles=lpc_profiles,
-            layer_consensus=layer_consensus,
+            support_lpc_profiles=support_lpc_profiles,
+            scoring_lpc_profiles=scoring_lpc_profiles,
+            support_layer_consensus=support_layer_consensus,
             consensus_lpc=consensus_lpc,
-            avg_perplexity=avg_perplexity,
+            scoring_signal=prominence_signal,
             seq=seq,
             p_window=p_window,
             kadane_core=global_kadane_core,
@@ -1176,7 +1241,7 @@ def _resolve_scales(scales: list[int] | None) -> list[int]:
 
 
 def analyze_sequence(sequence_id: str, seq: str, **kwargs) -> AnalysisResult:
-    """v11 analysis pipeline.
+    """REGPLEX v12 analysis pipeline.
 
     Steps
     -----
@@ -1185,7 +1250,7 @@ def analyze_sequence(sequence_id: str, seq: str, **kwargs) -> AnalysisResult:
     3. Multi-scale landscapes from smoothed profiles.
     4. Three-window Local Perplexity Contrast (LPC) at each scale.
     5. Layer consensus (median across scales, normalized).
-    6. Ensemble ConsensusLPC (median / trimmed-mean across layers).
+    6. Operating-mode consensus: Di-only (promoter/genome) or ensemble (experimental).
     7. Candidate valleys from positive ConsensusLPC runs.
     8–14. Kadane refinement → ConsensusLPC persistence → adaptive prominence →
           score → NMS → merge → final ranking.
@@ -1205,7 +1270,13 @@ def analyze_sequence(sequence_id: str, seq: str, **kwargs) -> AnalysisResult:
         "sg_poly_order": int(kwargs.get("sg_poly_order", SG_POLY_ORDER)),
         "persistence_threshold": float(kwargs.get("persistence_threshold", PERSISTENCE_THRESHOLD)),
         "nms_overlap": float(kwargs.get("nms_overlap", NMS_OVERLAP_THRESHOLD)),
+        "mode": kwargs.get("mode", DEFAULT_MODE),
+        "core_window_upstream": _parse_optional_int(kwargs.get("core_window_upstream", None)),
+        "core_window_downstream": _parse_optional_int(kwargs.get("core_window_downstream", None)),
+        "reference_point": _parse_optional_int(kwargs.get("reference_point", 0)),
     }
+    mode = _resolve_operating_mode(str(params["mode"]))
+    params["resolved_mode"] = mode
     scales = _resolve_scales(params["scales"])
     params["resolved_scales"] = scales
 
@@ -1242,17 +1313,40 @@ def analyze_sequence(sequence_id: str, seq: str, **kwargs) -> AnalysisResult:
             normalization=params["normalization_method"],
         )
 
-    # Step 6 (ensemble): final ConsensusLPC.
-    consensus_lpc = build_ensemble_consensus(layer_consensus, method=params["ensemble_method"])
+    # Step 6: final ConsensusLPC determined by operating mode.
+    if mode == "ensemble":
+        consensus_lpc = build_ensemble_consensus(layer_consensus, method=params["ensemble_method"])
+        core_upstream = params["core_window_upstream"]
+        core_downstream = params["core_window_downstream"]
+    else:
+        consensus_lpc = layer_consensus["di"].copy()
+        if mode == "promoter":
+            core_upstream = (
+                CORE_WINDOW_UPSTREAM
+                if "core_window_upstream" not in kwargs
+                else params["core_window_upstream"]
+            )
+            core_downstream = (
+                CORE_WINDOW_DOWNSTREAM
+                if "core_window_downstream" not in kwargs
+                else params["core_window_downstream"]
+            )
+        else:  # genome
+            core_upstream = None
+            core_downstream = None
+    params["resolved_core_window_upstream"] = core_upstream
+    params["resolved_core_window_downstream"] = core_downstream
 
-    # Steps 7–14: v11 detection pipeline.
+    # Steps 7–14: detection pipeline.
     domains, raw_candidates, kadane_core = find_domains(
         mono=mono,
         di=di,
         tri=tri,
-        lpc_profiles=lpc_profiles,
-        layer_consensus=layer_consensus,
+        support_lpc_profiles=lpc_profiles,
+        support_layer_consensus=layer_consensus,
         consensus_lpc=consensus_lpc,
+        scoring_lpc_profiles=lpc_profiles["di"],
+        scoring_signal=di,
         seq=seq,
         min_domain=params["min_domain"],
         max_domain=params["max_domain"],
@@ -1260,6 +1354,9 @@ def analyze_sequence(sequence_id: str, seq: str, **kwargs) -> AnalysisResult:
         persistence_threshold=params["persistence_threshold"],
         nms_overlap=params["nms_overlap"],
         p_window=params["perplexity_window"],
+        core_window_upstream=core_upstream,
+        core_window_downstream=core_downstream,
+        reference_point=params["reference_point"],
     )
     for d in domains:
         d["Sequence_ID"] = sequence_id
@@ -1358,7 +1455,10 @@ def export_gff(df: pd.DataFrame, gff3: bool = False) -> bytes:
 
 
 def cli() -> None:
-    parser = argparse.ArgumentParser(description="REGPLEX v11 — candidate-ranked perplexity valley detector")
+    def _cli_optional_int(value: str) -> int | None:
+        return _parse_optional_int(value)
+
+    parser = argparse.ArgumentParser(description="REGPLEX v12 — di-centric perplexity valley detector")
     parser.add_argument("fasta", help="Input FASTA file")
     parser.add_argument("--out", default="regplex_valleys.csv", help="Output CSV path")
     parser.add_argument(
@@ -1381,6 +1481,31 @@ def cli() -> None:
         "--ensemble-method",
         default=ENSEMBLE_METHOD,
         choices=["median", "trimmed_mean"],
+        help="Layer aggregation method used only in ensemble mode",
+    )
+    parser.add_argument(
+        "--mode",
+        default=DEFAULT_MODE,
+        choices=list(OPERATING_MODES),
+        help="Operating mode: promoter (default), genome, ensemble (experimental)",
+    )
+    parser.add_argument(
+        "--core-window-upstream",
+        type=_cli_optional_int,
+        default=CORE_WINDOW_UPSTREAM,
+        help="Promoter prior upstream window in bp (use 'none' to disable)",
+    )
+    parser.add_argument(
+        "--core-window-downstream",
+        type=_cli_optional_int,
+        default=CORE_WINDOW_DOWNSTREAM,
+        help="Promoter prior downstream window in bp (use 'none' to disable)",
+    )
+    parser.add_argument(
+        "--reference-point",
+        type=_cli_optional_int,
+        default=0,
+        help="Reference point for positional prior (default 0)",
     )
     parser.add_argument("--sg-window", type=int, default=SG_WINDOW_LENGTH, help="Savitzky-Golay window length (odd)")
     parser.add_argument("--sg-order", type=int, default=SG_POLY_ORDER, help="Savitzky-Golay polynomial order")
@@ -1404,6 +1529,10 @@ def cli() -> None:
             landscape_method=args.landscape_method,
             normalization_method=args.normalization_method,
             ensemble_method=args.ensemble_method,
+            mode=args.mode,
+            core_window_upstream=args.core_window_upstream,
+            core_window_downstream=args.core_window_downstream,
+            reference_point=args.reference_point,
             sg_window_length=args.sg_window,
             sg_poly_order=args.sg_order,
             persistence_threshold=args.persistence,

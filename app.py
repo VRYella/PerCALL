@@ -16,6 +16,9 @@ import streamlit as st
 
 from motif_engine import annotate_domains, compile_motifs, iupac_to_regex
 from regplex_core import (
+    CORE_WINDOW_DOWNSTREAM,
+    CORE_WINDOW_UPSTREAM,
+    DEFAULT_MODE,
     DEFAULT_SCALES,
     ENSEMBLE_METHOD,
     FLANK_WINDOW,
@@ -81,7 +84,7 @@ _DEFAULT_PROMOTER_IUPAC_MOTIFS = (
 
 PLOT_CONFIG = {
     "displaylogo": False,
-    "toImageButtonOptions": {"format": "svg", "filename": "regplex_v11_figure", "scale": 2},
+    "toImageButtonOptions": {"format": "svg", "filename": "regplex_v12_figure", "scale": 2},
     "modeBarButtonsToAdd": ["resetScale2d"],
 }
 
@@ -149,7 +152,7 @@ def _render_topbar() -> None:
         f"""
         <div class="regplex-topbar">
           <div class="regplex-topbar-inner">
-            <div class="brand">{_svg_logo()}<div><h1>REGPLEX</h1><span>v11 · Perplexity Valley Detector</span></div></div>
+            <div class="brand">{_svg_logo()}<div><h1>REGPLEX</h1><span>v12 · Di-centric Perplexity Valley Detector</span></div></div>
             <div class="top-links">
               <a href="https://github.com/VRYella/PerCALL" target="_blank" rel="noopener noreferrer">GitHub</a>
               <a href="{_README_URL}" target="_blank" rel="noopener noreferrer">Documentation</a>
@@ -217,7 +220,7 @@ def _run_analysis(fasta_text: str, params: dict, motif_text: str) -> tuple[list[
 def _render_home() -> None:
     img_b64 = _load_hero_image_b64()
     image_html = (
-        f'<img src="data:image/png;base64,{img_b64}" class="hero-image" alt="REGPLEX v11 workflow"/>'
+        f'<img src="data:image/png;base64,{img_b64}" class="hero-image" alt="REGPLEX v12 workflow"/>'
         if img_b64
         else '<div class="hero-image-missing">Hero image unavailable</div>'
     )
@@ -231,11 +234,11 @@ def _render_home() -> None:
       <span class="hero-subtitle-line">with Signal-Processing Candidate Refinement</span>
     </div>
     <p class="hero-desc">
-      REGPLEX v11 computes mononucleotide, dinucleotide and trinucleotide perplexity once,
-      applies Savitzky–Golay smoothing to preserve valley shape, builds multi-scale local contrast
-      profiles, generates candidate valleys from ConsensusLPC, refines each with Kadane's algorithm,
-      then filters by persistence ≥ 80 %, adaptive prominence, non-maximum suppression, and merging
-      to produce a concise list of high-confidence regulatory valleys.
+      REGPLEX v12 uses dinucleotide perplexity as the primary detection signal,
+      applies Savitzky–Golay smoothing, builds multi-scale local contrast profiles,
+      generates candidates from Di consensus LPC, refines each with Kadane's algorithm,
+      then filters by persistence ≥ 80 %, prominence, non-maximum suppression, and merging.
+      Mono and Tri layers remain as interpretability support only.
     </p>
     <div class="hero-chips">
       <span class="hero-chip">Savitzky–Golay smoothing</span>
@@ -296,6 +299,46 @@ def _render_analysis() -> None:
             _metric_card("Total length", f"{total_len:,} bp")
 
     st.markdown("#### ⚙️ Detection Parameters")
+    mode = st.selectbox(
+        "Operating mode",
+        options=["promoter", "genome", "ensemble"],
+        index=["promoter", "genome", "ensemble"].index(DEFAULT_MODE),
+        help="promoter: Di + positional prior (default); genome: Di only; ensemble: Mono+Di+Tri exploratory mode.",
+    )
+
+    core_window_upstream: int | None = None
+    core_window_downstream: int | None = None
+    reference_point: int | None = 0
+    if mode == "promoter":
+        st.caption("Promoter mode uses the default positional prior window [-500, +200] around reference point 0.")
+        mpos1, mpos2, mpos3 = st.columns(3)
+        with mpos1:
+            reference_point = int(st.number_input("Reference point", value=0, step=1))
+        with mpos2:
+            core_window_upstream = int(st.number_input("Core window upstream (bp)", min_value=0, value=CORE_WINDOW_UPSTREAM))
+        with mpos3:
+            core_window_downstream = int(st.number_input("Core window downstream (bp)", min_value=0, value=CORE_WINDOW_DOWNSTREAM))
+    elif mode == "genome":
+        st.caption("Genome mode disables positional prior and performs whole-genome discovery.")
+        reference_point = None
+        core_window_upstream = None
+        core_window_downstream = None
+    else:
+        st.warning("Ensemble mode is experimental and not recommended for primary predictions.")
+        use_positional_prior = st.checkbox("Apply positional prior in ensemble mode", value=False)
+        if use_positional_prior:
+            mpos1, mpos2, mpos3 = st.columns(3)
+            with mpos1:
+                reference_point = int(st.number_input("Reference point", value=0, step=1))
+            with mpos2:
+                core_window_upstream = int(st.number_input("Core window upstream (bp)", min_value=0, value=CORE_WINDOW_UPSTREAM))
+            with mpos3:
+                core_window_downstream = int(st.number_input("Core window downstream (bp)", min_value=0, value=CORE_WINDOW_DOWNSTREAM))
+        else:
+            reference_point = None
+            core_window_upstream = None
+            core_window_downstream = None
+
     p1, p2, p3 = st.columns(3)
     with p1:
         min_domain = st.number_input(
@@ -403,6 +446,10 @@ def _render_analysis() -> None:
             "landscape_method": LANDSCAPE_METHOD,
             "normalization_method": NORMALIZATION_METHOD,
             "ensemble_method": ENSEMBLE_METHOD,
+            "mode": mode,
+            "core_window_upstream": core_window_upstream,
+            "core_window_downstream": core_window_downstream,
+            "reference_point": reference_point,
             "min_candidate": MIN_CANDIDATE,
             "max_candidate": max_candidate,
             "min_domain": int(min_domain),
@@ -414,7 +461,7 @@ def _render_analysis() -> None:
             "nms_overlap": float(nms_overlap),
         }
 
-        with st.status("Running signal-processing valley detection…", expanded=False) as status:
+        with st.status("Running REGPLEX v12 di-centric valley detection…", expanded=False) as status:
             try:
                 results, runtime_seconds = _run_analysis(fasta_text, params, motif_text)
             except re.error as exc:
@@ -510,15 +557,15 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
     with tabs[6]:
         c1, c2, c3 = st.columns(3)
         with c1:
-            st.download_button("CSV", export_table(selected_df, "csv"), "regplex_v11_valleys.csv", "text/csv", width="stretch")
-            st.download_button("Excel", export_table(selected_df, "xlsx"), "regplex_v11_valleys.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", width="stretch")
-            st.download_button("BED", export_bed(selected_df), "regplex_v11_valleys.bed", "text/plain", width="stretch")
+            st.download_button("CSV", export_table(selected_df, "csv"), "regplex_v12_valleys.csv", "text/csv", width="stretch")
+            st.download_button("Excel", export_table(selected_df, "xlsx"), "regplex_v12_valleys.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", width="stretch")
+            st.download_button("BED", export_bed(selected_df), "regplex_v12_valleys.bed", "text/plain", width="stretch")
         with c2:
-            st.download_button("GFF", export_gff(selected_df, gff3=False), "regplex_v11_valleys.gff", "text/plain", width="stretch")
-            st.download_button("GFF3", export_gff(selected_df, gff3=True), "regplex_v11_valleys.gff3", "text/plain", width="stretch")
-            st.download_button("FASTA", export_fasta(selected_df), "regplex_v11_valleys.fasta", "text/plain", width="stretch")
+            st.download_button("GFF", export_gff(selected_df, gff3=False), "regplex_v12_valleys.gff", "text/plain", width="stretch")
+            st.download_button("GFF3", export_gff(selected_df, gff3=True), "regplex_v12_valleys.gff3", "text/plain", width="stretch")
+            st.download_button("FASTA", export_fasta(selected_df), "regplex_v12_valleys.fasta", "text/plain", width="stretch")
         with c3:
-            st.download_button("JSON", export_table(selected_df, "json"), "regplex_v11_valleys.json", "application/json", width="stretch")
+            st.download_button("JSON", export_table(selected_df, "json"), "regplex_v12_valleys.json", "application/json", width="stretch")
 
 
 def _render_motifs(df: pd.DataFrame) -> None:
@@ -555,14 +602,14 @@ def _render_about() -> None:
         """
         <div class="card">
           <h3>🧬 Scientific Hypothesis</h3>
-          <p>Regulatory regions are <strong>low-complexity</strong> genomic intervals that remain contrastive across independent information layers (mono/di/tri) and across multiple observation scales. A biologically meaningful valley must survive ranking, Kadane refinement, persistence filtering, adaptive prominence filtering, and overlap suppression.</p>
+          <p>REGPLEX v12 is <strong>di-centric</strong>: dinucleotide perplexity is the primary detection signal because it best captures local dependency and structural organization. Mono and Tri are retained as support evidence for interpretability, not as primary decision layers.</p>
           <h3 style="margin-top:1rem">⚙️ Algorithm Overview</h3>
-          <p>Each layer computes perplexity once, then a <strong>Savitzky–Golay filter</strong> (window 21, order 3) preserves valley shape while removing local noise. Multi-scale landscapes are built from the smoothed profiles; three-window <strong>LPC profiles</strong> are derived per scale, normalized, then median-combined to a layer consensus. The final ConsensusLPC is the median across layers.</p>
-          <p>Candidate valleys are generated from contiguous positive <strong>ConsensusLPC</strong> runs. Kadane's algorithm then finds the strongest continuous core inside each candidate using bounded lengths (default 50–1000 bp), and the final reported valleys keep the same 50 bp minimum by default. Candidates are filtered by <strong>ConsensusLPC persistence (≥ 0.80)</strong> and <strong>adaptive prominence</strong>, scored using MeanLPC × Persistence × ScaleSupport × Area × log(Length) × 1/(Variance+ε), then reduced with <strong>NMS</strong> and final gap-based merging (gap &lt; 25 bp).</p>
+          <p>Dinucleotide perplexity is smoothed by <strong>Savitzky–Golay</strong>, converted to multi-scale landscapes (25, 50, 100, 200, 400), transformed to LPC, and collapsed to a Di consensus LPC. Candidate valleys are refined by Kadane, filtered by persistence, prominence, and NMS, then merged.</p>
+          <p><strong>Operating modes:</strong> promoter (default, Di + positional prior), genome (Di only, no positional prior), ensemble (Mono+Di+Tri exploratory mode). Positional prior defaults to [-500,+200] around the reference point and can be disabled by setting windows to None.</p>
         </div>
         """
     )
-    _show_figure(plot_algorithm_workflow(), "workflow-v11")
+    _show_figure(plot_algorithm_workflow(), "workflow-v12")
 
 
 def main() -> None:
@@ -585,7 +632,7 @@ def main() -> None:
         _render_about()
 
     st.markdown("---")
-    st.markdown("**REGPLEX v11** · Perplexity Valley Detector · MIT License")
+    st.markdown("**REGPLEX v12** · Di-centric Perplexity Valley Detector · MIT License")
 
 
 if __name__ == "__main__":
