@@ -895,6 +895,7 @@ def candidate_statistics(
         "MonoSupport": f"{layer_support['mono'][0]}/{layer_support['mono'][1]}",
         "DiSupport": f"{layer_support['di'][0]}/{layer_support['di'][1]}",
         "TriSupport": f"{layer_support['tri'][0]}/{layer_support['tri'][1]}",
+        # OverallSupport retains all-layer support for interpretability.
         "OverallSupport": f"{support_hits}/{support_total}",
     }
 
@@ -1093,8 +1094,8 @@ def find_domains(
 
     prominence_signal = np.full(n, np.nan, dtype=np.float32)
     if len(scoring_signal) > 0:
-        end = min(n, len(scoring_signal))
-        prominence_signal[:end] = scoring_signal[:end].astype(np.float32)
+        signal_end = min(n, len(scoring_signal))
+        prominence_signal[:signal_end] = scoring_signal[:signal_end].astype(np.float32)
 
     # Step 4: generate all candidate valleys from positive ConsensusLPC runs.
     raw_candidate_intervals = _generate_candidate_valleys(consensus_lpc)
