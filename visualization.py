@@ -179,22 +179,26 @@ def plot_kadane_domains(
     consensus_lpc: np.ndarray,
     domains: list[dict],
     kadane_core: tuple[int | None, int | None] = (None, None),
-    candidates: list[tuple[int, int]] | None = None,
+    candidates: list[dict] | list[tuple[int, int]] | None = None,
 ) -> go.Figure:
     if len(consensus_lpc) == 0:
-        return _empty_figure("Kadane Refinement and Final Valleys")
+        return _empty_figure("Candidate Valleys, Kadane Core, and Final Merged Valleys")
     x = np.arange(len(consensus_lpc))
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=x, y=consensus_lpc, mode="lines", name="ConsensusLPC", line=dict(color="rgba(31,41,55,0.35)", width=1.2)))
 
     # Raw candidates (light background)
     if candidates:
-        for i, (cs, ce) in enumerate(candidates):
+        for i, candidate in enumerate(candidates):
+            if isinstance(candidate, dict):
+                cs, ce = _valley_bounds(candidate)
+            else:
+                cs, ce = candidate
             fig.add_vrect(
                 x0=cs, x1=ce,
                 fillcolor="rgba(245,158,11,0.06)",
                 line_width=0,
-                annotation_text="cand" if i == 0 else None,
+                annotation_text="candidate" if i == 0 else None,
                 annotation_position="top left" if i == 0 else None,
             )
 
@@ -214,7 +218,7 @@ def plot_kadane_domains(
             annotation_position="top left",
         )
     fig.update_layout(xaxis_title="Signal position", yaxis_title="ConsensusLPC")
-    return _apply_base(fig, "Kadane Refinement and Final Valleys", height=420)
+    return _apply_base(fig, "Candidate Valleys, Kadane Core, and Final Merged Valleys", height=420)
 
 
 def plot_scale_support_heatmap(lpc_profiles: dict[str, dict[int, np.ndarray]], domains: list[dict], scales: list[int]) -> go.Figure:
@@ -388,12 +392,9 @@ def plot_algorithm_workflow() -> go.Figure:
         "Three-window LPC",
         "Layer Consensus",
         "Ensemble ConsensusLPC",
-        "Valley Persistence Index (VPI)",
-        "Gap-Tolerant Candidates (VPI ≥ 0.6)",
-        "VPI Expansion (VPI > 0.3)",
-        "Kadane Core (viz only)",
+        "Candidate Valleys",
+        "Kadane Refinement",
         "ConsensusLPC Persistence Filter",
-        "VPI Persistence Filter (≥ 80 %)",
         "Prominence Filter (75th pct)",
         "Score & NMS",
         "Merged Domains",
@@ -403,8 +404,7 @@ def plot_algorithm_workflow() -> go.Figure:
         _BLUE, _BLUE, _TEAL, _GREEN,
         _AMBER,
         _AMBER, _AMBER, _BLUE, _TEAL,
-        _AMBER,
-        _GREEN, _GREEN, _AMBER, _CRIMSON, _CRIMSON, _CRIMSON,
+        _GREEN, _GREEN, _CRIMSON, _CRIMSON, _CRIMSON,
         _CRIMSON, _BLUE, _TEAL,
     ]
     n = len(labels)
@@ -415,4 +415,4 @@ def plot_algorithm_workflow() -> go.Figure:
             link=dict(source=list(range(n - 1)), target=list(range(1, n)), value=[4] * (n - 1), color=["rgba(30,58,138,0.15)"] * (n - 1)),
         )
     )
-    return _apply_base(fig, "REGPLEX v12 Workflow", height=560)
+    return _apply_base(fig, "REGPLEX v11 Workflow", height=520)

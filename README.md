@@ -8,7 +8,7 @@
 
 ## Scientific Motivation
 
-REGPLEX v10 models genomic complexity as three independent information-theoretic observers:
+REGPLEX v11 models genomic complexity as three independent information-theoretic observers:
 
 - **Mononucleotide perplexity**: composition and GC/AT structure
 - **Dinucleotide perplexity**: local dependency and structural organization (primary layer)
@@ -19,18 +19,21 @@ The method is training-free and uses no learned model weights.
 ## Algorithm
 
 1. Compute mono/di/tri perplexity **once**.
-2. Build multi-scale landscapes (default: 25, 50, 100, 200, 400 bp) using rolling mean or median.
-3. At each scale, compute three-window local perplexity contrast (upstream/spacer/candidate/spacer/downstream).
-4. Normalize each scale LPC within each layer (robust z-score or percentile), then median-combine to layer consensus.
-5. Ensemble layer consensuses to final **ConsensusLPC** (median or trimmed mean).
-6. Run bounded Kadane core detection once on ConsensusLPC, expand boundaries while signal stays positive, merge overlaps.
-7. Report valley support and intermediate metrics for full explainability.
+2. Apply one-pass **Savitzky–Golay smoothing** (default: window 21, order 3) to each perplexity profile.
+3. Build multi-scale landscapes (default: 25, 50, 100, 200, 400 bp).
+4. At each scale, compute three-window local perplexity contrast (upstream/spacer/candidate/spacer/downstream).
+5. Normalize each scale LPC within each layer, then median-combine to layer consensus.
+6. Ensemble layer consensuses to final **ConsensusLPC**.
+7. Generate candidate valleys from positive ConsensusLPC runs.
+8. Refine each candidate with bounded Kadane core detection (default 50–1000 bp).
+9. Filter by persistence ≥ 0.80 and adaptive prominence, then apply non-maximum suppression and merge nearby valleys.
+10. Rank remaining valleys by `MeanLPC × Persistence × ScaleSupport × Area × log(Length) × 1/(Variance+ε)`.
 
 ## Illustrated Workflow
 
 <svg width="980" height="160" viewBox="0 0 980 160" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="REGPLEX workflow">
   <title>REGPLEX workflow diagram</title>
-  <desc>Workflow: DNA to mono, di and tri perplexity; multi-scale analysis; layer consensus; ensemble ConsensusLPC; Kadane-driven valleys.</desc>
+  <desc>Workflow: DNA to mono, di and tri perplexity; Savitzky–Golay smoothing; multi-scale LPC; ConsensusLPC; candidate generation; Kadane refinement; filtering; NMS; merged valleys.</desc>
   <defs>
     <style>
       .n{fill:#fff;stroke:#1E3A8A;stroke-width:1.5;rx:10}
@@ -43,10 +46,10 @@ The method is training-free and uses no learned model weights.
   <rect class="n" x="160" y="16" width="120" height="34"/><text class="t" x="174" y="37">Mono</text>
   <rect class="n" x="160" y="62" width="120" height="34"/><text class="t" x="178" y="83">Di</text>
   <rect class="n" x="160" y="108" width="120" height="34"/><text class="t" x="175" y="129">Tri</text>
-  <rect class="n" x="310" y="50" width="140" height="48"/><text class="t" x="326" y="79">Multi-scale</text>
-  <rect class="n" x="480" y="50" width="150" height="48"/><text class="t" x="507" y="79">Layer consensus</text>
-  <rect class="n" x="660" y="50" width="130" height="48"/><text class="t" x="679" y="79">ConsensusLPC</text>
-  <rect class="n" x="820" y="50" width="140" height="48"/><text class="t" x="840" y="79">Kadane → Valleys</text>
+  <rect class="n" x="310" y="50" width="140" height="48"/><text class="t" x="330" y="79">SG + Multi-scale</text>
+  <rect class="n" x="480" y="50" width="150" height="48"/><text class="t" x="505" y="79">LPC + Consensus</text>
+  <rect class="n" x="660" y="50" width="130" height="48"/><text class="t" x="679" y="79">Candidates</text>
+  <rect class="n" x="820" y="50" width="140" height="48"/><text class="t" x="830" y="79">Kadane → NMS → Merge</text>
   <line class="a" x1="130" y1="74" x2="160" y2="74"/>
   <line class="a" x1="280" y1="74" x2="310" y2="74"/>
   <line class="a" x1="450" y1="74" x2="480" y2="74"/>
@@ -75,13 +78,13 @@ The Motif section includes built-in non-B DNA and promoter motif boxes by defaul
 ### CLI
 
 ```bash
-python regplex_core.py examples/ecoli.fasta --out regplex_v10_valleys.csv
+python regplex_core.py examples/ecoli.fasta --out regplex_v11_valleys.csv
 python regplex_core.py examples/ecoli.fasta --scales 25,50,100,200,400 --landscape-method median --normalization-method robust_z --ensemble-method median
 ```
 
 ## Notebook
 
-- `REGPLEX_Local.ipynb` contains a 15-section scientific walkthrough aligned to v10.
+- `REGPLEX_Local.ipynb` contains a 16-section scientific walkthrough aligned to v11.
 
 ## Examples
 
@@ -110,7 +113,7 @@ The UI generates publication-ready Plotly figures:
 3. Layer consensus LPC
 4. Ensemble ConsensusLPC
 5. Scale/layer support heatmap
-6. Kadane core with expanded valleys
+6. Candidate valleys, Kadane cores and final merged valleys
 7. Valley ranking
 8. Motif architecture
 9. Workflow diagram
@@ -124,7 +127,7 @@ The UI generates publication-ready Plotly figures:
 
 ## Citation
 
-If you use REGPLEX in research, cite this repository and include algorithm version (`v10`) in methods.
+If you use REGPLEX in research, cite this repository and include algorithm version (`v11`) in methods.
 
 ## License
 
