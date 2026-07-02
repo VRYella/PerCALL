@@ -303,14 +303,14 @@ def _render_analysis() -> None:
         "Operating mode",
         options=["promoter", "genome", "ensemble"],
         index=["promoter", "genome", "ensemble"].index(DEFAULT_MODE),
-        help="promoter: Di + positional prior (default); genome: Di only; ensemble: Mono+Di+Tri exploratory mode.",
+        help="promoter: Dinucleotide + positional prior (default); genome: Dinucleotide only; ensemble: Mono+Di+Tri exploratory mode.",
     )
 
     core_window_upstream: int | None = None
     core_window_downstream: int | None = None
     reference_point: int | None = 0
     if mode == "promoter":
-        st.caption("Promoter mode uses the default positional prior window [-500, +200] around reference point 0.")
+        st.caption(f"Promoter mode applies a positional prior window (default [-{CORE_WINDOW_UPSTREAM}, +{CORE_WINDOW_DOWNSTREAM}]) around the reference point.")
         mpos1, mpos2, mpos3 = st.columns(3)
         with mpos1:
             reference_point = int(st.number_input("Reference point", value=0, step=1))

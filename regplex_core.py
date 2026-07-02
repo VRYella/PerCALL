@@ -1243,6 +1243,10 @@ def _resolve_scales(scales: list[int] | None) -> list[int]:
 def analyze_sequence(sequence_id: str, seq: str, **kwargs) -> AnalysisResult:
     """REGPLEX v12 analysis pipeline.
 
+    Default behavior is di-centric: promoter/genome modes use Dinucleotide
+    ConsensusLPC for detection and keep Mono/Tri as support annotations.
+    Ensemble mode is retained as an exploratory multi-layer option.
+
     Steps
     -----
     1. Mono / Di / Tri perplexity (single pass, unchanged from v10).

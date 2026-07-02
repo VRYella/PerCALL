@@ -19,7 +19,7 @@ Mononucleotide and Trinucleotide perplexities are retained as auxiliary evidence
 - Dinucleotide statistics directly encode nearest-neighbor stacking interactions.
 - These interactions are strongly linked to local duplex stability.
 - Promoter architecture and DNA structural organization are reflected in short-range pair dependencies.
-- Empirical benchmarking showed no substantial independent discriminatory gain from Mono/Tri in core valley calling.
+- In the v12 redesign benchmark, Mono/Tri did not provide substantial independent discriminatory gain in the primary calling path.
 
 ## Default Pipeline (scientifically recommended)
 
