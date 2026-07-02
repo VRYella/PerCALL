@@ -56,6 +56,26 @@ st.set_page_config(page_title="REGPLEX", layout="wide", initial_sidebar_state="c
 _NAV_ITEMS = ["Home", "Analysis", "Results", "Motifs", "About"]
 _README_URL = "https://github.com/VRYella/PerCALL#readme"
 
+DEFAULT_NON_B_DNA_MOTIFS = (
+    "A{7}|T{7}",
+    "G{7}|C{7}",
+    "G{3,5}[ACGT]{1,7}G{3,5}[ACGT]{1,7}G{3,5}[ACGT]{1,7}G{3,5}",
+    "C{3,5}[ACGT]{1,7}C{3,5}[ACGT]{1,7}C{3,5}[ACGT]{1,7}C{3,5}",
+)
+
+DEFAULT_PROMOTER_IUPAC_MOTIFS = (
+    "TATAWAWR",
+    "BBCABW",
+    "YYCTTTYY",
+    "SSRCGCC",
+    "RTDKKKK",
+    "DSGYGGRASM",
+    "WATCGATW",
+    "CSARCSSAACGS",
+    "RGWCGTG",
+    "KCGRWCG",
+)
+
 PLOT_CONFIG = {
     "displaylogo": False,
     "toImageButtonOptions": {"format": "svg", "filename": "regplex_v11_figure", "scale": 2},
@@ -156,6 +176,12 @@ def _validate_motifs(motif_text: str) -> list[dict]:
         except re.error:
             rows.append({"Motif": motif, "Regex": "invalid", "Status": "invalid"})
     return rows
+
+
+def _combine_motif_text(custom_text: str) -> str:
+    default_lines = [*DEFAULT_NON_B_DNA_MOTIFS, *DEFAULT_PROMOTER_IUPAC_MOTIFS]
+    custom_lines = [line.strip() for line in custom_text.splitlines() if line.strip()]
+    return "\n".join([*default_lines, *custom_lines])
 
 
 def _run_analysis(fasta_text: str, params: dict, motif_text: str) -> tuple[list[AnalysisResult], float]:
@@ -272,8 +298,31 @@ def _render_analysis() -> None:
             help="Display limit; toggle Show All in Results to see every valley",
         )
 
-    motif_text = st.text_area("Motifs (Regex/IUPAC, one per line)", height=120, key="analysis_motifs")
+    st.markdown("#### 🧩 Built-in Motif Boxes (always included)")
+    b1, b2 = st.columns(2)
+    with b1:
+        st.text_area(
+            "Non-B DNA motifs",
+            value="\n".join(DEFAULT_NON_B_DNA_MOTIFS),
+            height=140,
+            disabled=True,
+        )
+    with b2:
+        st.text_area(
+            "Promoter motifs (IUPAC)",
+            value="\n".join(DEFAULT_PROMOTER_IUPAC_MOTIFS),
+            height=220,
+            disabled=True,
+        )
+
+    custom_motif_text = st.text_area(
+        "Add more motifs (Regex/IUPAC, one per line)",
+        height=120,
+        key="custom_motif_text",
+    )
+    motif_text = _combine_motif_text(custom_motif_text)
     motif_rows = _validate_motifs(motif_text)
+    st.caption(f"Annotating with {len(motif_rows)} motif patterns (built-in + custom).")
     if motif_rows:
         lines = []
         for row in motif_rows:
@@ -286,7 +335,7 @@ def _render_analysis() -> None:
         run_clicked = st.button("▶ Run REGPLEX", type="primary", width="stretch")
     with reset_col:
         if st.button("↺ Reset", width="stretch"):
-            for key in ["results", "domains_df", "runtime", "input_fasta_text", "motif_text"]:
+            for key in ["results", "domains_df", "runtime", "input_fasta_text", "motif_text", "custom_motif_text"]:
                 st.session_state.pop(key, None)
             st.rerun()
     with example_col:
@@ -326,6 +375,7 @@ def _render_analysis() -> None:
             st.session_state["domains_df"] = domains_dataframe(results)
             st.session_state["runtime"] = runtime_seconds
             st.session_state["motif_text"] = motif_text
+            st.session_state["custom_motif_text"] = custom_motif_text
             st.session_state["top_n"] = int(top_n)
             n_seqs = len(results)
             seq_word = "sequence" if n_seqs == 1 else "sequences"
@@ -426,8 +476,15 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
 
 def _render_motifs(df: pd.DataFrame) -> None:
     _render_html_block("<div class='card'><h3>Motif Annotation</h3><p>Validate motif syntax and inspect valley-level motif support.</p></div>")
-    motif_text = st.text_area("Motif editor", value=st.session_state.get("motif_text", ""), height=220)
+    m1, m2 = st.columns(2)
+    with m1:
+        st.text_area("Non-B DNA motifs", value="\n".join(DEFAULT_NON_B_DNA_MOTIFS), height=140, disabled=True)
+    with m2:
+        st.text_area("Promoter motifs (IUPAC)", value="\n".join(DEFAULT_PROMOTER_IUPAC_MOTIFS), height=220, disabled=True)
+    custom_text = st.text_area("Add more motifs", height=220, key="custom_motif_text")
+    motif_text = _combine_motif_text(custom_text)
     rows = _validate_motifs(motif_text)
+    st.caption(f"Active motif patterns: {len(rows)} (built-in + custom).")
     if not rows:
         _render_html_block("<div class='empty-state'><div>No motifs entered.</div></div>")
         return
