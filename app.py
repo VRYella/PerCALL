@@ -44,11 +44,11 @@ from regplex_core import (
 from visualization import (
     plot_algorithm_workflow,
     plot_consensus_lpc,
+    plot_kadane_domains,
     plot_domain_ranking,
     plot_motif_architecture,
     plot_scale_support_heatmap,
     plot_smoothed_perplexity,
-    plot_vpi_profile,
 )
 
 st.set_page_config(page_title="REGPLEX", layout="wide", initial_sidebar_state="collapsed")
@@ -149,7 +149,7 @@ def _render_topbar() -> None:
         f"""
         <div class="regplex-topbar">
           <div class="regplex-topbar-inner">
-            <div class="brand">{_svg_logo()}<div><h1>REGPLEX</h1><span>v12 · Biological Domain Detector</span></div></div>
+            <div class="brand">{_svg_logo()}<div><h1>REGPLEX</h1><span>v11 · Perplexity Valley Detector</span></div></div>
             <div class="top-links">
               <a href="https://github.com/VRYella/PerCALL" target="_blank" rel="noopener noreferrer">GitHub</a>
               <a href="{_README_URL}" target="_blank" rel="noopener noreferrer">Documentation</a>
@@ -217,7 +217,7 @@ def _run_analysis(fasta_text: str, params: dict, motif_text: str) -> tuple[list[
 def _render_home() -> None:
     img_b64 = _load_hero_image_b64()
     image_html = (
-        f'<img src="data:image/png;base64,{img_b64}" class="hero-image" alt="REGPLEX v10 workflow"/>'
+        f'<img src="data:image/png;base64,{img_b64}" class="hero-image" alt="REGPLEX v11 workflow"/>'
         if img_b64
         else '<div class="hero-image-missing">Hero image unavailable</div>'
     )
@@ -233,9 +233,9 @@ def _render_home() -> None:
     <p class="hero-desc">
       REGPLEX v11 computes mononucleotide, dinucleotide and trinucleotide perplexity once,
       applies Savitzky–Golay smoothing to preserve valley shape, builds multi-scale local contrast
-      profiles, generates candidate valleys, refines each with Kadane's algorithm, then filters by
-      persistence ≥ 80 %, adaptive prominence, and non-maximum suppression to produce a concise
-      list of high-confidence regulatory valleys.
+      profiles, generates candidate valleys from ConsensusLPC, refines each with Kadane's algorithm,
+      then filters by persistence ≥ 80 %, adaptive prominence, non-maximum suppression, and merging
+      to produce a concise list of high-confidence regulatory valleys.
     </p>
     <div class="hero-chips">
       <span class="hero-chip">Savitzky–Golay smoothing</span>
@@ -267,7 +267,7 @@ def _render_analysis() -> None:
     _render_html_block(
         "<div class='card'>"
         "<h3>🔬 REGPLEX Analysis</h3>"
-        "<p>Upload or paste a FASTA sequence, tune the two key parameters, then run the pipeline.</p>"
+        "<p>Upload or paste a FASTA sequence, tune the valley-detection parameters, then run the pipeline.</p>"
         "</div>"
     )
 
@@ -301,7 +301,7 @@ def _render_analysis() -> None:
         min_domain = st.number_input(
             "Min valley length (bp)",
             min_value=MIN_DOMAIN, max_value=10000, value=MIN_DOMAIN,
-            help="Minimum output region size in nucleotides (≥ 100 mer guaranteed)",
+            help="Minimum output region size in nucleotides (default 50 bp).",
         )
     with p2:
         persistence_threshold = st.slider(
@@ -315,6 +315,42 @@ def _render_analysis() -> None:
             1, 500, TOP_N_DISPLAY,
             help="Display limit; toggle Show All in Results to see every valley",
         )
+
+    with st.expander("Advanced detection parameters"):
+        a1, a2, a3 = st.columns(3)
+        with a1:
+            max_domain = st.number_input(
+                "Max valley length (bp)",
+                min_value=MIN_DOMAIN, max_value=10000, value=MAX_DOMAIN,
+                help="Maximum final valley length and Kadane refinement bound.",
+            )
+            merge_gap = st.number_input(
+                "Merge gap (bp)",
+                min_value=0, max_value=1000, value=MERGE_GAP,
+                help="Merge post-NMS valleys when the gap is smaller than this value.",
+            )
+        with a2:
+            sg_window_length = st.number_input(
+                "Savitzky–Golay window",
+                min_value=3, max_value=401, value=SG_WINDOW_LENGTH, step=2,
+                help="Odd smoothing window length applied once to each perplexity profile.",
+            )
+            nms_overlap = st.slider(
+                "NMS overlap threshold",
+                0.0, 1.0, NMS_OVERLAP_THRESHOLD, 0.05,
+                help="Suppress overlapping valleys when their overlap fraction exceeds this value.",
+            )
+        with a3:
+            sg_poly_order = st.number_input(
+                "Savitzky–Golay order",
+                min_value=1, max_value=10, value=SG_POLY_ORDER,
+                help="Polynomial order for Savitzky–Golay smoothing.",
+            )
+            max_candidate = st.number_input(
+                "LPC candidate max length (bp)",
+                min_value=MIN_CANDIDATE, max_value=10000, value=MAX_CANDIDATE,
+                help="Upper bound for the scale-adapted LPC candidate window.",
+            )
 
     st.markdown("#### 🧩 Built-in Motif Boxes (always included)")
     b1, b2 = st.columns(2)
@@ -359,6 +395,8 @@ def _render_analysis() -> None:
             st.warning("No FASTA provided.")
             return
 
+        max_domain = max(int(max_domain), int(min_domain))
+        max_candidate = max(int(max_candidate), int(min_domain))
         params = {
             "perplexity_window": PERPLEXITY_WINDOW,
             "scales": DEFAULT_SCALES,
@@ -366,14 +404,14 @@ def _render_analysis() -> None:
             "normalization_method": NORMALIZATION_METHOD,
             "ensemble_method": ENSEMBLE_METHOD,
             "min_candidate": MIN_CANDIDATE,
-            "max_candidate": MAX_CANDIDATE,
+            "max_candidate": max_candidate,
             "min_domain": int(min_domain),
-            "max_domain": MAX_DOMAIN,
-            "merge_gap": MERGE_GAP,
-            "sg_window_length": SG_WINDOW_LENGTH,
-            "sg_poly_order": SG_POLY_ORDER,
+            "max_domain": max_domain,
+            "merge_gap": int(merge_gap),
+            "sg_window_length": int(sg_window_length),
+            "sg_poly_order": int(sg_poly_order),
             "persistence_threshold": float(persistence_threshold),
-            "nms_overlap": NMS_OVERLAP_THRESHOLD,
+            "nms_overlap": float(nms_overlap),
         }
 
         with st.status("Running signal-processing valley detection…", expanded=False) as status:
@@ -419,8 +457,8 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
 
     tabs = st.tabs([
         "📈 Perplexity",
-        "🌊 VPI Profile",
         "🎯 ConsensusLPC",
+        "🧭 Candidate Refinement",
         "🌡️ Scale Support",
         "🏆 Valley Ranking",
         "🔎 Motifs",
@@ -436,25 +474,24 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
             f"smooth-{selected_seq}",
         )
     with tabs[1]:
-        _show_figure(
-            plot_vpi_profile(result.consensus_lpc, result.vpi, result.domains, result.kadane_core),
-            f"vpi-{selected_seq}",
-        )
-    with tabs[2]:
         _show_figure(plot_consensus_lpc(result.consensus_lpc, result.domains), f"cons-{selected_seq}")
+    with tabs[2]:
+        _show_figure(
+            plot_kadane_domains(result.consensus_lpc, result.domains, result.kadane_core, result.candidates),
+            f"candidate-refine-{selected_seq}",
+        )
     with tabs[3]:
         _show_figure(plot_scale_support_heatmap(result.lpc_profiles, result.domains, scales), f"support-{selected_seq}")
     with tabs[4]:
         _show_figure(plot_domain_ranking(result.domains), f"rank-{selected_seq}")
 
-        # v12 display columns
         display_cols = [
             col for col in [
                 "Rank", "Start", "End", "Length",
                 "MeanPerplexity", "MinPerplexity", "MaxPerplexity",
                 "MeanLPC", "MaxLPC", "Prominence", "Area", "Persistence",
                 "ScaleSupport", "MonoSupport", "DiSupport", "TriSupport",
-                "Variance", "GC%", "ValleyScore", "Motifs", "Sequence",
+                "Variance", "GC%", "ValleyScore", "ValleyScoreNormalized", "Motifs", "Sequence",
             ]
             if col in selected_df.columns
         ]
@@ -473,15 +510,15 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
     with tabs[6]:
         c1, c2, c3 = st.columns(3)
         with c1:
-            st.download_button("CSV", export_table(selected_df, "csv"), "regplex_v12_valleys.csv", "text/csv", width="stretch")
-            st.download_button("Excel", export_table(selected_df, "xlsx"), "regplex_v12_valleys.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", width="stretch")
-            st.download_button("BED", export_bed(selected_df), "regplex_v12_valleys.bed", "text/plain", width="stretch")
+            st.download_button("CSV", export_table(selected_df, "csv"), "regplex_v11_valleys.csv", "text/csv", width="stretch")
+            st.download_button("Excel", export_table(selected_df, "xlsx"), "regplex_v11_valleys.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", width="stretch")
+            st.download_button("BED", export_bed(selected_df), "regplex_v11_valleys.bed", "text/plain", width="stretch")
         with c2:
-            st.download_button("GFF", export_gff(selected_df, gff3=False), "regplex_v12_valleys.gff", "text/plain", width="stretch")
-            st.download_button("GFF3", export_gff(selected_df, gff3=True), "regplex_v12_valleys.gff3", "text/plain", width="stretch")
-            st.download_button("FASTA", export_fasta(selected_df), "regplex_v12_valleys.fasta", "text/plain", width="stretch")
+            st.download_button("GFF", export_gff(selected_df, gff3=False), "regplex_v11_valleys.gff", "text/plain", width="stretch")
+            st.download_button("GFF3", export_gff(selected_df, gff3=True), "regplex_v11_valleys.gff3", "text/plain", width="stretch")
+            st.download_button("FASTA", export_fasta(selected_df), "regplex_v11_valleys.fasta", "text/plain", width="stretch")
         with c3:
-            st.download_button("JSON", export_table(selected_df, "json"), "regplex_v12_valleys.json", "application/json", width="stretch")
+            st.download_button("JSON", export_table(selected_df, "json"), "regplex_v11_valleys.json", "application/json", width="stretch")
 
 
 def _render_motifs(df: pd.DataFrame) -> None:
@@ -518,10 +555,10 @@ def _render_about() -> None:
         """
         <div class="card">
           <h3>🧬 Scientific Hypothesis</h3>
-          <p>Regulatory regions are <strong>low-complexity</strong> genomic intervals that remain contrastive across independent information layers (mono/di/tri) and across multiple observation scales. A biologically meaningful domain must persist across the majority of evaluated positions (<strong>VPI ≥ 0.6 at ≥ 80 % of positions</strong>) and be distinctly prominent relative to its genomic context.</p>
+          <p>Regulatory regions are <strong>low-complexity</strong> genomic intervals that remain contrastive across independent information layers (mono/di/tri) and across multiple observation scales. A biologically meaningful valley must survive ranking, Kadane refinement, persistence filtering, adaptive prominence filtering, and overlap suppression.</p>
           <h3 style="margin-top:1rem">⚙️ Algorithm Overview</h3>
           <p>Each layer computes perplexity once, then a <strong>Savitzky–Golay filter</strong> (window 21, order 3) preserves valley shape while removing local noise. Multi-scale landscapes are built from the smoothed profiles; three-window <strong>LPC profiles</strong> are derived per scale, normalized, then median-combined to a layer consensus. The final ConsensusLPC is the median across layers.</p>
-          <p>The <strong>Valley Persistence Index (VPI)</strong> is computed per position as the fraction of all scale×layer combinations with LPC > 0. Candidates are generated from VPI ≥ 0.6 runs with internal gaps ≤ 20 bp bridged. Each candidate is expanded left/right while VPI > 0.3 or ConsensusLPC > 0. Kadane's algorithm identifies the best core region <em>for visualization only</em> — final boundaries always come from expansion. Candidates are then filtered by ConsensusLPC persistence (≥ 0.80), VPI persistence (≥ 0.80), and <strong>adaptive prominence (75th percentile)</strong>. After <strong>NMS</strong> and merging (gap &lt; 50 bp), valleys are ranked by the composite ValleyScore = MeanLPC × Persistence × ScaleSupport × Prominence × log(Length) × 1/(Variance+ε).</p>
+          <p>Candidate valleys are generated from contiguous positive <strong>ConsensusLPC</strong> runs. Kadane's algorithm then finds the strongest continuous core inside each candidate using bounded lengths (default 50–1000 bp). Candidates are filtered by <strong>ConsensusLPC persistence (≥ 0.80)</strong> and <strong>adaptive prominence</strong>, scored using MeanLPC × Persistence × ScaleSupport × Area × log(Length) × 1/(Variance+ε), then reduced with <strong>NMS</strong> and final gap-based merging (gap &lt; 25 bp).</p>
         </div>
         """
     )
@@ -548,7 +585,7 @@ def main() -> None:
         _render_about()
 
     st.markdown("---")
-    st.markdown("**REGPLEX v12** · Biological Domain Detector · MIT License")
+    st.markdown("**REGPLEX v11** · Perplexity Valley Detector · MIT License")
 
 
 if __name__ == "__main__":
