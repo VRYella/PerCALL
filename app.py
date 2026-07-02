@@ -179,6 +179,7 @@ def _validate_motifs(motif_text: str) -> list[dict]:
 
 
 def _combine_motif_text(custom_text: str) -> str:
+    """Return a newline-separated motif set containing built-ins plus user-added motifs."""
     default_lines = [*DEFAULT_NON_B_DNA_MOTIFS, *DEFAULT_PROMOTER_IUPAC_MOTIFS]
     custom_lines = [line.strip() for line in custom_text.splitlines() if line.strip()]
     return "\n".join([*default_lines, *custom_lines])
@@ -301,25 +302,19 @@ def _render_analysis() -> None:
     st.markdown("#### 🧩 Built-in Motif Boxes (always included)")
     b1, b2 = st.columns(2)
     with b1:
-        st.text_area(
-            "Non-B DNA motifs",
-            value="\n".join(DEFAULT_NON_B_DNA_MOTIFS),
-            height=140,
-            disabled=True,
-        )
+        st.markdown("**Non-B DNA motifs (fixed)**")
+        st.code("\n".join(DEFAULT_NON_B_DNA_MOTIFS), language="text")
     with b2:
-        st.text_area(
-            "Promoter motifs (IUPAC)",
-            value="\n".join(DEFAULT_PROMOTER_IUPAC_MOTIFS),
-            height=220,
-            disabled=True,
-        )
+        st.markdown("**Promoter motifs (IUPAC, fixed)**")
+        st.code("\n".join(DEFAULT_PROMOTER_IUPAC_MOTIFS), language="text")
 
     custom_motif_text = st.text_area(
         "Add more motifs (Regex/IUPAC, one per line)",
+        value=st.session_state.get("custom_motif_text", ""),
         height=120,
-        key="custom_motif_text",
+        key="analysis_custom_motif_text",
     )
+    st.session_state["custom_motif_text"] = custom_motif_text
     motif_text = _combine_motif_text(custom_motif_text)
     motif_rows = _validate_motifs(motif_text)
     st.caption(f"Annotating with {len(motif_rows)} motif patterns (built-in + custom).")
@@ -335,7 +330,16 @@ def _render_analysis() -> None:
         run_clicked = st.button("▶ Run REGPLEX", type="primary", width="stretch")
     with reset_col:
         if st.button("↺ Reset", width="stretch"):
-            for key in ["results", "domains_df", "runtime", "input_fasta_text", "motif_text", "custom_motif_text"]:
+            for key in [
+                "results",
+                "domains_df",
+                "runtime",
+                "input_fasta_text",
+                "motif_text",
+                "custom_motif_text",
+                "analysis_custom_motif_text",
+                "motifs_custom_motif_text",
+            ]:
                 st.session_state.pop(key, None)
             st.rerun()
     with example_col:
@@ -478,10 +482,18 @@ def _render_motifs(df: pd.DataFrame) -> None:
     _render_html_block("<div class='card'><h3>Motif Annotation</h3><p>Validate motif syntax and inspect valley-level motif support.</p></div>")
     m1, m2 = st.columns(2)
     with m1:
-        st.text_area("Non-B DNA motifs", value="\n".join(DEFAULT_NON_B_DNA_MOTIFS), height=140, disabled=True)
+        st.markdown("**Non-B DNA motifs (fixed)**")
+        st.code("\n".join(DEFAULT_NON_B_DNA_MOTIFS), language="text")
     with m2:
-        st.text_area("Promoter motifs (IUPAC)", value="\n".join(DEFAULT_PROMOTER_IUPAC_MOTIFS), height=220, disabled=True)
-    custom_text = st.text_area("Add more motifs", height=220, key="custom_motif_text")
+        st.markdown("**Promoter motifs (IUPAC, fixed)**")
+        st.code("\n".join(DEFAULT_PROMOTER_IUPAC_MOTIFS), language="text")
+    custom_text = st.text_area(
+        "Add more motifs",
+        value=st.session_state.get("custom_motif_text", ""),
+        height=220,
+        key="motifs_custom_motif_text",
+    )
+    st.session_state["custom_motif_text"] = custom_text
     motif_text = _combine_motif_text(custom_text)
     rows = _validate_motifs(motif_text)
     st.caption(f"Active motif patterns: {len(rows)} (built-in + custom).")
