@@ -56,14 +56,14 @@ st.set_page_config(page_title="REGPLEX", layout="wide", initial_sidebar_state="c
 _NAV_ITEMS = ["Home", "Analysis", "Results", "Motifs", "About"]
 _README_URL = "https://github.com/VRYella/PerCALL#readme"
 
-DEFAULT_NON_B_DNA_MOTIFS = (
+_DEFAULT_NON_B_DNA_MOTIFS = (
     "A{7}|T{7}",
     "G{7}|C{7}",
     "G{3,5}[ACGT]{1,7}G{3,5}[ACGT]{1,7}G{3,5}[ACGT]{1,7}G{3,5}",
     "C{3,5}[ACGT]{1,7}C{3,5}[ACGT]{1,7}C{3,5}[ACGT]{1,7}C{3,5}",
 )
 
-DEFAULT_PROMOTER_IUPAC_MOTIFS = (
+_DEFAULT_PROMOTER_IUPAC_MOTIFS = (
     "TATAWAWR",
     "BBCABW",
     "YYCTTTYY",
@@ -81,6 +81,17 @@ PLOT_CONFIG = {
     "toImageButtonOptions": {"format": "svg", "filename": "regplex_v11_figure", "scale": 2},
     "modeBarButtonsToAdd": ["resetScale2d"],
 }
+
+_RESET_SESSION_KEYS = (
+    "results",
+    "domains_df",
+    "runtime",
+    "input_fasta_text",
+    "motif_text",
+    "custom_motif_text",
+    "analysis_custom_motif_text",
+    "motifs_custom_motif_text",
+)
 
 
 def _render_html_block(body: str) -> None:
@@ -180,7 +191,7 @@ def _validate_motifs(motif_text: str) -> list[dict]:
 
 def _combine_motif_text(custom_text: str) -> str:
     """Return a newline-separated motif set containing built-ins plus user-added motifs."""
-    default_lines = [*DEFAULT_NON_B_DNA_MOTIFS, *DEFAULT_PROMOTER_IUPAC_MOTIFS]
+    default_lines = [*_DEFAULT_NON_B_DNA_MOTIFS, *_DEFAULT_PROMOTER_IUPAC_MOTIFS]
     custom_lines = [line.strip() for line in custom_text.splitlines() if line.strip()]
     return "\n".join([*default_lines, *custom_lines])
 
@@ -303,10 +314,10 @@ def _render_analysis() -> None:
     b1, b2 = st.columns(2)
     with b1:
         st.markdown("**Non-B DNA motifs (fixed)**")
-        st.code("\n".join(DEFAULT_NON_B_DNA_MOTIFS), language="text")
+        st.code("\n".join(_DEFAULT_NON_B_DNA_MOTIFS), language="text")
     with b2:
         st.markdown("**Promoter motifs (IUPAC, fixed)**")
-        st.code("\n".join(DEFAULT_PROMOTER_IUPAC_MOTIFS), language="text")
+        st.code("\n".join(_DEFAULT_PROMOTER_IUPAC_MOTIFS), language="text")
 
     custom_motif_text = st.text_area(
         "Add more motifs (Regex/IUPAC, one per line)",
@@ -330,16 +341,7 @@ def _render_analysis() -> None:
         run_clicked = st.button("▶ Run REGPLEX", type="primary", width="stretch")
     with reset_col:
         if st.button("↺ Reset", width="stretch"):
-            for key in [
-                "results",
-                "domains_df",
-                "runtime",
-                "input_fasta_text",
-                "motif_text",
-                "custom_motif_text",
-                "analysis_custom_motif_text",
-                "motifs_custom_motif_text",
-            ]:
+            for key in _RESET_SESSION_KEYS:
                 st.session_state.pop(key, None)
             st.rerun()
     with example_col:
@@ -483,10 +485,10 @@ def _render_motifs(df: pd.DataFrame) -> None:
     m1, m2 = st.columns(2)
     with m1:
         st.markdown("**Non-B DNA motifs (fixed)**")
-        st.code("\n".join(DEFAULT_NON_B_DNA_MOTIFS), language="text")
+        st.code("\n".join(_DEFAULT_NON_B_DNA_MOTIFS), language="text")
     with m2:
         st.markdown("**Promoter motifs (IUPAC, fixed)**")
-        st.code("\n".join(DEFAULT_PROMOTER_IUPAC_MOTIFS), language="text")
+        st.code("\n".join(_DEFAULT_PROMOTER_IUPAC_MOTIFS), language="text")
     custom_text = st.text_area(
         "Add more motifs",
         value=st.session_state.get("custom_motif_text", ""),
