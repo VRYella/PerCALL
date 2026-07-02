@@ -941,7 +941,7 @@ def valley_statistics(
         and not (end < k_start or start > k_end)
     )
 
-    # Per-valley Kadane core (for visualization — boundaries come from expansion)
+    # Per-valley Kadane core (for visualization within the final merged valley)
     vk_start, vk_end = valley_kadane_core
 
     return {
@@ -981,7 +981,7 @@ def valley_statistics(
         "ValleyScore_raw": float(valley_score_raw),
         "GC%": float(gc),
         "KadaneCoreOverlap": core_overlap,
-        # Per-valley Kadane core (visualization only; final bounds from VPI expansion)
+        # Per-valley Kadane core (visualization only)
         "KadaneCoreStart": int(vk_start) if vk_start is not None else None,
         "KadaneCoreEnd": int(vk_end) if vk_end is not None else None,
         "Sequence": sequence,
@@ -1132,6 +1132,7 @@ def find_domains(
     for idx, (s, e) in enumerate(merged_intervals, 1):
         if e - s + 1 < min_domain:
             continue
+        ks = ke = None
         if e - s + 1 > max_domain:
             ks, ke = _refine_with_kadane(consensus_lpc, s, e, min_domain, max_domain)
             if ks is None or ke is None:
@@ -1142,7 +1143,8 @@ def find_domains(
         prom = _compute_prominence(avg_perplexity, s, e)
         if prom < adaptive_threshold:
             continue
-        ks, ke = _refine_with_kadane(consensus_lpc, s, e, min_domain, max_domain)
+        if ks is None or ke is None:
+            ks, ke = _refine_with_kadane(consensus_lpc, s, e, min_domain, max_domain)
         d = valley_statistics(
             valley_index=idx,
             start=s,
