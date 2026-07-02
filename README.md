@@ -70,6 +70,8 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
+The Motif section includes built-in non-B DNA and promoter motif boxes by default, and you can add extra custom Regex/IUPAC motifs for additional valley annotation.
+
 ### CLI
 
 ```bash
