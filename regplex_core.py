@@ -1025,7 +1025,7 @@ def find_domains(
     nms_overlap: float = NMS_OVERLAP_THRESHOLD,
     p_window: int = PERPLEXITY_WINDOW,
 ) -> tuple[list[dict], list[dict], tuple[int | None, int | None]]:
-    """v11 candidate → ranking → refinement pipeline.
+    """v11 candidate → refinement → ranking pipeline.
 
     ConsensusLPC candidates → Kadane refinement → persistence filter →
     adaptive prominence filter → score → NMS → merge → final valleys.
