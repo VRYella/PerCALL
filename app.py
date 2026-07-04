@@ -244,7 +244,7 @@ def _render_home() -> None:
     image_html = (
         f'<img src="data:image/png;base64,{img_b64}" class="hero-image" alt="REGPLEX v13 workflow"/>'
         if img_b64
-        else '<div class="hero-image-missing">No logo</div>'
+        else '<div class="hero-image-missing">Logo unavailable</div>'
     )
     _render_html_block(
         f"""
