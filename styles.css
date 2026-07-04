@@ -4,68 +4,72 @@
    Variables
 ================================ */
 :root {
-  --primary: #1E3A8A;
-  --primary-light: #3B5FC0;
-  --secondary: #0F766E;
-  --accent: #10B981;
-  --highlight: #F59E0B;
-  --danger: #DC2626;
-  --background: #F0F4FF;
-  --card: #FFFFFF;
-  --border: #C7D2FE;
-  --text: #0f172a;
-  --muted: #475569;
-  --radius: 18px;
-  --shadow-soft: 0 8px 32px rgba(30, 58, 138, 0.10);
-  --shadow-card: 0 2px 12px rgba(30, 58, 138, 0.08);
+  /* Colours */
+  --primary:    #1E40AF;
+  --secondary:  #0891B2;
+  --accent:     #10B981;
+  --highlight:  #F59E0B;
+  --danger:     #DC2626;
+  --background: #F8FAFC;
+  --card:       #FFFFFF;
+  --border:     #BFDBFE;
+  --text:       #0f172a;
+  --muted:      #475569;
+  --radius:     16px;
+  --shadow-soft: 0 8px 32px rgba(30,64,175,0.10);
+  --shadow-card: 0 2px 12px rgba(30,64,175,0.08);
   --content-top-padding: calc(4.2rem + 2.8rem + 0.75rem);
+
+  /* Font families */
+  --font-body:    "Inter", "Segoe UI", sans-serif;
+  --font-heading: "Space Grotesk", "Inter", sans-serif;
+  --font-mono:    "JetBrains Mono", "SFMono-Regular", Menlo, monospace;
+
+  /* Font scale */
+  --fs-xs:  13px;
+  --fs-sm:  15px;
+  --fs-md:  19px;
+  --fs-lg:  24px;
+  --fs-xl:  32px;
+  --fs-xxl: 48px;
 }
 
 /* ================================
    Typography
 ================================ */
-body,
-.stApp {
+body, .stApp {
   background: var(--background);
   color: var(--text);
-  font-family: "Inter", "Segoe UI", sans-serif;
+  font-family: var(--font-body);
+  font-size: var(--fs-md);
+  line-height: 1.7;
 }
 
 h1, h2, h3, h4 {
-  font-family: "Space Grotesk", "Inter", sans-serif;
-  font-weight: 1200;
+  font-family: var(--font-heading);
+  font-weight: 800;
   letter-spacing: -0.02em;
 }
 
-h3 {
-  color: var(--primary);
-  font-size: 1.25rem;
-  margin-bottom: 0.25rem;
-}
+h1 { font-size: var(--fs-xxl); }
+h2 { font-size: var(--fs-xl); }
+h3 { font-size: var(--fs-lg); color: var(--primary); margin-bottom: 0.25rem; }
 
-.mono,
-code,
-pre {
-  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, monospace;
-}
+.mono, code, pre { font-family: var(--font-mono); font-size: var(--fs-sm); }
 
 /* ================================
    Streamlit cleanup + layout
 ================================ */
-#MainMenu,
-footer,
-header,
+#MainMenu, footer, header,
 [data-testid="stToolbar"],
 [data-testid="stStatusWidget"],
 [data-testid="stDecoration"],
 [data-testid="stSidebarNav"],
-[data-testid="stSidebar"] {
-  display: none !important;
-}
+[data-testid="stSidebar"] { display: none !important; }
 
 .block-container {
-  max-width: 99% !important;
-  padding: var(--content-top-padding) 1.5rem 2.2rem !important;
+  max-width: 100% !important;
+  padding: var(--content-top-padding) 1rem 2.2rem !important;
 }
 
 /* ================================
@@ -73,18 +77,16 @@ header,
 ================================ */
 .regplex-topbar {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
+  top: 0; left: 0; right: 0;
   z-index: 999;
   backdrop-filter: blur(14px);
-  background: rgba(240, 244, 255, 0.90);
+  background: rgba(248,250,252,0.92);
   border-bottom: 2px solid var(--border);
-  box-shadow: 0 2px 16px rgba(30, 58, 138, 0.08);
+  box-shadow: var(--shadow-card);
 }
 
 .regplex-topbar-inner {
-  padding: 0.75rem 1.5rem;
+  padding: 0.75rem 1rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -99,22 +101,17 @@ header,
 .brand h1 {
   margin: 0;
   font-size: 1.12rem;
-  font-weight: 800;
   color: var(--primary);
   letter-spacing: -0.02em;
 }
 
-.brand span {
-  color: var(--muted);
-  font-size: 0.82rem;
-  font-weight: 600;
-}
+.brand span { color: var(--muted); font-size: 0.82rem; font-weight: 600; }
 
 .top-links {
   display: flex;
   align-items: center;
   gap: 0.85rem;
-  font-size: 0.84rem;
+  font-size: 0.9rem;
 }
 
 .top-links a {
@@ -126,17 +123,26 @@ header,
   transition: background 0.18s;
 }
 
-.top-links a:hover {
-  background: #e0e7ff;
+.top-links a:hover { background: #dbeafe; }
+
+.top-version-badge {
+  background: linear-gradient(110deg, var(--primary) 20%, var(--secondary) 100%);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 0.28rem 0.8rem;
+  border-radius: 999px;
+  letter-spacing: 0.05em;
 }
 
+/* ================================
+   Navigation tabs (radio)
+================================ */
 div[data-testid="stRadio"] {
   position: fixed;
-  top: 3.8rem;
-  left: 0;
-  right: 0;
+  top: 3.8rem; left: 0; right: 0;
   z-index: 998;
-  background: rgba(240, 244, 255, 0.96);
+  background: rgba(248,250,252,0.97);
   border-bottom: 2px solid var(--border);
 }
 
@@ -152,50 +158,54 @@ div[data-testid="stRadio"] label {
   display: flex !important;
   justify-content: center;
   align-items: center;
-  min-height: 44px;
+  min-height: 56px;
   border-bottom: 3px solid transparent;
-  border-radius: 12px 12px 0 0;
+  border-radius: 0;
   color: var(--muted);
-  font-weight: 600;
+  font-family: var(--font-heading);
+  font-size: 18px;
+  font-weight: 700;
   transition: 180ms ease;
 }
 
-div[data-testid="stRadio"] label:hover {
-  background: #e0e7ff;
-  color: var(--primary);
-}
+div[data-testid="stRadio"] label:hover { background: #dbeafe; color: var(--primary); }
 
 div[data-testid="stRadio"] label:has(input[type="radio"]:checked) {
-  color: var(--primary);
+  background: var(--primary);
+  color: #fff;
   border-bottom-color: var(--primary);
-  font-weight: 800;
-  background: #eff6ff;
+  font-weight: 700;
 }
 
-div[data-testid="stRadio"] div[data-baseweb="radio"] {
-  display: none !important;
-}
+div[data-testid="stRadio"] div[data-baseweb="radio"] { display: none !important; }
 
 /* ================================
    Hero
 ================================ */
 .hero-section {
   display: grid;
-  grid-template-columns: 56fr 44fr;
-  gap: 2rem;
+  grid-template-columns: auto 1fr auto;
+  gap: 1.5rem;
   align-items: center;
-  margin-bottom: 1.2rem;
+  padding: 0.5rem 0;
+  max-height: 350px;
+  margin-bottom: 1rem;
+  overflow: hidden;
 }
 
-.hero-left {
+.hero-logo { display: flex; align-items: center; }
+
+.hero-center {
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
+  align-items: center;
+  text-align: center;
+  gap: 0.5rem;
 }
 
 .hero-brand {
-  font-family: "Space Grotesk", sans-serif;
-  font-size: clamp(2.3rem, 5vw, 3.8rem);
+  font-family: var(--font-heading);
+  font-size: var(--fs-xxl);
   font-weight: 800;
   background: linear-gradient(110deg, var(--primary) 30%, var(--secondary));
   -webkit-background-clip: text;
@@ -205,49 +215,46 @@ div[data-testid="stRadio"] div[data-baseweb="radio"] {
 }
 
 .hero-subtitle {
-  font-size: 1.15rem;
-  font-weight: 700;
+  font-size: var(--fs-lg);
+  font-weight: 800;
   color: var(--text);
-}
-
-.hero-subtitle-line {
-  display: block;
-}
-
-.hero-desc {
-  color: var(--muted);
-  line-height: 1.65;
-  font-size: 0.97rem;
+  line-height: 1.2;
 }
 
 .hero-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.55rem;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
 }
 
 .hero-chip {
-  border: 1.5px solid #6366f1;
-  background: linear-gradient(110deg, #e0e7ff, #eff6ff);
+  border: 1.5px solid var(--primary);
+  background: linear-gradient(110deg, #dbeafe, #eff6ff);
   color: var(--primary);
   border-radius: 999px;
-  padding: 0.35rem 0.9rem;
-  font-size: 0.82rem;
+  padding: 0.3rem 0.9rem;
+  font-size: var(--fs-sm);
   font-weight: 700;
   letter-spacing: 0.01em;
+  box-shadow: 0 1px 4px rgba(30,64,175,0.10);
 }
 
-.hero-image,
-.hero-image-missing {
+.hero-metrics { display: flex; flex-direction: column; gap: 0.4rem; }
+
+.hero-image, .hero-image-missing {
   width: 100%;
-  border-radius: 20px;
+  max-height: 280px;
+  object-fit: contain;
+  border-radius: 16px;
   border: 1.5px solid var(--border);
   background: white;
   box-shadow: var(--shadow-soft);
 }
 
 .hero-image-missing {
-  min-height: 240px;
+  min-height: 120px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -257,9 +264,7 @@ div[data-testid="stRadio"] div[data-baseweb="radio"] {
 /* ================================
    Cards
 ================================ */
-.card,
-.metric-card,
-.empty-state {
+.card, .metric-card, .empty-state {
   background: var(--card);
   border: 1.5px solid var(--border);
   border-radius: var(--radius);
@@ -267,26 +272,25 @@ div[data-testid="stRadio"] div[data-baseweb="radio"] {
 }
 
 .card {
-  padding: 1.15rem 1.4rem;
+  padding: 1.1rem 1.4rem;
   margin-bottom: 1rem;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   border-left: 4px solid var(--primary);
 }
 
-.card:hover,
-.metric-card:hover {
+.card:hover, .metric-card:hover {
   transform: translateY(-2px);
   box-shadow: var(--shadow-soft);
 }
 
 .metric-card {
-  padding: 1rem 1.1rem;
-  border-top: 3px solid var(--primary);
+  padding: 1rem 1.2rem;
+  border-top: 4px solid var(--primary);
 }
 
 .metric-label {
   color: var(--muted);
-  font-size: 0.80rem;
+  font-size: 14px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -294,9 +298,9 @@ div[data-testid="stRadio"] div[data-baseweb="radio"] {
 
 .metric-value {
   color: var(--primary);
-  font-size: 1.4rem;
+  font-size: 30px;
   font-weight: 800;
-  margin-top: 0.2rem;
+  margin-top: 0.15rem;
 }
 
 .empty-state {
@@ -307,13 +311,13 @@ div[data-testid="stRadio"] div[data-baseweb="radio"] {
 }
 
 /* ================================
-   Buttons + tabs
+   Buttons
 ================================ */
 .stButton > button,
 .stDownloadButton > button,
 [data-testid="stLinkButton"] a {
   border-radius: 12px;
-  min-height: 42px;
+  min-height: 44px;
   font-weight: 700;
   letter-spacing: 0.01em;
 }
@@ -322,22 +326,25 @@ div[data-testid="stRadio"] div[data-baseweb="radio"] {
   border: none;
   color: #fff;
   background: linear-gradient(95deg, var(--primary) 10%, var(--secondary) 90%);
-  font-size: 1rem;
-  box-shadow: 0 4px 16px rgba(30, 58, 138, 0.25);
+  font-size: var(--fs-md);
+  box-shadow: 0 4px 16px rgba(30,64,175,0.25);
 }
 
 .stButton > button[kind="primary"]:hover {
   filter: brightness(1.07);
-  box-shadow: 0 6px 20px rgba(30, 58, 138, 0.32);
+  box-shadow: 0 6px 20px rgba(30,64,175,0.32);
 }
 
 .stButton > button {
-  border: 1.5px solid #c7d2fe;
+  border: 1.5px solid var(--border);
   color: var(--primary);
-  background: #f0f4ff;
+  background: #f0f9ff;
   font-weight: 700;
 }
 
+/* ================================
+   Tabs
+================================ */
 [data-testid="stTabs"] [role="tablist"] {
   width: 100%;
   gap: 0.35rem;
@@ -346,37 +353,77 @@ div[data-testid="stRadio"] div[data-baseweb="radio"] {
 
 [data-testid="stTabs"] [role="tab"] {
   flex: 1;
+  height: 56px;
   border: 1.5px solid var(--border);
   border-bottom: none;
-  border-radius: 14px 14px 0 0;
-  background: #e8eeff;
+  border-radius: 12px 12px 0 0;
+  background: #e0f2fe;
   color: var(--muted);
+  font-family: var(--font-heading);
+  font-size: 18px;
   font-weight: 700;
 }
 
 [data-testid="stTabs"] [aria-selected="true"] {
-  background: #fff;
-  color: var(--primary);
-  border-color: var(--border);
-  font-weight: 800;
-  box-shadow: 0 -2px 8px rgba(30, 58, 138, 0.07);
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+  font-weight: 700;
 }
 
+[data-testid="stTabsContent"] { padding-top: 0.75rem; }
+
 /* ================================
-   Tables + plots
+   Tables
 ================================ */
 [data-testid="stPlotlyChart"],
-[data-testid="stDataFrame"] {
-  width: 100% !important;
-}
+[data-testid="stDataFrame"] { width: 100% !important; }
 
 [data-testid="stDataFrame"] th {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: #f0f4ff;
+  background: #DBEAFE;
+  font-weight: 700;
+  font-size: 17px;
+  color: var(--primary);
+}
+
+[data-testid="stDataFrame"] td { font-size: 16px; height: 36px; }
+
+[data-testid="stDataFrame"] tr:nth-child(even) td { background: #f0f9ff; }
+
+[data-testid="stDataFrame"] tr:hover td { background: #dbeafe !important; }
+
+/* ================================
+   Section headers
+================================ */
+.section-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin: 1.2rem 0 0.5rem;
+  padding: 0.55rem 1rem;
+  background: linear-gradient(90deg, #eff6ff 0%, #f0f9ff 100%);
+  border-left: 5px solid var(--primary);
+  border-radius: 0 12px 12px 0;
+}
+
+.section-icon { font-size: 1.15rem; }
+
+.section-title {
+  font-family: var(--font-heading);
+  font-size: 1.1rem;
   font-weight: 800;
   color: var(--primary);
+  letter-spacing: -0.01em;
+}
+
+.section-subtitle {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--muted);
+  margin-left: 0.2rem;
 }
 
 /* ================================
@@ -399,144 +446,42 @@ div[data-testid="stRadio"] div[data-baseweb="radio"] {
 }
 
 /* ================================
-   Responsive
+   About / algorithm blocks
 ================================ */
-@media (max-width: 980px) {
-  .hero-section {
-    grid-template-columns: 1fr;
-  }
-
-  .top-links {
-    display: none;
-  }
-
-  .block-container {
-    padding-top: calc(4.2rem + 3.1rem + 1rem) !important;
-  }
-}
-
-@media (max-width: 640px) {
-  div[data-testid="stRadio"] label {
-    font-size: 0.78rem;
-  }
-}
-
-/* ================================
-   v13 enhancements
-================================ */
-
-/* Version badge in topbar */
-.top-version-badge {
-  background: linear-gradient(110deg, var(--primary) 20%, var(--secondary) 100%);
-  color: #fff;
-  font-size: 0.78rem;
-  font-weight: 800;
-  padding: 0.28rem 0.8rem;
-  border-radius: 999px;
-  letter-spacing: 0.05em;
-}
-
-/* Section headers above tables */
-.section-header {
-  display: flex;
-  align-items: baseline;
-  gap: 0.6rem;
-  margin: 1.2rem 0 0.5rem;
-  padding: 0.55rem 1rem;
-  background: linear-gradient(90deg, #eff6ff 0%, #f0f4ff 100%);
-  border-left: 5px solid var(--primary);
-  border-radius: 0 12px 12px 0;
-}
-
-.section-icon  { font-size: 1.15rem; }
-
-.section-title {
-  font-family: "Space Grotesk", sans-serif;
-  font-size: 1.05rem;
-  font-weight: 800;
-  color: var(--primary);
-  letter-spacing: -0.01em;
-}
-
-.section-subtitle {
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--muted);
-  margin-left: 0.2rem;
-}
-
-/* Hypothesis block quote */
 .hypothesis-quote {
   border-left: 4px solid var(--secondary);
-  margin: 1rem 0 0.5rem 1rem;
-  padding: 0.6rem 1rem;
+  margin: 0.75rem 0 0.5rem 1rem;
+  padding: 0.5rem 1rem;
   background: #f0fdf4;
   border-radius: 0 10px 10px 0;
   font-style: italic;
   color: var(--secondary);
   font-weight: 600;
-  font-size: 0.97rem;
+  font-size: var(--fs-md);
 }
 
-/* Algorithm numbered list */
-.algo-list {
-  padding-left: 1.3rem;
-  line-height: 2.1;
+.algo-list { padding-left: 1.3rem; line-height: 2.0; }
+
+.algo-list li { font-size: var(--fs-md); color: var(--text); }
+
+.algo-list li strong { color: var(--primary); }
+
+/* ================================
+   Misc
+================================ */
+[data-testid="stCaptionContainer"] p strong { color: var(--primary); font-weight: 800; }
+
+[data-testid="stStatusWidget"] { font-weight: 700; color: var(--primary); }
+
+/* ================================
+   Responsive
+================================ */
+@media (max-width: 980px) {
+  .hero-section { grid-template-columns: 1fr; max-height: none; }
+  .top-links { display: none; }
+  .block-container { padding-top: calc(4.2rem + 3.1rem + 1rem) !important; }
 }
 
-.algo-list li {
-  font-size: 0.96rem;
-  color: var(--text);
-}
-
-.algo-list li strong {
-  color: var(--primary);
-}
-
-/* Data table enhancements */
-[data-testid="stDataFrame"] td {
-  font-size: 0.88rem;
-}
-
-[data-testid="stDataFrame"] tr:hover td {
-  background: #eff6ff !important;
-}
-
-/* Metric card icon prefix */
-.metric-label {
-  font-size: 0.79rem;
-  font-weight: 700;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-/* Bold captions */
-[data-testid="stCaptionContainer"] p strong {
-  color: var(--primary);
-  font-weight: 800;
-}
-
-/* Hero chips — v13 style */
-.hero-chip {
-  border: 1.5px solid var(--primary);
-  background: linear-gradient(110deg, #dbeafe, #eff6ff);
-  color: var(--primary);
-  border-radius: 999px;
-  padding: 0.3rem 0.85rem;
-  font-size: 0.8rem;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  box-shadow: 0 1px 4px rgba(30,58,138,0.10);
-}
-
-/* Tab body padding */
-[data-testid="stTabsContent"] {
-  padding-top: 0.75rem;
-}
-
-/* Status / spinner text */
-[data-testid="stStatusWidget"] {
-  font-weight: 700;
-  color: var(--primary);
+@media (max-width: 640px) {
+  div[data-testid="stRadio"] label { font-size: 14px; }
 }
