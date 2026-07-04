@@ -4,58 +4,65 @@
   <img src="regplexlogo.png" alt="REGPLEX logo" width="340" />
 </p>
 
-<p align="center"><strong>Hierarchical Perplexity Ensemble for Explainable Regulatory Valley Discovery</strong></p>
+<p align="center"><strong>Dinucleotide-centric Perplexity Valley Discovery for Regulatory Genomics</strong></p>
 
-## Scientific Motivation
+## Scientific Rationale (v12)
 
-REGPLEX v11 models genomic complexity as three independent information-theoretic observers:
+REGPLEX v12 is a **di-centric** redesign.
 
-- **Mononucleotide perplexity**: composition and GC/AT structure
-- **Dinucleotide perplexity**: local dependency and structural organization (primary layer)
-- **Trinucleotide perplexity**: higher-order sequence grammar
+REGPLEX uses **Dinucleotide Perplexity** as its primary information-theoretic representation of DNA sequence organization.
 
-The method is training-free and uses no learned model weights.
+Mononucleotide and Trinucleotide perplexities are retained as auxiliary evidence layers for interpretability and cross-species comparisons but do not participate in the primary detection engine.
 
-## Algorithm
+### Why dinucleotide is primary
 
-1. Compute mono/di/tri perplexity **once**.
-2. Apply one-pass **Savitzky–Golay smoothing** (default: window 21, order 3) to each perplexity profile.
-3. Build multi-scale landscapes (default: 25, 50, 100, 200, 400 bp).
-4. At each scale, compute three-window local perplexity contrast (upstream/spacer/candidate/spacer/downstream).
-5. Normalize each scale LPC within each layer, then median-combine to layer consensus.
-6. Ensemble layer consensuses to final **ConsensusLPC**.
-7. Generate candidate valleys from positive ConsensusLPC runs.
-8. Refine each candidate with bounded Kadane core detection (default 50–1000 bp).
-9. Filter by persistence ≥ 0.80 and adaptive prominence, then apply non-maximum suppression and merge nearby valleys.
-10. Rank remaining valleys by `MeanLPC × Persistence × ScaleSupport × Area × log(Length) × 1/(Variance+ε)`.
+- Dinucleotide statistics directly encode nearest-neighbor stacking interactions.
+- These interactions are strongly linked to local duplex stability.
+- Promoter architecture and DNA structural organization are reflected in short-range pair dependencies.
+- In the v12 redesign benchmark, Mono/Tri did not provide substantial independent discriminatory gain in the primary calling path.
 
-## Illustrated Workflow
+## Default Pipeline (scientifically recommended)
 
-<svg width="980" height="160" viewBox="0 0 980 160" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="REGPLEX workflow">
-  <title>REGPLEX workflow diagram</title>
-  <desc>Workflow: DNA to mono, di and tri perplexity; Savitzky–Golay smoothing; multi-scale LPC; ConsensusLPC; candidate generation; Kadane refinement; filtering; NMS; merged valleys.</desc>
-  <defs>
-    <style>
-      .n{fill:#fff;stroke:#1E3A8A;stroke-width:1.5;rx:10}
-      .t{font:600 12px Arial,sans-serif;fill:#0f172a}
-      .a{stroke:#0F766E;stroke-width:2;marker-end:url(#m)}
-    </style>
-    <marker id="m" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#0F766E"/></marker>
-  </defs>
-  <rect class="n" x="20" y="50" width="110" height="48"/><text class="t" x="44" y="79">DNA</text>
-  <rect class="n" x="160" y="16" width="120" height="34"/><text class="t" x="174" y="37">Mono</text>
-  <rect class="n" x="160" y="62" width="120" height="34"/><text class="t" x="178" y="83">Di</text>
-  <rect class="n" x="160" y="108" width="120" height="34"/><text class="t" x="175" y="129">Tri</text>
-  <rect class="n" x="310" y="50" width="140" height="48"/><text class="t" x="330" y="79">SG + Multi-scale</text>
-  <rect class="n" x="480" y="50" width="150" height="48"/><text class="t" x="505" y="79">LPC + Consensus</text>
-  <rect class="n" x="660" y="50" width="130" height="48"/><text class="t" x="679" y="79">Candidates</text>
-  <rect class="n" x="820" y="50" width="140" height="48"/><text class="t" x="830" y="79">Kadane → NMS → Merge</text>
-  <line class="a" x1="130" y1="74" x2="160" y2="74"/>
-  <line class="a" x1="280" y1="74" x2="310" y2="74"/>
-  <line class="a" x1="450" y1="74" x2="480" y2="74"/>
-  <line class="a" x1="630" y1="74" x2="660" y2="74"/>
-  <line class="a" x1="790" y1="74" x2="820" y2="74"/>
-</svg>
+DNA
+→ Dinucleotide Perplexity
+→ Savitzky–Golay smoothing
+→ Multi-scale LPC (25, 50, 100, 200, 400)
+→ Di ConsensusLPC
+→ Candidate valleys
+→ Kadane refinement
+→ Persistence filter (≥ 0.80)
+→ Prominence filter
+→ NMS
+→ Merged domains
+→ Final valleys
+
+`MonoSupport` and `TriSupport` are reported as annotations, not detection signals.
+
+## Operating Modes
+
+- `promoter` (**default**): Dinucleotide signal + positional prior
+- `genome`: Dinucleotide signal only (no positional prior)
+- `ensemble` (**experimental**): Mono+Di+Tri exploratory consensus
+
+### Positional prior parameters
+
+- `CORE_WINDOW_UPSTREAM` (default: 500)
+- `CORE_WINDOW_DOWNSTREAM` (default: 200)
+
+Promoter prior keeps valleys within `[-500, +200]` relative to a reference point (default `0`).
+Set either window to `None` to disable localization filtering.
+
+## Algorithm Summary
+
+1. Compute mono/di/tri perplexity once.
+2. Smooth each profile with Savitzky–Golay.
+3. Build multi-scale landscapes.
+4. Build LPC profiles at each scale.
+5. Build per-layer consensus tracks.
+6. Build final ConsensusLPC according to mode (Di-only in promoter/genome).
+7. Detect, refine, and filter valleys.
+8. Rank using **Di-derived** metrics (`MeanLPC`, `Prominence`, `Persistence`, `ScaleSupport`, `Area`, `Length`, `Variance`).
+9. Report support fields (`MonoSupport`, `DiSupport`, `TriSupport`, `OverallSupport`).
 
 ## Installation
 
@@ -73,79 +80,25 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-The Motif section includes built-in non-B DNA and promoter motif boxes by default, and you can add extra custom Regex/IUPAC motifs for additional valley annotation.
-
 ### CLI
 
 ```bash
-python regplex_core.py examples/ecoli.fasta --out regplex_v11_valleys.csv
-python regplex_core.py examples/ecoli.fasta --scales 25,50,100,200,400 --landscape-method median --normalization-method robust_z --ensemble-method median
+python regplex_core.py examples/ecoli.fasta --out regplex_v12_valleys.csv
+python regplex_core.py examples/human_promoters.fasta --mode promoter --core-window-upstream 500 --core-window-downstream 200
+python regplex_core.py examples/ecoli.fasta --mode genome --core-window-upstream none --core-window-downstream none
+python regplex_core.py examples/ecoli.fasta --mode ensemble
 ```
-
-## Notebook
-
-- `REGPLEX_Local.ipynb` contains a 16-section scientific walkthrough aligned to v11.
-
-## Examples
-
-- `examples/ecoli.fasta`
-- `examples/human_promoters.fasta`
 
 ## Outputs
 
-Core valley fields include:
-
-- Coordinates and length
-- `Contrast`, `Persistence`, `Area`
-- `MonoSupport`, `DiSupport`, `TriSupport`
-- `ScaleSupport`, `LayerSupport`, `OverallSupport`
-- `ValleyScore`, `ValleyScoreNormalized`
-- motif annotations and sequence extraction
+Core fields include coordinates, `MeanLPC`, `Prominence`, `Persistence`, `ScaleSupport`, `MonoSupport`, `DiSupport`, `TriSupport`, `OverallSupport`, and `ValleyScore`.
 
 Formats: CSV, Excel, BED, GFF/GFF3, FASTA, JSON.
 
-## Figures
+## Notebook
 
-The UI generates publication-ready Plotly figures:
-
-1. Layer perplexity profiles (mono/di/tri)
-2. Per-layer multi-scale landscapes
-3. Layer consensus LPC
-4. Ensemble ConsensusLPC
-5. Scale/layer support heatmap
-6. Candidate valleys, Kadane cores and final merged valleys
-7. Valley ranking
-8. Motif architecture
-9. Workflow diagram
-
-## Performance
-
-- Fully NumPy/Pandas-based computation
-- Prefix-sum accelerated rolling means
-- Single-pass layer signal computation
-- No repeated raw perplexity calculations
-
-## Citation
-
-If you use REGPLEX in research, cite this repository and include algorithm version (`v11`) in methods.
+- `REGPLEX_Local.ipynb` includes the local v12 walkthrough and rationale for dinucleotide-primary detection.
 
 ## License
 
 MIT
-
-## Contributing
-
-Contributions are welcome. Please open an issue with:
-
-- biological question
-- expected behavior
-- reproducible FASTA example
-
-## Screenshots
-
-Run the Streamlit app and capture:
-
-- Home hero + workflow
-- Analysis controls
-- Results tabs (ConsensusLPC, support, ranking)
-- About scientific workflow page
