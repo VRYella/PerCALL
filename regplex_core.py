@@ -210,9 +210,10 @@ def compute_pds(
 
     PDS[i] = ((UpstreamMean + DownstreamMean) / 2) - CandidateMean
 
-    Only positions where UpstreamMean > CandidateMean AND
-    DownstreamMean > CandidateMean receive a positive (finite) PDS value.
-    All other positions are set to NaN (rejected as non-valleys).
+    Positions where any window lies outside the signal array receive NaN.
+    The biological filter (UpstreamMean > CandidateMean and
+    DownstreamMean > CandidateMean) is applied at valley level in
+    find_valleys(), not here.
     """
     n = len(smoothed)
     if n == 0:
@@ -273,8 +274,10 @@ def _bounded_kadane_max(arr: np.ndarray, min_len: int, max_len: int) -> tuple[in
         i_max = j - min_len + 1
         if i_max < 0:
             continue
-        # Maintain deque of indices with maximum prefix sum (for max-mean search)
-        while dq and pref[dq[-1]] <= pref[i_max]:
+        # Maintain deque with minimum prefix sums (front = argmin pref) so that
+        # pref[j+1] - pref[dq[0]] is maximised → maximum mean sub-array.
+        # Pop from back while the new candidate has a smaller (or equal) prefix sum.
+        while dq and pref[dq[-1]] >= pref[i_max]:
             dq.pop()
         dq.append(i_max)
         while dq and dq[0] < i_min:
@@ -632,6 +635,7 @@ def analyze_sequence(sequence_id: str, seq: str, **kwargs) -> AnalysisResult:
         "sg_poly_order": int(kwargs.get("sg_poly_order", SG_POLY_ORDER)),
         "flank_size": int(kwargs.get("flank_size", FLANK_SIZE)),
         "spacer_size": int(kwargs.get("spacer_size", SPACER_SIZE)),
+        "min_candidate": int(kwargs.get("min_candidate", MIN_CANDIDATE)),
         "min_valley_length": int(kwargs.get("min_valley_length", MIN_VALLEY_LENGTH)),
         "max_valley_length": int(kwargs.get("max_valley_length", MAX_VALLEY_LENGTH)),
         "merge_gap": int(kwargs.get("merge_gap", MERGE_GAP)),
@@ -639,7 +643,12 @@ def analyze_sequence(sequence_id: str, seq: str, **kwargs) -> AnalysisResult:
 
     di = compute_di_perplexity(seq, params["perplexity_window"])
     smoothed_di = smooth_perplexity(di, params["sg_window_length"], params["sg_poly_order"])
-    pds = compute_pds(smoothed_di, params["flank_size"], params["spacer_size"])
+    pds = compute_pds(
+        smoothed_di,
+        flank_size=params["flank_size"],
+        spacer_size=params["spacer_size"],
+        candidate_size=params["min_candidate"],
+    )
 
     domains = find_valleys(
         pds=pds,
