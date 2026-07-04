@@ -3,10 +3,6 @@ from __future__ import annotations
 import numpy as np
 import plotly.graph_objects as go
 
-# ---------------------------------------------------------------------------
-# Theme constants
-# ---------------------------------------------------------------------------
-
 _BG = "#ffffff"
 _GRID = "rgba(148,163,184,0.22)"
 _TEXT = "#1f2937"
@@ -16,304 +12,407 @@ _TEAL = "#0F766E"
 _GREEN = "#10B981"
 _AMBER = "#F59E0B"
 _CRIMSON = "#DC2626"
-_SLATE = "#64748B"
+
+_LAYER_COLORS = {"mono": _BLUE, "di": _TEAL, "tri": _GREEN}
+_SCALE_COLORS = [_BLUE, _TEAL, _GREEN, _AMBER, _CRIMSON, "#2563eb", "#1d4ed8", _MUTED]
 
 _BASE_LAYOUT = dict(
     paper_bgcolor=_BG,
     plot_bgcolor=_BG,
     font=dict(color=_TEXT, family="Inter, Segoe UI, sans-serif", size=13),
-    title_font=dict(size=16, color=_TEXT),
-    margin=dict(l=62, r=30, t=56, b=52),
+    title_font=dict(size=18, color=_TEXT),
+    margin=dict(l=62, r=30, t=66, b=52),
     legend=dict(bgcolor="rgba(255,255,255,0.9)", bordercolor=_GRID, borderwidth=1),
 )
 
 
 def _apply_base(fig: go.Figure, title: str, height: int = 360) -> go.Figure:
     fig.update_layout(**_BASE_LAYOUT, title=title, height=height)
-    fig.update_xaxes(showgrid=True, gridcolor=_GRID, zeroline=False, linecolor=_GRID,
-                     tickfont=dict(color=_MUTED))
-    fig.update_yaxes(showgrid=True, gridcolor=_GRID, zeroline=False, linecolor=_GRID,
-                     tickfont=dict(color=_MUTED))
+    fig.update_xaxes(showgrid=True, gridcolor=_GRID, zeroline=False, linecolor=_GRID, tickfont=dict(color=_MUTED))
+    fig.update_yaxes(showgrid=True, gridcolor=_GRID, zeroline=False, linecolor=_GRID, tickfont=dict(color=_MUTED))
     return fig
 
 
 def _empty_figure(title: str) -> go.Figure:
     fig = go.Figure()
-    fig.add_annotation(text="No data available", x=0.5, y=0.5,
-                       xref="paper", yref="paper", showarrow=False,
-                       font=dict(color=_MUTED, size=14))
+    fig.add_annotation(text="No data available", x=0.5, y=0.5, xref="paper", yref="paper", showarrow=False)
     return _apply_base(fig, title)
 
 
-def _valley_signal_bounds(domain: dict) -> tuple[int, int]:
-    return (
-        int(domain.get("Signal_Start", domain.get("Start", 0))),
-        int(domain.get("Signal_End", domain.get("End", 0))),
-    )
+def _valley_bounds(domain: dict) -> tuple[int, int]:
+    return int(domain.get("Signal_Start", domain.get("Start", 0))), int(domain.get("Signal_End", domain.get("End", 0)))
 
 
-def _add_valley_rects(fig: go.Figure, domains: list[dict]) -> None:
-    for d in domains:
-        s, e = _valley_signal_bounds(d)
-        fig.add_vrect(x0=s, x1=e,
-                      fillcolor="rgba(30,58,138,0.10)",
-                      line_color=_BLUE, line_width=0.8,
-                      opacity=0.6)
-
-
-# ---------------------------------------------------------------------------
-# Plot 1 – Raw perplexity landscape
-# ---------------------------------------------------------------------------
-
-def plot_perplexity_landscape(di: np.ndarray, domains: list[dict]) -> go.Figure:
-    """Raw dinucleotide perplexity profile with valley highlights."""
-    if len(di) == 0:
-        return _empty_figure("Dinucleotide Perplexity Landscape")
-    fig = go.Figure()
-    x = np.arange(len(di))
-    fig.add_trace(go.Scatter(
-        x=x, y=di, mode="lines",
-        name="Di-perplexity (raw)",
-        line=dict(color=_BLUE, width=1.2),
-        opacity=0.7,
-    ))
-    _add_valley_rects(fig, domains)
-    fig.update_layout(xaxis_title="Signal position", yaxis_title="Perplexity")
-    return _apply_base(fig, "Dinucleotide Perplexity Landscape", height=360)
-
-
-# ---------------------------------------------------------------------------
-# Plot 2 – Smoothed perplexity landscape
-# ---------------------------------------------------------------------------
-
-def plot_smoothed_perplexity_landscape(
+def plot_smoothed_perplexity(
+    mono: np.ndarray,
     di: np.ndarray,
+    tri: np.ndarray,
+    smoothed_mono: np.ndarray,
     smoothed_di: np.ndarray,
+    smoothed_tri: np.ndarray,
     domains: list[dict],
 ) -> go.Figure:
-    """Savitzky-Golay smoothed perplexity with detected valley highlights."""
+    """Plot raw vs Savitzky–Golay smoothed perplexity for each layer."""
     if len(di) == 0 and len(smoothed_di) == 0:
-        return _empty_figure("Smoothed Perplexity Landscape")
-    fig = go.Figure()
-    if len(di) > 0:
-        fig.add_trace(go.Scatter(
-            x=np.arange(len(di)), y=di, mode="lines",
-            name="Raw", line=dict(color=_BLUE, width=1.0, dash="dot"), opacity=0.35,
-        ))
-    if len(smoothed_di) > 0:
-        fig.add_trace(go.Scatter(
-            x=np.arange(len(smoothed_di)), y=smoothed_di, mode="lines",
-            name="SG-smoothed", line=dict(color=_TEAL, width=2.2), opacity=0.95,
-        ))
-    _add_valley_rects(fig, domains)
-    fig.update_layout(xaxis_title="Signal position", yaxis_title="Perplexity")
-    return _apply_base(fig, "Smoothed Perplexity Landscape (Savitzky–Golay)", height=380)
-
-
-# ---------------------------------------------------------------------------
-# Plot 3 – Three-window illustration
-# ---------------------------------------------------------------------------
-
-def plot_three_window(
-    smoothed_di: np.ndarray,
-    valley: dict,
-    flank_size: int = 100,
-    spacer_size: int = 50,
-) -> go.Figure:
-    """Three-window illustration for a selected valley.
-
-    Shows upstream / spacer / candidate / spacer / downstream regions
-    with shaded backgrounds and horizontal mean-value reference lines.
-    """
-    if len(smoothed_di) == 0 or valley is None:
-        return _empty_figure("Three-Window Context")
-
-    n = len(smoothed_di)
-    s = int(valley.get("Signal_Start", valley.get("Start", 0)))
-    e = int(valley.get("Signal_End", valley.get("End", 0)))
-
-    # Window boundaries
-    up_e = max(0, s - spacer_size)
-    up_s = max(0, up_e - flank_size)
-    dn_s = min(n, e + spacer_size)
-    dn_e = min(n, dn_s + flank_size)
-
-    # Display range
-    view_s = max(0, up_s - 10)
-    view_e = min(n, dn_e + 10)
-    x = np.arange(view_s, view_e)
-    y = smoothed_di[view_s:view_e]
+        return _empty_figure("Raw vs Savitzky–Golay Smoothed Perplexity")
 
     fig = go.Figure()
+    raw_pairs = [("Mono", mono, _BLUE), ("Di", di, _TEAL), ("Tri", tri, _GREEN)]
+    smooth_pairs = [("Mono SG", smoothed_mono, _BLUE), ("Di SG", smoothed_di, _TEAL), ("Tri SG", smoothed_tri, _GREEN)]
 
-    # Shaded region backgrounds
-    fig.add_vrect(x0=up_s, x1=up_e,
-                  fillcolor="rgba(30,58,138,0.08)", line_width=0,
-                  annotation_text="Upstream", annotation_position="top left",
-                  annotation_font=dict(size=11, color=_BLUE))
-    if up_e < s:
-        fig.add_vrect(x0=up_e, x1=s, fillcolor="rgba(100,116,139,0.05)", line_width=0,
-                      annotation_text="Spacer", annotation_position="top left",
-                      annotation_font=dict(size=10, color=_MUTED))
-    fig.add_vrect(x0=s, x1=e,
-                  fillcolor="rgba(15,118,110,0.14)", line_color=_TEAL, line_width=1,
-                  annotation_text="Candidate", annotation_position="top right",
-                  annotation_font=dict(size=11, color=_TEAL))
-    if e < dn_s:
-        fig.add_vrect(x0=e, x1=dn_s, fillcolor="rgba(100,116,139,0.05)", line_width=0)
-    fig.add_vrect(x0=dn_s, x1=dn_e,
-                  fillcolor="rgba(30,58,138,0.08)", line_width=0,
-                  annotation_text="Downstream", annotation_position="top right",
-                  annotation_font=dict(size=11, color=_BLUE))
+    for (name, arr, color), (sname, sarr, scolor) in zip(raw_pairs, smooth_pairs):
+        if len(arr) > 0:
+            x = np.arange(len(arr))
+            fig.add_trace(go.Scatter(
+                x=x, y=arr, mode="lines", name=f"{name} Raw",
+                line=dict(color=color, width=1, dash="dot"), opacity=0.45, legendgroup=name,
+            ))
+        if len(sarr) > 0:
+            xs = np.arange(len(sarr))
+            fig.add_trace(go.Scatter(
+                x=xs, y=sarr, mode="lines", name=f"{sname} Smoothed",
+                line=dict(color=scolor, width=2.2), opacity=0.9, legendgroup=name,
+            ))
 
-    # Smoothed signal
-    fig.add_trace(go.Scatter(
-        x=x, y=y, mode="lines",
-        name="SG-smoothed perplexity",
-        line=dict(color=_TEXT, width=1.8),
-    ))
+    for d in domains:
+        s0, s1 = _valley_bounds(d)
+        fig.add_vrect(x0=s0, x1=s1, fillcolor="rgba(30,58,138,0.10)", line_width=0)
 
-    # Horizontal mean reference lines
-    def _safe_mean(arr: np.ndarray) -> float | None:
-        v = arr[np.isfinite(arr)]
-        return float(np.mean(v)) if v.size else None
-
-    up_mean = _safe_mean(smoothed_di[up_s:up_e])
-    cand_mean = _safe_mean(smoothed_di[s:e])
-    dn_mean = _safe_mean(smoothed_di[dn_s:dn_e])
-
-    for label, x0, x1, mean_val, color in [
-        ("UpstreamMean", up_s, up_e, up_mean, _BLUE),
-        ("CandidateMean", s, e, cand_mean, _TEAL),
-        ("DownstreamMean", dn_s, dn_e, dn_mean, _BLUE),
-    ]:
-        if mean_val is not None:
-            fig.add_shape(type="line", x0=x0, x1=x1, y0=mean_val, y1=mean_val,
-                          line=dict(color=color, width=2, dash="dash"))
-            fig.add_annotation(x=(x0 + x1) / 2, y=mean_val,
-                                text=f"{label}: {mean_val:.2f}",
-                                showarrow=False, yshift=10,
-                                font=dict(size=10, color=color))
-
-    valley_id = valley.get("ID", "")
     fig.update_layout(xaxis_title="Signal position", yaxis_title="Perplexity")
-    return _apply_base(fig, f"Three-Window Context — {valley_id}", height=400)
+    return _apply_base(fig, "Raw vs Savitzky–Golay Smoothed Perplexity", height=420)
 
 
-# ---------------------------------------------------------------------------
-# Plot 4 – PDS landscape
-# ---------------------------------------------------------------------------
+def plot_perplexity_layers(mono: np.ndarray, di: np.ndarray, tri: np.ndarray) -> go.Figure:
+    if len(di) == 0:
+        return _empty_figure("Layer Perplexity Profiles")
+    x = np.arange(len(di))
+    fig = go.Figure()
+    for name, arr in (("Mono", mono), ("Di", di), ("Tri", tri)):
+        if len(arr) == 0:
+            continue
+        fig.add_trace(
+            go.Scatter(
+                x=x[: len(arr)],
+                y=arr,
+                mode="lines",
+                name=f"{name} Perplexity",
+                line=dict(color=_LAYER_COLORS[name.lower()], width=1.8),
+                opacity=0.9,
+            )
+        )
+    fig.update_layout(xaxis_title="Signal position", yaxis_title="Perplexity")
+    return _apply_base(fig, "Layer Perplexity Profiles", height=390)
 
-def plot_pds_landscape(pds: np.ndarray, domains: list[dict]) -> go.Figure:
-    """Genome-wide PDS profile with detected valley highlights."""
-    if len(pds) == 0:
-        return _empty_figure("Perplexity Depression Score (PDS) Landscape")
-    x = np.arange(len(pds))
-    pos = np.where(np.isfinite(pds) & (pds > 0), pds, 0.0)
-    neg = np.where(np.isfinite(pds) & (pds <= 0), pds, 0.0)
 
+def plot_multiscale_landscapes(landscapes: dict[int, np.ndarray], domains: list[dict], layer_name: str) -> go.Figure:
+    if not landscapes:
+        return _empty_figure(f"{layer_name} Multi-scale Landscapes")
+    fig = go.Figure()
+    for i, s in enumerate(sorted(landscapes)):
+        arr = landscapes[s]
+        fig.add_trace(
+            go.Scatter(
+                x=np.arange(len(arr)),
+                y=arr,
+                mode="lines",
+                name=f"{s} bp",
+                line=dict(color=_SCALE_COLORS[i % len(_SCALE_COLORS)], width=1.6),
+                opacity=0.85,
+            )
+        )
+    for d in domains:
+        s0, s1 = _valley_bounds(d)
+        fig.add_vrect(x0=s0, x1=s1, fillcolor="rgba(30,58,138,0.10)", line_width=0)
+    fig.update_layout(xaxis_title="Signal position", yaxis_title=f"{layer_name} landscape perplexity")
+    return _apply_base(fig, f"{layer_name} Multi-scale Landscapes", height=400)
+
+
+def plot_layer_consensus(layer_consensus: dict[str, np.ndarray], domains: list[dict]) -> go.Figure:
+    if not layer_consensus:
+        return _empty_figure("Layer Consensus LPC")
+    fig = go.Figure()
+    for layer, arr in layer_consensus.items():
+        x = np.arange(len(arr))
+        pos = np.where(arr > 0, arr, 0)
+        fig.add_trace(
+            go.Scatter(
+                x=x,
+                y=pos,
+                mode="lines",
+                name=f"{layer.capitalize()} Consensus",
+                line=dict(color=_LAYER_COLORS.get(layer, _MUTED), width=1.8),
+            )
+        )
+    for d in domains:
+        s0, s1 = _valley_bounds(d)
+        fig.add_vrect(x0=s0, x1=s1, fillcolor="rgba(30,58,138,0.08)", line_width=0)
+    fig.update_layout(xaxis_title="Signal position", yaxis_title="Normalized LPC")
+    return _apply_base(fig, "Layer Consensus LPC", height=390)
+
+
+def plot_consensus_lpc(consensus_lpc: np.ndarray, domains: list[dict]) -> go.Figure:
+    if len(consensus_lpc) == 0:
+        return _empty_figure("ConsensusLPC")
+    x = np.arange(len(consensus_lpc))
+    pos = np.where(consensus_lpc > 0, consensus_lpc, 0)
     fig = go.Figure()
     fig.add_hline(y=0, line=dict(color=_GRID, dash="dot"))
-    fig.add_trace(go.Scatter(
-        x=x, y=pos, mode="lines",
-        name="PDS > 0 (valley)",
-        line=dict(color=_TEAL, width=1.8),
-        fill="tozeroy", fillcolor="rgba(15,118,110,0.18)",
-    ))
-    fig.add_trace(go.Scatter(
-        x=x, y=neg, mode="lines",
-        name="PDS ≤ 0 (background)",
-        line=dict(color=_SLATE, width=1.0),
-        opacity=0.5,
-    ))
+    fig.add_trace(
+        go.Scatter(
+            x=x,
+            y=pos,
+            mode="lines",
+            name="ConsensusLPC",
+            line=dict(color=_GREEN, width=2),
+            fill="tozeroy",
+            fillcolor="rgba(16,185,129,0.15)",
+        )
+    )
     for d in domains:
-        s, e = _valley_signal_bounds(d)
-        fig.add_vrect(x0=s, x1=e,
-                      fillcolor="rgba(30,58,138,0.18)", line_color=_BLUE, line_width=1,
-                      opacity=0.7)
-    fig.update_layout(xaxis_title="Signal position", yaxis_title="PDS")
-    return _apply_base(fig, "Perplexity Depression Score (PDS) Landscape", height=380)
+        s0, s1 = _valley_bounds(d)
+        fig.add_vrect(x0=s0, x1=s1, fillcolor="rgba(30,58,138,0.16)", line_color=_BLUE, opacity=0.30)
+    fig.update_layout(xaxis_title="Signal position", yaxis_title="ConsensusLPC")
+    return _apply_base(fig, "Final ConsensusLPC")
 
 
-# ---------------------------------------------------------------------------
-# Plot 5 – Valley ranking
-# ---------------------------------------------------------------------------
+def plot_kadane_domains(
+    consensus_lpc: np.ndarray,
+    domains: list[dict],
+    kadane_core: tuple[int | None, int | None] = (None, None),
+    candidates: list[dict] | list[tuple[int, int]] | None = None,
+) -> go.Figure:
+    if len(consensus_lpc) == 0:
+        return _empty_figure("Candidate Valleys, Kadane Core, and Final Merged Valleys")
+    x = np.arange(len(consensus_lpc))
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=x, y=consensus_lpc, mode="lines", name="ConsensusLPC", line=dict(color="rgba(31,41,55,0.35)", width=1.2)))
 
-def plot_valley_ranking(domains: list[dict]) -> go.Figure:
-    """Bar chart of valleys ranked by ValleyScore."""
+    # Raw candidates (light background)
+    if candidates:
+        for i, candidate in enumerate(candidates):
+            if isinstance(candidate, dict):
+                cs, ce = _valley_bounds(candidate)
+            else:
+                cs, ce = candidate
+            fig.add_vrect(
+                x0=cs, x1=ce,
+                fillcolor="rgba(245,158,11,0.06)",
+                line_width=0,
+                annotation_text="candidate" if i == 0 else None,
+                annotation_position="top left" if i == 0 else None,
+            )
+
+    # Final domains (accepted)
+    for domain in domains:
+        s0, s1 = _valley_bounds(domain)
+        fig.add_vrect(x0=s0, x1=s1, fillcolor="rgba(30,58,138,0.18)", line_color=_BLUE, line_width=1, opacity=0.7)
+
+    # Global best Kadane core
+    ks, ke = kadane_core
+    if ks is not None and ke is not None:
+        fig.add_vrect(
+            x0=ks, x1=ke,
+            fillcolor="rgba(245,158,11,0.30)",
+            line_color=_AMBER,
+            annotation_text="Best Kadane core",
+            annotation_position="top left",
+        )
+    fig.update_layout(xaxis_title="Signal position", yaxis_title="ConsensusLPC")
+    return _apply_base(fig, "Candidate Valleys, Kadane Core, and Final Merged Valleys", height=420)
+
+
+def plot_scale_support_heatmap(lpc_profiles: dict[str, dict[int, np.ndarray]], domains: list[dict], scales: list[int]) -> go.Figure:
+    if not domains or not lpc_profiles:
+        return _empty_figure("Scale and Layer Support")
+    valley_ids = [d.get("ID", f"PV_{i:06d}") for i, d in enumerate(domains, 1)]
+    x_labels = [f"{layer}:{sc}bp" for layer in ("mono", "di", "tri") for sc in scales]
+    z: list[list[float]] = []
+    for d in domains:
+        s0, s1 = _valley_bounds(d)
+        row: list[float] = []
+        for layer in ("mono", "di", "tri"):
+            for sc in scales:
+                arr = lpc_profiles.get(layer, {}).get(sc)
+                if arr is None or s1 >= len(arr):
+                    row.append(float("nan"))
+                    continue
+                seg = arr[s0: s1 + 1]
+                finite_vals = seg[np.isfinite(seg)]
+                row.append(float(np.mean(finite_vals)) if finite_vals.size else float("nan"))
+        z.append(row)
+
+    fig = go.Figure(
+        go.Heatmap(
+            z=z,
+            x=x_labels,
+            y=valley_ids,
+            colorscale=[[0.0, "#e2e8f0"], [0.5, _TEAL], [1.0, _BLUE]],
+            zmid=0,
+            colorbar=dict(title="Mean LPC"),
+            hovertemplate="Valley: %{y}<br>Layer/Scale: %{x}<br>Mean LPC: %{z:.4f}<extra></extra>",
+        )
+    )
+    fig.update_layout(xaxis_title="Layer / Scale", yaxis_title="Valley")
+    h = max(320, 60 + 30 * len(domains))
+    return _apply_base(fig, "Scale and Layer Support", height=h)
+
+
+def plot_domain_ranking(domains: list[dict]) -> go.Figure:
     if not domains:
         return _empty_figure("Valley Ranking")
     ranked = sorted(domains, key=lambda d: d.get("ValleyScore", 0.0), reverse=True)
-    ids = [d.get("ID", f"PV_{i:06d}") for i, d in enumerate(ranked, 1)]
-    scores = [d.get("ValleyScore", 0.0) for d in ranked]
-    pds_means = [d.get("PDSMean", 0.0) for d in ranked]
-    lengths = [d.get("Length", 0) for d in ranked]
-    persistence = [d.get("Persistence", 0.0) for d in ranked]
-
-    colors = [
-        f"rgba(15,118,110,{0.4 + 0.6 * s / max(scores, default=1)})" for s in scores
-    ]
-
-    fig = go.Figure(go.Bar(
-        x=ids,
-        y=scores,
-        marker=dict(color=colors, line=dict(color=_TEAL, width=1)),
-        customdata=list(zip(lengths, pds_means, persistence)),
-        hovertemplate=(
-            "%{x}<br>"
-            "ValleyScore: %{y:.4f}<br>"
-            "Length: %{customdata[0]} bp<br>"
-            "PDSMean: %{customdata[1]:.3f}<br>"
-            "Persistence: %{customdata[2]:.2f}"
-            "<extra></extra>"
-        ),
-    ))
+    fig = go.Figure(
+        go.Bar(
+            x=[d.get("ID", "PV") for d in ranked],
+            y=[d.get("ValleyScore", 0.0) for d in ranked],
+            marker=dict(color=[d.get("Contrast", 0.0) for d in ranked], colorscale=[[0.0, "#cbd5e1"], [0.5, _TEAL], [1.0, _BLUE]], colorbar=dict(title="Contrast")),
+            customdata=np.array([[d.get("Length", 0), d.get("ScaleSupport", "0/0"), d.get("LayerSupport", "0/0")] for d in ranked], dtype=object),
+            hovertemplate="%{x}<br>ValleyScore %{y:.4f}<br>Length %{customdata[0]} bp<br>ScaleSupport %{customdata[1]}<br>LayerSupport %{customdata[2]}<extra></extra>",
+        )
+    )
     fig.update_layout(xaxis_title="Valley ID", yaxis_title="Valley Score")
-    return _apply_base(fig, "Valley Ranking by Score", height=380)
+    return _apply_base(fig, "Valley Ranking", height=390)
 
 
-# ---------------------------------------------------------------------------
-# Plot 6 – Algorithm workflow (Sankey)
-# ---------------------------------------------------------------------------
+def plot_motif_architecture(domains: list[dict]) -> go.Figure:
+    if not domains:
+        return _empty_figure("Motif Mapping")
+    ranked = sorted(domains, key=lambda d: d.get("MotifCount", 0), reverse=True)
+    fig = go.Figure(
+        go.Bar(
+            x=[d.get("ID", "PV") for d in ranked],
+            y=[d.get("MotifCount", 0) for d in ranked],
+            marker=dict(color=_TEAL),
+            customdata=[d.get("Motifs", "") or "—" for d in ranked],
+            hovertemplate="%{x}<br>MotifCount %{y}<br>%{customdata}<extra></extra>",
+        )
+    )
+    fig.update_layout(xaxis_title="Valley ID", yaxis_title="Motif count")
+    return _apply_base(fig, "Motif Mapping", height=360)
+
+
+def plot_vpi_profile(
+    consensus_lpc: np.ndarray,
+    vpi: np.ndarray,
+    domains: list[dict],
+    kadane_core: tuple[int | None, int | None] = (None, None),
+) -> go.Figure:
+    """Valley Persistence Profile — primary interpretation figure for v12.
+
+    Plots ConsensusLPC (left axis) and VPI (right axis, 0–1) on the same
+    figure, with final valley extents and per-valley Kadane cores highlighted.
+    Note: per-valley Kadane cores are shown for visualization only — they
+    represent the best core region identified by Kadane scoring and do NOT
+    determine final valley boundaries (those come from VPI expansion).
+    """
+    if len(consensus_lpc) == 0:
+        return _empty_figure("Valley Persistence Profile (VPI)")
+
+    x = np.arange(len(consensus_lpc))
+    fig = go.Figure()
+
+    # ConsensusLPC — positive region only, filled
+    pos_lpc = np.where(np.isfinite(consensus_lpc) & (consensus_lpc > 0), consensus_lpc, 0.0)
+    fig.add_trace(go.Scatter(
+        x=x, y=pos_lpc,
+        mode="lines", name="ConsensusLPC",
+        line=dict(color=_GREEN, width=2),
+        fill="tozeroy", fillcolor="rgba(16,185,129,0.15)",
+    ))
+
+    # VPI on secondary axis
+    if len(vpi) > 0:
+        xv = np.arange(len(vpi))
+        fig.add_trace(go.Scatter(
+            x=xv, y=vpi.astype(float),
+            mode="lines", name="VPI",
+            line=dict(color=_AMBER, width=2, dash="dash"),
+            yaxis="y2",
+            opacity=0.85,
+        ))
+        # Threshold reference lines (as traces on y2)
+        n_pts = len(vpi)
+        fig.add_trace(go.Scatter(
+            x=[0, n_pts - 1], y=[0.6, 0.6],
+            mode="lines", name="VPI ≥ 0.6 (candidate)",
+            line=dict(color=_AMBER, dash="dot", width=1),
+            yaxis="y2", showlegend=True, opacity=0.7,
+        ))
+        fig.add_trace(go.Scatter(
+            x=[0, n_pts - 1], y=[0.3, 0.3],
+            mode="lines", name="VPI ≥ 0.3 (expand)",
+            line=dict(color=_CRIMSON, dash="dot", width=1),
+            yaxis="y2", showlegend=True, opacity=0.7,
+        ))
+
+    # Final valleys
+    for domain in domains:
+        s0, s1 = _valley_bounds(domain)
+        fig.add_vrect(x0=s0, x1=s1, fillcolor="rgba(30,58,138,0.16)", line_color=_BLUE, line_width=1, opacity=0.6)
+        # Per-valley Kadane core (visualization only)
+        ks = domain.get("KadaneCoreStart")
+        ke = domain.get("KadaneCoreEnd")
+        if ks is not None and ke is not None:
+            fig.add_vrect(x0=ks, x1=ke, fillcolor="rgba(245,158,11,0.22)", line_width=0)
+
+    # Global best Kadane core
+    ks_g, ke_g = kadane_core
+    if ks_g is not None and ke_g is not None:
+        fig.add_vrect(
+            x0=ks_g, x1=ke_g,
+            fillcolor="rgba(245,158,11,0.32)",
+            line_color=_AMBER, line_width=1.5,
+            annotation_text="Best Kadane core",
+            annotation_position="top left",
+        )
+
+    fig.update_layout(
+        xaxis_title="Signal position",
+        yaxis_title="ConsensusLPC",
+        yaxis2=dict(
+            title="VPI (0–1)",
+            overlaying="y",
+            side="right",
+            range=[0.0, 1.05],
+            showgrid=False,
+            tickfont=dict(color=str(_AMBER)),
+        ),
+    )
+    return _apply_base(fig, "Valley Persistence Profile (VPI)", height=430)
+
 
 def plot_algorithm_workflow() -> go.Figure:
-    """REGPLEX v13 algorithm workflow as a Sankey diagram."""
     labels = [
-        "DNA Input",
-        "Dinucleotide Perplexity\n(17 nt window)",
-        "Savitzky–Golay Smoothing\n(21 bp, order 3)",
-        "Perplexity Depression Score\n(three-window contrast)",
-        "Bounded Kadane Detection\n(100–1000 bp)",
-        "Valley Expansion\n(PDS threshold)",
-        "Valley Merging\n(gap ≤ 100 bp)",
-        "Valley Metrics\n& Biological Filter",
-        "ValleyScore Ranking",
-        "Optional Motif\nAnnotation",
-        "Downloads\n(CSV/Excel/BED/GFF/FASTA/JSON)",
+        "DNA",
+        "Mono Perplexity",
+        "Di Perplexity",
+        "Tri Perplexity",
+        "Savitzky–Golay Smoothing",
+        "Multi-scale Landscapes",
+        "Three-window LPC",
+        "Layer Consensus",
+        "ConsensusLPC",
+        "Candidate Valleys",
+        "Kadane Refinement",
+        "ConsensusLPC Persistence Filter",
+        "Prominence Filter (75th pct)",
+        "Score & NMS",
+        "Merged Domains",
+        "Motif Annotation",
     ]
     colors = [
-        _BLUE, _BLUE,
+        _BLUE, _BLUE, _TEAL, _GREEN,
         _AMBER,
-        _TEAL,
-        _GREEN, _GREEN, _GREEN,
-        _CRIMSON,
-        _CRIMSON,
-        _TEAL,
-        _BLUE,
+        _AMBER, _AMBER, _BLUE, _TEAL,
+        _GREEN, _GREEN, _CRIMSON, _CRIMSON, _CRIMSON,
+        _CRIMSON, _BLUE, _TEAL,
     ]
     n = len(labels)
-    fig = go.Figure(go.Sankey(
-        arrangement="snap",
-        node=dict(
-            label=labels, pad=16, thickness=16,
-            line=dict(color=_GRID, width=1),
-            color=colors,
-        ),
-        link=dict(
-            source=list(range(n - 1)),
-            target=list(range(1, n)),
-            value=[5] * (n - 1),
-            color=["rgba(30,58,138,0.12)"] * (n - 1),
-        ),
-    ))
-    return _apply_base(fig, "REGPLEX v13 — Algorithm Workflow", height=500)
+    fig = go.Figure(
+        go.Sankey(
+            arrangement="snap",
+            node=dict(label=labels, pad=14, thickness=14, line=dict(color=_GRID, width=1), color=colors[:n]),
+            link=dict(source=list(range(n - 1)), target=list(range(1, n)), value=[4] * (n - 1), color=["rgba(30,58,138,0.15)"] * (n - 1)),
+        )
+    )
+    return _apply_base(fig, "REGPLEX v12 Workflow", height=520)
