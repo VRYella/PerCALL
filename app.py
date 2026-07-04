@@ -501,7 +501,7 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
         "</div>"
     )
 
-    top_n    = int(st.session_state.get("top_n", TOP_N_DISPLAY))
+    top_n    = TOP_N_DISPLAY
     show_all = st.toggle(
         f"Show all {len(selected_df)} valleys",
         value=False,

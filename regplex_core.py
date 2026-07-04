@@ -22,9 +22,10 @@ MIN_CANDIDATE     = 50    # Minimum PDS candidate window (bp)
 MAX_CANDIDATE     = 1000  # Maximum PDS candidate window (bp)
 MIN_VALLEY_LENGTH = 100   # Minimum accepted valley length (bp)
 MAX_VALLEY_LENGTH = 1000  # Maximum accepted valley length (bp)
-MERGE_GAP         = 100   # Merge adjacent valleys within this distance (bp)
-TOP_N_DISPLAY     = 20    # Default top-N display limit
-EPSILON           = 1e-9
+MERGE_GAP                  = 100   # Merge adjacent valleys within this distance (bp)
+TOP_N_DISPLAY              = 20    # Default top-N display limit
+EXPANSION_THRESHOLD_FRACTION = 0.2  # Fraction of peak PDS used in valley expansion
+EPSILON                    = 1e-9
 
 _IUPAC_DNA = set("ACGTN")
 _MAP = np.full(256, 4, dtype=np.uint8)
@@ -339,7 +340,7 @@ def _expand_valley_pds(
     core_finite = pds[core_start: core_end + 1]
     core_finite = core_finite[np.isfinite(core_finite)]
     peak_pds = float(np.max(core_finite)) if core_finite.size else 0.0
-    threshold = 0.2 * peak_pds  # 20 % of peak
+    threshold = EXPANSION_THRESHOLD_FRACTION * peak_pds  # expand until PDS drops below this
 
     include = np.isfinite(pds) & ((pds > 0) | (pds > threshold))
 
@@ -457,7 +458,11 @@ def _valley_metrics(
     length   = end_nt - start_nt + 1
     gc       = (sequence.count("G") + sequence.count("C")) / max(len(sequence), 1)
 
-    # ValleyScore (raw; normalised later)
+    # ValleyScore = PDSMean × Persistence × log(Length) × Stability
+    # · PDSMean:    depth of the valley below local background
+    # · Persistence: fraction of positions with PDS > 0 (robustness)
+    # · log(Length): rewards longer valleys without over-weighting
+    # · Stability:  penalises noisy valleys via inverse variance
     log_length       = math.log(max(end - start + 1, 1))
     stability        = 1.0 / (variance + EPSILON)
     valley_score_raw = pds_mean * persistence * log_length * stability
@@ -629,7 +634,7 @@ def export_table(df: pd.DataFrame, fmt: str) -> bytes:
 def export_bed(df: pd.DataFrame) -> bytes:
     bed = df[["Sequence_ID", "Start", "End", "ID", "ValleyScore"]].copy()
     bed["Start"] = bed["Start"].astype(int)
-    bed["End"]   = (bed["End"].astype(int) + 1)
+    bed["End"]   = bed["End"].astype(int) + 1
     return bed.to_csv(index=False, sep="\t", header=False).encode()
 
 
