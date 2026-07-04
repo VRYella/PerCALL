@@ -1,104 +1,213 @@
-# REGPLEX
+# REGPLEX v13
 
-<p align="center">
-  <img src="regplexlogo.png" alt="REGPLEX logo" width="340" />
-</p>
+**A training-free computational framework for identifying extended genomic perplexity valleys.**
 
-<p align="center"><strong>Dinucleotide-centric Perplexity Valley Discovery for Regulatory Genomics</strong></p>
+REGPLEX identifies regions where local sequence complexity is significantly lower than the surrounding genomic background, using dinucleotide perplexity, three-window contrast analysis, bounded Kadane optimization, and interpretable valley ranking.
 
-## Scientific Rationale (v12)
+---
 
-REGPLEX v12 is a **di-centric** redesign.
+## Scientific Hypothesis
 
-REGPLEX uses **Dinucleotide Perplexity** as its primary information-theoretic representation of DNA sequence organization.
+> Identify extended low-perplexity genomic valleys relative to their local genomic background using a training-free information-theoretic framework.
 
-Mononucleotide and Trinucleotide perplexities are retained as auxiliary evidence layers for interpretability and cross-species comparisons but do not participate in the primary detection engine.
+REGPLEX is not a promoter predictor, motif scanner, or classifier. It is a general-purpose framework for detecting extended regions of anomalously low sequence complexity.
 
-### Why dinucleotide is primary
+---
 
-- Dinucleotide statistics directly encode nearest-neighbor stacking interactions.
-- These interactions are strongly linked to local duplex stability.
-- Promoter architecture and DNA structural organization are reflected in short-range pair dependencies.
-- In the v12 redesign benchmark, Mono/Tri did not provide substantial independent discriminatory gain in the primary calling path.
+## Algorithm
 
-## Default Pipeline (scientifically recommended)
+```
+DNA sequence
+    │
+    ▼
+Dinucleotide Perplexity  (17 nt sliding window)
+    │
+    ▼
+Savitzky–Golay Smoothing  (window 21 bp, polynomial order 3)
+    │
+    ▼
+Perplexity Depression Score (PDS)
+    Three-window contrast:
+    ┌────────────┐  spacer  ┌──────────────────┐  spacer  ┌────────────┐
+    │  Upstream  │  50 bp   │    Candidate      │  50 bp   │ Downstream │
+    │  100 bp    │          │    (adaptive)     │          │  100 bp    │
+    └────────────┘          └──────────────────┘          └────────────┘
+    PDS = ((UpstreamMean + DownstreamMean) / 2) − CandidateMean
+    │
+    ▼
+Bounded Kadane Detection  (100–1000 bp)
+    │
+    ▼
+Valley Expansion  (expand while PDS > 0 or PDS > 20% of peak)
+    │
+    ▼
+Valley Merging  (merge if gap ≤ 100 bp)
+    │
+    ▼
+Biological Filter  (UpstreamMean > CandidateMean AND DownstreamMean > CandidateMean)
+    │
+    ▼
+ValleyScore Ranking
+    │
+    ▼
+Optional Motif Annotation
+    │
+    ▼
+Downloads (CSV / Excel / BED / GFF3 / FASTA / JSON)
+```
 
-DNA
-→ Dinucleotide Perplexity
-→ Savitzky–Golay smoothing
-→ Multi-scale LPC (25, 50, 100, 200, 400)
-→ Di ConsensusLPC
-→ Candidate valleys
-→ Kadane refinement
-→ Persistence filter (≥ 0.80)
-→ Prominence filter
-→ NMS
-→ Merged domains
-→ Final valleys
-
-`MonoSupport` and `TriSupport` are reported as annotations, not detection signals.
-
-## Operating Modes
-
-- `promoter` (**default**): Dinucleotide signal + positional prior
-- `genome`: Dinucleotide signal only (no positional prior)
-- `ensemble` (**experimental**): Mono+Di+Tri exploratory consensus
-
-### Positional prior parameters
-
-- `CORE_WINDOW_UPSTREAM` (default: 500)
-- `CORE_WINDOW_DOWNSTREAM` (default: 200)
-
-Promoter prior keeps valleys within `[-500, +200]` relative to a reference point (default `0`).
-Set either window to `None` to disable localization filtering.
-
-## Algorithm Summary
-
-1. Compute mono/di/tri perplexity once.
-2. Smooth each profile with Savitzky–Golay.
-3. Build multi-scale landscapes.
-4. Build LPC profiles at each scale.
-5. Build per-layer consensus tracks.
-6. Build final ConsensusLPC according to mode (Di-only in promoter/genome).
-7. Detect, refine, and filter valleys.
-8. Rank using **Di-derived** metrics (`MeanLPC`, `Prominence`, `Persistence`, `ScaleSupport`, `Area`, `Length`, `Variance`).
-9. Report support fields (`MonoSupport`, `DiSupport`, `TriSupport`, `OverallSupport`).
+---
 
 ## Installation
 
 ```bash
-git clone https://github.com/VRYella/PerCALL.git
-cd PerCALL
 pip install -r requirements.txt
 ```
 
-## Quick Start
+Requirements: `numpy`, `scipy`, `pandas`, `openpyxl`, `streamlit`, `plotly`
 
-### Web interface
+---
+
+## Usage
+
+### Streamlit web application
 
 ```bash
 streamlit run app.py
 ```
 
-### CLI
+### Command-line interface
 
 ```bash
-python regplex_core.py examples/ecoli.fasta --out regplex_v12_valleys.csv
-python regplex_core.py examples/human_promoters.fasta --mode promoter --core-window-upstream 500 --core-window-downstream 200
-python regplex_core.py examples/ecoli.fasta --mode genome --core-window-upstream none --core-window-downstream none
-python regplex_core.py examples/ecoli.fasta --mode ensemble
+python regplex_core.py examples/ecoli.fasta --out results.csv
 ```
 
-## Outputs
+### Python API
 
-Core fields include coordinates, `MeanLPC`, `Prominence`, `Persistence`, `ScaleSupport`, `MonoSupport`, `DiSupport`, `TriSupport`, `OverallSupport`, and `ValleyScore`.
+```python
+from regplex_core import parse_fasta, analyze_sequence
 
-Formats: CSV, Excel, BED, GFF/GFF3, FASTA, JSON.
+records = parse_fasta(open("examples/ecoli.fasta").read())
+header, seq = records[0]
+result = analyze_sequence(header, seq)
 
-## Notebook
+for valley in result.domains:
+    print(valley["ID"], valley["Start"], valley["End"], valley["ValleyScore"])
+```
 
-- `REGPLEX_Local.ipynb` includes the local v12 walkthrough and rationale for dinucleotide-primary detection.
+---
 
-## License
+## Parameters
 
-MIT
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `perplexity_window` | 17 | Dinucleotide perplexity sliding window (nt) |
+| `sg_window` | 21 | Savitzky–Golay smoothing window (bp, odd) |
+| `sg_order` | 3 | Savitzky–Golay polynomial order |
+| `flank_size` | 100 | Upstream/downstream flank window (bp) |
+| `spacer_size` | 50 | Gap between flank and candidate windows (bp) |
+| `min_candidate` | 50 | Minimum candidate window size (bp) |
+| `max_candidate` | 1000 | Maximum candidate window size (bp) |
+| `min_valley_length` | 100 | Minimum accepted valley length (bp) |
+| `max_valley_length` | 1000 | Maximum accepted valley length (bp) |
+| `merge_gap` | 100 | Maximum gap between valleys to merge (bp) |
+
+---
+
+## Input
+
+- FASTA format, single or multi-record
+- DNA sequences (A, C, G, T, and IUPAC ambiguity codes)
+- No minimum or maximum length enforced
+
+---
+
+## Output Columns
+
+| Column | Description |
+|--------|-------------|
+| `ID` | Unique valley identifier (`PV_000001`, …) |
+| `Start` | 0-based start position |
+| `End` | End position (exclusive) |
+| `Length` | Valley length (bp) |
+| `MeanPerplexity` | Mean dinucleotide perplexity within valley |
+| `MinPerplexity` | Minimum perplexity within valley |
+| `MaxPerplexity` | Maximum perplexity within valley |
+| `UpstreamMean` | Mean perplexity in upstream flank |
+| `CandidateMean` | Mean perplexity in candidate region |
+| `DownstreamMean` | Mean perplexity in downstream flank |
+| `UpstreamDifference` | UpstreamMean − CandidateMean |
+| `DownstreamDifference` | DownstreamMean − CandidateMean |
+| `PDSMean` | Mean Perplexity Depression Score |
+| `PDSMax` | Maximum Perplexity Depression Score |
+| `Prominence` | Peak perplexity contrast |
+| `Persistence` | Fraction of valley positions with PDS > 0 |
+| `AreaUnderValley` | Integral of perplexity depression |
+| `Variance` | Perplexity variance within valley |
+| `GC%` | GC content of valley sequence |
+| `MotifCount` | Number of motif matches |
+| `Motifs` | Matched motif patterns |
+| `Sequence` | Valley nucleotide sequence |
+| `ValleyScore` | Composite interpretable score |
+| `ValleyScoreNormalized` | ValleyScore normalized 0–1 |
+| `Rank` | Rank by ValleyScore |
+
+---
+
+## ValleyScore Formula
+
+```
+Contrast     = PDSMean
+LengthFactor = log(Length)
+Stability    = 1 / (Variance + 1e-9)
+
+ValleyScore  = Contrast × Persistence × LengthFactor × Stability
+```
+
+Normalized 0–1 within each sequence. No arbitrary weights.
+
+---
+
+## Motif Annotation
+
+REGPLEX supports optional motif annotation of detected valleys.
+
+Accepted formats:
+
+- **IUPAC codes** — e.g. `TATAWAWR`, `GCNNNNNGC`
+- **Regular expressions** — e.g. `GGGN{1,7}GGG`, `(CAG){5,}`
+
+Motifs are scanned only within detected valleys — never genome-wide. They do not influence detection.
+
+---
+
+## File Structure
+
+```
+regplex_core.py      # Core algorithm: perplexity, PDS, Kadane, metrics
+visualization.py     # Plotly figures: perplexity, PDS, three-window, ranking
+motif_engine.py      # IUPAC/regex motif scanning
+app.py               # Streamlit web application
+examples/            # Example FASTA files
+README.md
+```
+
+---
+
+## Design Principles
+
+- **Training-free** — no reference genomes, no labelled data, no species-specific parameters
+- **Single signal** — dinucleotide perplexity only; no mono- or tri-perplexity
+- **Single pass** — one smoothing operation, no multi-scale layers
+- **Interpretable** — every component of ValleyScore is directly interpretable
+- **No mode switching** — identical algorithm for all inputs
+
+---
+
+## Citation
+
+If you use REGPLEX in your research, please cite the repository:
+
+```
+REGPLEX v13 — https://github.com/VRYella/PerCALL
+```
