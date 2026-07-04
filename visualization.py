@@ -19,19 +19,33 @@ _INDIGO  = "#4F46E5"
 _BASE_LAYOUT = dict(
     paper_bgcolor=_BG,
     plot_bgcolor=_BG,
-    font=dict(color=_TEXT, family="Inter, Segoe UI, sans-serif", size=13),
-    title_font=dict(size=17, color=_BLUE, family="Space Grotesk, Inter, sans-serif"),
-    margin=dict(l=62, r=30, t=66, b=52),
-    legend=dict(bgcolor="rgba(255,255,255,0.9)", bordercolor=_GRID, borderwidth=1),
+    font=dict(color=_TEXT, family="Inter, Segoe UI, sans-serif", size=16),
+    title_font=dict(size=24, color=_BLUE, family="Space Grotesk, Inter, sans-serif"),
+    margin=dict(l=72, r=36, t=72, b=60),
+    legend=dict(
+        bgcolor="rgba(255,255,255,0.9)",
+        bordercolor="rgba(0,0,0,0)",
+        borderwidth=0,
+        font=dict(size=16),
+    ),
+    hoverlabel=dict(font=dict(size=15)),
 )
 
 
 def _apply_base(fig: go.Figure, title: str, height: int = 360) -> go.Figure:
     fig.update_layout(**_BASE_LAYOUT, title=f"<b>{title}</b>", height=height)
-    fig.update_xaxes(showgrid=True, gridcolor=_GRID, zeroline=False, linecolor=_GRID,
-                     tickfont=dict(color=_MUTED))
-    fig.update_yaxes(showgrid=True, gridcolor=_GRID, zeroline=False, linecolor=_GRID,
-                     tickfont=dict(color=_MUTED))
+    fig.update_xaxes(
+        showgrid=False, zeroline=False,
+        linecolor="rgba(203,213,225,0.6)", linewidth=1,
+        tickfont=dict(color=_MUTED, size=16),
+        title_font=dict(size=18),
+    )
+    fig.update_yaxes(
+        showgrid=True, gridcolor="rgba(226,232,240,0.7)", zeroline=False,
+        linecolor="rgba(203,213,225,0.6)", linewidth=1,
+        tickfont=dict(color=_MUTED, size=16),
+        title_font=dict(size=18),
+    )
     return fig
 
 
@@ -191,10 +205,18 @@ def plot_three_window(
     fig.update_xaxes(title_text="Signal position (nt)", row=2, col=1)
     fig.update_layout(**_BASE_LAYOUT, title=f"<b>Three-Window Illustration — {domain.get('ID', 'valley')}</b>",
                       height=500)
-    fig.update_xaxes(showgrid=True, gridcolor=_GRID, zeroline=False, linecolor=_GRID,
-                     tickfont=dict(color=_MUTED))
-    fig.update_yaxes(showgrid=True, gridcolor=_GRID, zeroline=False, linecolor=_GRID,
-                     tickfont=dict(color=_MUTED))
+    fig.update_xaxes(
+        showgrid=False, zeroline=False,
+        linecolor="rgba(203,213,225,0.6)", linewidth=1,
+        tickfont=dict(color=_MUTED, size=16),
+        title_font=dict(size=18),
+    )
+    fig.update_yaxes(
+        showgrid=True, gridcolor="rgba(226,232,240,0.7)", zeroline=False,
+        linecolor="rgba(203,213,225,0.6)", linewidth=1,
+        tickfont=dict(color=_MUTED, size=16),
+        title_font=dict(size=18),
+    )
     return fig
 
 

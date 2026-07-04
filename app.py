@@ -244,33 +244,27 @@ def _render_home() -> None:
     image_html = (
         f'<img src="data:image/png;base64,{img_b64}" class="hero-image" alt="REGPLEX v13 workflow"/>'
         if img_b64
-        else '<div class="hero-image-missing">Hero image unavailable</div>'
+        else '<div class="hero-image-missing">No logo</div>'
     )
     _render_html_block(
         f"""
 <div class="hero-section">
-  <div class="hero-left">
+  <div class="hero-logo">{image_html}</div>
+  <div class="hero-center">
     <div class="hero-brand">REGPLEX</div>
-    <div class="hero-subtitle">
-      <span class="hero-subtitle-line">Training-Free Perplexity Valley Detection</span>
-      <span class="hero-subtitle-line">via Information-Theoretic Contrast Scoring</span>
-    </div>
-    <p class="hero-desc">
-      REGPLEX v13 identifies extended low-perplexity genomic valleys relative to their
-      local background using a training-free information-theoretic framework.
-      Dinucleotide perplexity (window = 17 nt) is smoothed by Savitzky–Golay,
-      transformed to a Perplexity Depression Score via three-window contrast,
-      then valleys are located by bounded Kadane, expanded, merged, and ranked.
-    </p>
+    <div class="hero-subtitle">Perplexity Valley Detector</div>
     <div class="hero-chips">
-      <span class="hero-chip">Di perplexity · window 17</span>
-      <span class="hero-chip">Savitzky–Golay</span>
-      <span class="hero-chip">PDS three-window contrast</span>
-      <span class="hero-chip">Bounded Kadane</span>
-      <span class="hero-chip">No training · No ML</span>
+      <span class="hero-chip">Training-free</span>
+      <span class="hero-chip">Species-independent</span>
+      <span class="hero-chip">Dinucleotide Perplexity</span>
+      <span class="hero-chip">Motif Annotation</span>
     </div>
   </div>
-  <div class="hero-right">{image_html}</div>
+  <div class="hero-metrics">
+    <div class="metric-card"><div class="metric-label">Method</div><div class="metric-value" style="font-size:18px">Info-Theoretic</div></div>
+    <div class="metric-card"><div class="metric-label">Window</div><div class="metric-value" style="font-size:18px">17 nt</div></div>
+    <div class="metric-card"><div class="metric-label">Version</div><div class="metric-value" style="font-size:18px">v13</div></div>
+  </div>
 </div>
 """
     )
@@ -294,8 +288,8 @@ def _render_home() -> None:
 def _render_analysis() -> None:
     _render_html_block(
         "<div class='card'>"
-        "<h3>🔬 REGPLEX v13 Analysis</h3>"
-        "<p>Upload or paste a FASTA sequence, tune the valley-detection parameters, then run the pipeline.</p>"
+        "<h3>🔬 Analysis</h3>"
+        "<p style='margin:0;color:var(--muted)'>Upload or paste a FASTA sequence, tune parameters, then run.</p>"
         "</div>"
     )
 
@@ -617,8 +611,8 @@ def _render_motifs(df: pd.DataFrame) -> None:
     _render_html_block(
         "<div class='card'>"
         "<h3>🧩 Motif Annotation</h3>"
-        "<p>Validate motif syntax and inspect valley-level motif counts. "
-        "Motifs are optional — they never influence valley detection.</p>"
+        "<p style='margin:0;color:var(--muted)'>Validate motif syntax and inspect valley-level counts. "
+        "Motifs do not affect valley detection.</p>"
         "</div>"
     )
     m1, m2 = st.columns(2)
@@ -661,42 +655,28 @@ def _render_about() -> None:
     _render_html_block(
         """
         <div class="card">
-          <h3>🧬 Scientific Hypothesis</h3>
-          <p>
-            REGPLEX v13 identifies <strong>extended low-perplexity genomic valleys</strong>
-            relative to their local genomic background using a
-            <strong>training-free information-theoretic framework</strong>.
-          </p>
+          <h3>🧬 Scientific Basis</h3>
           <blockquote class="hypothesis-quote">
-            "Identify extended low-perplexity genomic valleys relative to their
-            local genomic background using a training-free information-theoretic framework."
+            Extended low-perplexity genomic valleys are identified relative to local background
+            using a training-free information-theoretic framework. No species-specific parameters required.
           </blockquote>
         </div>
         <div class="card">
           <h3>⚙️ Algorithm Pipeline</h3>
           <ol class="algo-list">
-            <li><strong>Dinucleotide Perplexity</strong> — window = 17 nt (16 dinucleotide transitions); stable and local.</li>
-            <li><strong>Savitzky–Golay Smoothing</strong> — applied exactly once (window=21, order=3).</li>
-            <li><strong>Perplexity Depression Score (PDS)</strong> — three-window contrast:<br>
-              <code>PDS = ((UpstreamMean + DownstreamMean) / 2) − CandidateMean</code><br>
-              Positions where either flank ≤ candidate are rejected.</li>
-            <li><strong>Bounded Kadane Detection</strong> — finds all positive-PDS valleys of length 100–1000 bp.</li>
-            <li><strong>Valley Expansion</strong> — grow boundaries while PDS &gt; 0 or PDS &gt; 20% of peak.</li>
-            <li><strong>Valley Merging</strong> — adjacent valleys within 100 bp are merged.</li>
-            <li><strong>ValleyScore</strong> = PDSMean × Persistence × log(Length) × Stability</li>
-            <li><strong>Optional Motif Annotation</strong> — IUPAC or regex patterns, scanned only in predicted valleys.</li>
+            <li><strong>Dinucleotide Perplexity</strong> — window = 17 nt; 16 dinucleotide transitions.</li>
+            <li><strong>Savitzky–Golay Smoothing</strong> — window=21, order=3; applied once.</li>
+            <li><strong>PDS (three-window contrast)</strong> — <code>PDS = (UpMean + DnMean) / 2 − CandMean</code>; flanks must exceed candidate.</li>
+            <li><strong>Bounded Kadane</strong> — all positive-PDS valleys, 100–1000 bp.</li>
+            <li><strong>Expansion &amp; Merging</strong> — grow while PDS &gt; 0 or &gt;20% peak; merge gap ≤ 100 bp.</li>
+            <li><strong>ValleyScore</strong> = PDSMean × Persistence × log(Length) × Stability.</li>
+            <li><strong>Optional Motif Annotation</strong> — IUPAC / regex; scanned within valleys only.</li>
           </ol>
         </div>
         <div class="card">
-          <h3>🚫 What REGPLEX v13 is NOT</h3>
-          <ul>
-            <li>Not a promoter predictor</li>
-            <li>Not a motif predictor</li>
-            <li>Not a classifier</li>
-            <li>No training data required</li>
-            <li>No species-specific parameters</li>
-            <li>No ensemble voting or multi-layer consensus</li>
-          </ul>
+          <h3>🚫 Out of Scope</h3>
+          <p style="margin:0;color:var(--muted)">Not a promoter predictor · Not a classifier · No training data ·
+          No ML · No ensemble voting · No species-specific parameters.</p>
         </div>
         """
     )
