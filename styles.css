@@ -420,3 +420,123 @@ div[data-testid="stRadio"] div[data-baseweb="radio"] {
     font-size: 0.78rem;
   }
 }
+
+/* ================================
+   v13 enhancements
+================================ */
+
+/* Version badge in topbar */
+.top-version-badge {
+  background: linear-gradient(110deg, var(--primary) 20%, var(--secondary) 100%);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 0.28rem 0.8rem;
+  border-radius: 999px;
+  letter-spacing: 0.05em;
+}
+
+/* Section headers above tables */
+.section-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin: 1.2rem 0 0.5rem;
+  padding: 0.55rem 1rem;
+  background: linear-gradient(90deg, #eff6ff 0%, #f0f4ff 100%);
+  border-left: 5px solid var(--primary);
+  border-radius: 0 12px 12px 0;
+}
+
+.section-icon  { font-size: 1.15rem; }
+
+.section-title {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--primary);
+  letter-spacing: -0.01em;
+}
+
+.section-subtitle {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-left: 0.2rem;
+}
+
+/* Hypothesis block quote */
+.hypothesis-quote {
+  border-left: 4px solid var(--secondary);
+  margin: 1rem 0 0.5rem 1rem;
+  padding: 0.6rem 1rem;
+  background: #f0fdf4;
+  border-radius: 0 10px 10px 0;
+  font-style: italic;
+  color: var(--secondary);
+  font-weight: 600;
+  font-size: 0.97rem;
+}
+
+/* Algorithm numbered list */
+.algo-list {
+  padding-left: 1.3rem;
+  line-height: 2.1;
+}
+
+.algo-list li {
+  font-size: 0.96rem;
+  color: var(--text);
+}
+
+.algo-list li strong {
+  color: var(--primary);
+}
+
+/* Data table enhancements */
+[data-testid="stDataFrame"] td {
+  font-size: 0.88rem;
+}
+
+[data-testid="stDataFrame"] tr:hover td {
+  background: #eff6ff !important;
+}
+
+/* Metric card icon prefix */
+.metric-label {
+  font-size: 0.79rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Bold captions */
+[data-testid="stCaptionContainer"] p strong {
+  color: var(--primary);
+  font-weight: 800;
+}
+
+/* Hero chips — v13 style */
+.hero-chip {
+  border: 1.5px solid var(--primary);
+  background: linear-gradient(110deg, #dbeafe, #eff6ff);
+  color: var(--primary);
+  border-radius: 999px;
+  padding: 0.3rem 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  box-shadow: 0 1px 4px rgba(30,58,138,0.10);
+}
+
+/* Tab body padding */
+[data-testid="stTabsContent"] {
+  padding-top: 0.75rem;
+}
+
+/* Status / spinner text */
+[data-testid="stStatusWidget"] {
+  font-weight: 700;
+  color: var(--primary);
+}
