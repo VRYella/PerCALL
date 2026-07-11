@@ -50,7 +50,7 @@ def annotate_regions(regions: list[dict], compiled_motifs: list[tuple[str, re.Pa
             if count:
                 hits.append(f"{motif}:{count}")
                 total += count
-        region["MotifCount"] = total
+        region["Motif_Count"] = total
         region["Motifs"] = ";".join(hits)
     return regions
 

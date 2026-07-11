@@ -142,18 +142,18 @@ def plot_pds_landscape(pds: np.ndarray, regions: list[dict]) -> go.Figure:
 def plot_region_ranking(regions: list[dict]) -> go.Figure:
     if not regions:
         return _empty_figure("Region Ranking")
-    ranked = sorted(regions, key=lambda r: r.get("RegionScore", 0.0), reverse=True)
+    ranked = sorted(regions, key=lambda r: r.get("Region_Score", 0.0), reverse=True)
     ids = [r.get("Region_ID", "LPR") for r in ranked]
-    scores = [r.get("RegionScore", 0.0) for r in ranked]
-    pds = [r.get("PDSMean", 0.0) for r in ranked]
+    scores = [r.get("Region_Score", 0.0) for r in ranked]
+    pds = [r.get("Perplexity_Depression_Score", 0.0) for r in ranked]
     lens = [r.get("Length", 0) for r in ranked]
 
     fig = go.Figure(go.Bar(
         x=ids,
         y=scores,
-        marker=dict(color=pds, colorscale=[[0.0, "#e0e7ff"], [0.5, _TEAL], [1.0, _BLUE]], colorbar=dict(title="PDSMean")),
+        marker=dict(color=pds, colorscale=[[0.0, "#e0e7ff"], [0.5, _TEAL], [1.0, _BLUE]], colorbar=dict(title="PDS")),
         customdata=np.array([[l, p] for l, p in zip(lens, pds)], dtype=object),
-        hovertemplate="<b>%{x}</b><br>RegionScore: %{y:.4f}<br>Length: %{customdata[0]} bp<br>PDSMean: %{customdata[1]:.4f}<extra></extra>",
+        hovertemplate="<b>%{x}</b><br>Region_Score: %{y:.4f}<br>Length: %{customdata[0]} bp<br>PDS: %{customdata[1]:.4f}<extra></extra>",
     ))
     fig.update_layout(xaxis_title="Region_ID", yaxis_title="Region Score")
     return _apply_base(fig, "Low Perplexity Region Ranking", height=390)
@@ -162,13 +162,13 @@ def plot_region_ranking(regions: list[dict]) -> go.Figure:
 def plot_motif_architecture(regions: list[dict]) -> go.Figure:
     if not regions:
         return _empty_figure("Motif Annotation")
-    ranked = sorted(regions, key=lambda r: r.get("MotifCount", 0), reverse=True)
+    ranked = sorted(regions, key=lambda r: r.get("Motif_Count", 0), reverse=True)
     fig = go.Figure(go.Bar(
         x=[r.get("Region_ID", "LPR") for r in ranked],
-        y=[r.get("MotifCount", 0) for r in ranked],
+        y=[r.get("Motif_Count", 0) for r in ranked],
         marker=dict(color=_INDIGO),
         customdata=[r.get("Motifs", "") or "—" for r in ranked],
-        hovertemplate="%{x}<br>MotifCount: %{y}<br>%{customdata}<extra></extra>",
+        hovertemplate="%{x}<br>Motif_Count: %{y}<br>%{customdata}<extra></extra>",
     ))
     fig.update_layout(xaxis_title="Region_ID", yaxis_title="Motif count")
     return _apply_base(fig, "Motif Annotation by Region", height=370)

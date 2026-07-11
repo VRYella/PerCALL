@@ -28,6 +28,21 @@ TOP_N_DISPLAY = 20
 EXPANSION_THRESHOLD_FRACTION = 0.2
 EPSILON = 1e-9
 
+# Output column groups
+PRIMARY_COLS = [
+    "Region_ID", "Start", "End", "Length",
+    "Mean_Perplexity", "Min_Perplexity", "Max_Perplexity",
+    "Upstream_Mean", "Region_Mean", "Downstream_Mean",
+    "Perplexity_Depression_Score",
+    "Prominence", "Persistence", "Region_Score",
+    "GC_Content", "Motif_Count", "Motifs", "Sequence", "Rank",
+]
+
+ADVANCED_COLS = [
+    "Variance", "Std_Dev", "CV", "AUC_PDS",
+    "Kadane_Core_Start", "Kadane_Core_End",
+]
+
 _IUPAC_DNA = set("ACGTN")
 _MAP = np.full(256, 4, dtype=np.uint8)
 for _base, _idx in zip("ACGT", range(4)):
@@ -506,6 +521,9 @@ def _region_metrics(
     pds_max = float(np.max(pds_finite)) if pds_finite.size else 0.0
     persistence = float(np.mean(pds_finite > 0)) if pds_finite.size else 0.0
     variance = float(np.var(pds_finite)) if pds_finite.size > 1 else 0.0
+    std_dev = float(np.std(pds_finite)) if pds_finite.size > 1 else 0.0
+    cv = std_dev / abs(pds_mean) if abs(pds_mean) > EPSILON else 0.0
+    auc_pds = float(np.sum(np.maximum(pds_finite, 0.0))) if pds_finite.size else 0.0
 
     bg_up_s = max(0, start - spacer_size - flank_size)
     bg_up_e = max(0, start - spacer_size)
@@ -547,22 +565,26 @@ def _region_metrics(
         "Region_ID": f"LPR_{region_index:06d}",
         "Signal_Start": int(start),
         "Signal_End": int(end),
+        "Kadane_Core_Start": int(start),
+        "Kadane_Core_End": int(end),
         "Start": int(start_nt),
         "End": int(end_nt),
         "Length": int(length),
-        "MeanPerplexity": mean_perplexity,
-        "MinPerplexity": min_perplexity,
-        "MaxPerplexity": max_perplexity,
-        "UpstreamMean": up_mean,
-        "RegionMean": reg_mean,
-        "DownstreamMean": dn_mean,
-        "PDSMean": pds_mean,
-        "PDSMax": pds_max,
+        "Mean_Perplexity": mean_perplexity,
+        "Min_Perplexity": min_perplexity,
+        "Max_Perplexity": max_perplexity,
+        "Upstream_Mean": up_mean,
+        "Region_Mean": reg_mean,
+        "Downstream_Mean": dn_mean,
+        "Perplexity_Depression_Score": pds_mean,
         "Prominence": prominence,
         "Persistence": persistence,
         "Variance": variance,
-        "GC%": gc,
-        "MotifCount": 0,
+        "Std_Dev": std_dev,
+        "CV": cv,
+        "AUC_PDS": auc_pds,
+        "GC_Content": round(gc * 100, 2),
+        "Motif_Count": 0,
         "Motifs": "",
         "Sequence": sequence,
         "RegionScore_raw": region_score_raw,
@@ -586,10 +608,10 @@ def normalize_region_score(regions: list[dict]) -> list[dict]:
 
     raw = np.array([max(0.0, float(r.get("RegionScore_raw", 0.0))) for r in regions], dtype=np.float64)
     for i, region in enumerate(regions):
-        region["RegionScore"] = float(raw[i])
+        region["Region_Score"] = float(raw[i])
         region.pop("RegionScore_raw", None)
 
-    ranked = sorted(range(len(regions)), key=lambda idx: regions[idx]["RegionScore"], reverse=True)
+    ranked = sorted(range(len(regions)), key=lambda idx: regions[idx]["Region_Score"], reverse=True)
     for rank, idx in enumerate(ranked, 1):
         regions[idx]["Rank"] = rank
 
@@ -655,7 +677,7 @@ def analyze_sequence(sequence_id: str, seq: str, **kwargs) -> AnalysisResult:
         region["Sequence_ID"] = sequence_id
         regions.append(region)
 
-    regions.sort(key=lambda r: r["Signal_Start"])
+    regions.sort(key=lambda r: r["Start"])
     regions = normalize_region_score(regions)
 
     return AnalysisResult(
@@ -690,12 +712,22 @@ def regions_dataframe(results: Iterable[AnalysisResult]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def export_table(df: pd.DataFrame, fmt: str) -> bytes:
+def _filter_export_cols(df: pd.DataFrame, include_advanced: bool = False) -> pd.DataFrame:
+    """Return df with only the appropriate output columns, preserving Sequence_ID."""
+    wanted = ["Sequence_ID"] + PRIMARY_COLS
+    if include_advanced:
+        wanted = wanted + ADVANCED_COLS
+    keep = [c for c in wanted if c in df.columns]
+    return df[keep]
+
+
+def export_table(df: pd.DataFrame, fmt: str, include_advanced: bool = False) -> bytes:
     """Purpose: Export tabular region results to standard serialized formats.
 
     Parameters:
     - df: Region dataframe.
     - fmt: One of csv/tsv/xlsx/json.
+    - include_advanced: Include advanced diagnostic columns when True.
 
     Returns:
     - Encoded bytes for the requested format.
@@ -703,18 +735,19 @@ def export_table(df: pd.DataFrame, fmt: str) -> bytes:
     Computational complexity:
     - O(r*c) time and O(r*c) space for r rows and c columns.
     """
+    out = _filter_export_cols(df, include_advanced)
     fmt = fmt.lower()
     if fmt == "csv":
-        return df.to_csv(index=False).encode()
+        return out.to_csv(index=False).encode()
     if fmt == "tsv":
-        return df.to_csv(index=False, sep="\t").encode()
+        return out.to_csv(index=False, sep="\t").encode()
     if fmt == "xlsx":
         buf = io.BytesIO()
         with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-            df.to_excel(writer, index=False)
+            out.to_excel(writer, index=False)
         return buf.getvalue()
     if fmt == "json":
-        return df.to_json(orient="records", indent=2).encode()
+        return out.to_json(orient="records", indent=2).encode()
     raise ValueError(f"Unsupported format: {fmt}")
 
 
@@ -730,7 +763,7 @@ def export_bed(df: pd.DataFrame) -> bytes:
     Computational complexity:
     - O(r) time and O(r) space.
     """
-    bed = df[["Sequence_ID", "Start", "End", "Region_ID", "RegionScore"]].copy()
+    bed = df[["Sequence_ID", "Start", "End", "Region_ID", "Region_Score"]].copy()
     bed["Start"] = bed["Start"].astype(int)
     bed["End"] = bed["End"].astype(int) + 1
     return bed.to_csv(index=False, sep="\t", header=False).encode()
@@ -752,7 +785,7 @@ def export_fasta(df: pd.DataFrame) -> bytes:
     for _, row in df.iterrows():
         lines.append(
             f">{row['Region_ID']}|{row['Sequence_ID']}:{row['Start']}-{row['End']}"
-            f"|RegionScore={row['RegionScore']:.4f}"
+            f"|Region_Score={row['Region_Score']:.4f}"
         )
         lines.append(str(row["Sequence"]))
     return ("\n".join(lines) + ("\n" if lines else "")).encode()
@@ -775,8 +808,8 @@ def export_gff(df: pd.DataFrame, gff3: bool = False) -> bytes:
     for _, row in df.iterrows():
         attr = (
             f"ID={row['Region_ID']};"
-            f"RegionScore={row['RegionScore']:.4f};"
-            f"PDSMean={row.get('PDSMean', 0.0):.4f};"
+            f"Region_Score={row['Region_Score']:.4f};"
+            f"Perplexity_Depression_Score={row.get('Perplexity_Depression_Score', 0.0):.4f};"
             f"Persistence={row['Persistence']:.4f};"
             f"Prominence={row.get('Prominence', 0.0):.4f};"
             f"Motifs={row.get('Motifs', '')}"
@@ -788,7 +821,7 @@ def export_gff(df: pd.DataFrame, gff3: bool = False) -> bytes:
                 "low_perplexity_region",
                 str(int(row["Start"]) + 1),
                 str(int(row["End"]) + 1),
-                f"{float(row['RegionScore']):.4f}",
+                f"{float(row['Region_Score']):.4f}",
                 ".",
                 ".",
                 attr,
