@@ -478,7 +478,7 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
     _render_html_block(
         "<div class='card'>"
         "<h3>Results</h3>"
-        "<p style='margin:0;color:var(--muted)'>Inspect ranked LPR calls, signal profiles, and sequence-level motif architecture.</p>"
+        "<p style='margin:0;color:var(--muted)'>Inspect ranked Low Perplexity Region calls, signal profiles, and sequence-level motif architecture.</p>"
         "</div>"
     )
 
@@ -622,7 +622,7 @@ def _render_motifs(df: pd.DataFrame) -> None:
     _render_html_block(
         "<div class='card'>"
         "<h3>Motif Annotation</h3>"
-        "<p style='margin:0;color:var(--muted)'>Review motif definitions and valley-level motif counts for interpreted LPR intervals.</p>"
+        "<p style='margin:0;color:var(--muted)'>Review motif definitions and Low Perplexity Region-level motif counts for interpreted intervals.</p>"
         "</div>"
     )
     m1, m2 = st.columns(2)
