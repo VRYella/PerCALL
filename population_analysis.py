@@ -537,7 +537,8 @@ def export_occurrence_matrix(df: pd.DataFrame, fmt: str = "csv") -> bytes:
     Parameters
     ----------
     df : pd.DataFrame
-    fmt : str  one of csv / tsv / xlsx
+    fmt : {'csv', 'tsv', 'xlsx'}, default 'csv'
+        Output format.
 
     Returns
     -------

@@ -311,7 +311,8 @@ def plot_positional_heatmap(results, signal: str = "perplexity") -> go.Figure:
     Parameters
     ----------
     results : list[AnalysisResult]
-    signal : str  "perplexity" or "pds"
+    signal : str, default 'perplexity'
+        Signal to visualise. One of ``'perplexity'`` or ``'pds'``.
 
     Returns
     -------
