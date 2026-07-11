@@ -70,9 +70,12 @@ _DEFAULT_PROMOTER_IUPAC_MOTIFS = (
     "KCGRWCG",
 )
 
+OUTPUT_BASENAME = "regplex_regions"
+PLOT_BASENAME = "regplex_figure"
+
 PLOT_CONFIG = {
     "displaylogo": False,
-    "toImageButtonOptions": {"format": "svg", "filename": "regplex_v13_figure", "scale": 2},
+    "toImageButtonOptions": {"format": "svg", "filename": PLOT_BASENAME, "scale": 2},
     "modeBarButtonsToAdd": ["resetScale2d"],
 }
 
@@ -586,28 +589,28 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
         c1, c2, c3 = st.columns(3)
         with c1:
             st.download_button("CSV",
-                export_table(selected_df, "csv"), "regplex_v13_regions.csv", "text/csv",
+                export_table(selected_df, "csv"), f"{OUTPUT_BASENAME}.csv", "text/csv",
                 use_container_width=True)
             st.download_button("Excel",
-                export_table(selected_df, "xlsx"), "regplex_v13_regions.xlsx",
+                export_table(selected_df, "xlsx"), f"{OUTPUT_BASENAME}.xlsx",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True)
             st.download_button("BED",
-                export_bed(selected_df), "regplex_v13_regions.bed", "text/plain",
+                export_bed(selected_df), f"{OUTPUT_BASENAME}.bed", "text/plain",
                 use_container_width=True)
         with c2:
             st.download_button("GFF",
-                export_gff(selected_df, gff3=False), "regplex_v13_regions.gff", "text/plain",
+                export_gff(selected_df, gff3=False), f"{OUTPUT_BASENAME}.gff", "text/plain",
                 use_container_width=True)
             st.download_button("GFF3",
-                export_gff(selected_df, gff3=True), "regplex_v13_regions.gff3", "text/plain",
+                export_gff(selected_df, gff3=True), f"{OUTPUT_BASENAME}.gff3", "text/plain",
                 use_container_width=True)
             st.download_button("FASTA",
-                export_fasta(selected_df), "regplex_v13_regions.fasta", "text/plain",
+                export_fasta(selected_df), f"{OUTPUT_BASENAME}.fasta", "text/plain",
                 use_container_width=True)
         with c3:
             st.download_button("JSON",
-                export_table(selected_df, "json"), "regplex_v13_regions.json", "application/json",
+                export_table(selected_df, "json"), f"{OUTPUT_BASENAME}.json", "application/json",
                 use_container_width=True)
 
 

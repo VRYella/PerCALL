@@ -266,15 +266,15 @@ def compute_pds(
     centers = np.arange(n, dtype=np.int64)
     half_cand = cand_w // 2
 
-    cand_s = centers - half_cand
-    cand_e = cand_s + cand_w
-    up_e = cand_s - spacer_size
+    reg_s = centers - half_cand
+    reg_e = reg_s + cand_w
+    up_e = reg_s - spacer_size
     up_s = up_e - flank_size
-    dn_s = cand_e + spacer_size
+    dn_s = reg_e + spacer_size
     dn_e = dn_s + flank_size
 
     up_mean = _window_means(csum, ccount, up_s, up_e)
-    reg_mean = _window_means(csum, ccount, cand_s, cand_e)
+    reg_mean = _window_means(csum, ccount, reg_s, reg_e)
     dn_mean = _window_means(csum, ccount, dn_s, dn_e)
 
     contrast = ((up_mean + dn_mean) / 2.0) - reg_mean
