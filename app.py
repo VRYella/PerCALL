@@ -251,7 +251,7 @@ def _render_home() -> None:
   <div class="hero-logo">{image_html}</div>
   <div class="hero-center">
     <div class="hero-brand">REGPLEX</div>
-    <div class="hero-subtitle">Identification of Low Perplexity Regions in Genomic DNA Using Dinucleotide Sequence Complexity</div>
+    <div class="hero-subtitle">Identification of Low Perplexity Regions via Dinucleotide Sequence Complexity</div>
     <p style="margin:0;max-width:860px;color:var(--muted)">
       REGPLEX is a computational framework for identifying Low Perplexity Regions (LPRs) in genomic DNA
       through dinucleotide sequence complexity analysis. The method integrates local background contrast,
