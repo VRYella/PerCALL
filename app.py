@@ -255,14 +255,14 @@ def _render_home() -> None:
     <p style="margin:0;max-width:860px;color:var(--muted)">
       REGPLEX is a computational framework for identifying Low Perplexity Regions in genomic DNA
       through dinucleotide sequence complexity analysis. The method integrates local background contrast,
-      Savitzky–Golay smoothing, bounded optimization, and motif annotation to characterize extended
+      Savitzky-Golay smoothing, bounded optimization, and motif annotation to characterize extended
       regions of reduced sequence complexity across diverse genomes.
     </p>
     <div class="hero-chips">
       <span class="hero-chip">Dinucleotide Perplexity</span>
       <span class="hero-chip">Low Perplexity Regions</span>
       <span class="hero-chip">Local Background Contrast</span>
-      <span class="hero-chip">Savitzky–Golay Smoothing</span>
+      <span class="hero-chip">Savitzky-Golay Smoothing</span>
       <span class="hero-chip">Bounded Optimization</span>
       <span class="hero-chip">Motif Annotation</span>
       <span class="hero-chip">Training-Free</span>
@@ -675,7 +675,7 @@ def _render_about() -> None:
           <h3>Algorithm Pipeline</h3>
           <ol class="algo-list">
             <li><strong>Dinucleotide Perplexity</strong> — window = 17 nt; 16 dinucleotide transitions.</li>
-            <li><strong>Savitzky–Golay Smoothing</strong> — window=21, order=3; applied once.</li>
+            <li><strong>Savitzky-Golay Smoothing</strong> — window=21, order=3; applied once.</li>
             <li><strong>PDS (three-window contrast)</strong> — <code>PDS = (UpMean + DnMean) / 2 − CandMean</code>; flanks must exceed candidate.</li>
             <li><strong>Bounded Kadane</strong> — all positive-PDS valleys, 100–1000 bp.</li>
             <li><strong>Expansion &amp; Merging</strong> — grow while PDS &gt; 0 or &gt;20% peak; merge gap ≤ 100 bp.</li>
