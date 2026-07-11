@@ -84,11 +84,101 @@ Primary table columns:
 - `RegionScore`, `Rank`
 - `MotifCount`, `Motifs`, `Sequence`
 
-## Examples
-Example FASTA files are available in `examples/`. A synchronized example output table is provided at `examples/sample_output.csv`.
+## Population Analysis
+
+REGPLEX supports two complementary analytical workflows:
+
+### 1. Single-Sequence Analysis
+Detect and rank Low Perplexity Regions in an individual genomic sequence.  
+Run as shown in Quick Start above.
+
+### 2. Population-Level Analysis
+Identify **conserved Low Perplexity Regions** across a set of aligned genomic sequences.
+
+**Activation:** Population Analysis Mode is activated automatically when every sequence in the input FASTA has **identical length** and there are ≥2 sequences. No user intervention is required.
+
+**Supported input types:**
+- Aligned promoter sequences (e.g. from multiple species or strains)
+- Multiple orthologous promoters
+- Multiple strains of the same organism
+- Multiple genomes aligned to a common reference
+- Ortholog comparisons from comparative genomics databases
+
+**Population statistics computed:**
+
+| Statistic | Description |
+|---|---|
+| Mean Perplexity Profile | Per-position mean ± SD of dinucleotide perplexity |
+| Mean PDS Profile | Per-position mean ± SD of Perplexity Depression Score |
+| LPR Frequency | Fraction of sequences with an LPR at each position |
+| Region Boundary Density | Histogram of LPR start and end positions |
+| Mean Region Score | Per-position mean RegionScore of overlapping LPRs |
+| Mean GC Profile | GC% estimated from overlapping region data |
+
+**Consensus LPRs:**  
+A consensus LPR is a contiguous run of positions where the LPR frequency ≥ the minimum support threshold (default: 50%).  
+Adjacent runs within the merge gap are joined.
+
+Output fields per consensus region:
+
+| Column | Description |
+|---|---|
+| Region_ID | CLPR_XXXX identifier |
+| Consensus_Start | Start position in signal coordinates |
+| Consensus_End | End position |
+| Length | Consensus region length (bp) |
+| Support | Fraction of sequences with overlapping LPR |
+| Mean_PDS | Mean Perplexity Depression Score |
+| Mean_RegionScore | Mean Region Score |
+| Mean_Perplexity | Mean dinucleotide perplexity |
+| GC% | Estimated GC content |
+
+**Occurrence matrix:**  
+Binary Sequence × ConsensusLPR matrix (1 = LPR overlaps; 0 = absent). Downloadable as CSV/Excel.
+
+**Motif enrichment:**  
+For each consensus region, reports the fraction of sequences where a motif was found in any overlapping LPR — enabling motif conservation analysis across the population.
+
+**Streamlit:**  
+The **Population Analysis** tab appears automatically in the navigation bar when all sequences share equal length.  
+Click "🧬 Population Example" on the Home or Analysis pages to load the bundled 10-sequence synthetic promoter demo.
+
+**Notebook:**  
+Section 15 of `REGPLEX_Local.ipynb` demonstrates the full population workflow with publication-quality figures.
+
+**Python API:**
+```python
+from population_analysis import (
+    is_population_mode,
+    compute_population_stats,
+    compute_consensus_lprs,
+    build_occurrence_matrix,
+    population_summary_table,
+    compute_motif_frequencies,
+)
+
+# After running analyze_sequence on each record:
+if is_population_mode(results):
+    stats     = compute_population_stats(results)
+    consensus = compute_consensus_lprs(stats, results=results, min_support=0.5)
+    summary   = population_summary_table(consensus)
+    occ       = build_occurrence_matrix(results, consensus)
+```
+
+**Performance:**  
+All population statistics use NumPy vectorized operations.  
+Target: 1000 sequences × 6000 bp processed in seconds on a standard workstation.
+
+
 
 ## Interpretation
 REGPLEX ranks algorithmic candidates by local sequence-complexity depression. Scores are descriptive and should be interpreted as prioritization metrics, not biological proof.
+
+## Examples
+Example FASTA files are available in `examples/`:
+- `ecoli.fasta` — single E. coli sequence for single-sequence analysis
+- `population_example.fasta` — 10 synthetic 2000 bp promoter sequences (equal length) for population analysis demo
+- `sample_output.csv` — example output table
 
 ## Motif Annotation
 Motif annotation is optional and executed after LPR detection. Motifs can be provided as regex or IUPAC patterns and are counted only within detected region sequences.
