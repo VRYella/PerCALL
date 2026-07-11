@@ -21,6 +21,8 @@ from regplex_core import (
     MIN_CANDIDATE,
     MIN_REGION_LENGTH,
     PERPLEXITY_WINDOW,
+    PRIMARY_COLS,
+    ADVANCED_COLS,
     SG_POLY_ORDER,
     SG_WINDOW_LENGTH,
     SPACER_SIZE,
@@ -89,14 +91,9 @@ _RESET_SESSION_KEYS = (
     "motifs_custom_motif_text",
 )
 
-# ─── Display columns (no support columns) ───────────────────────────────────
-_DISPLAY_COLS = [
-    "Rank", "Region_ID", "Start", "End", "Length",
-    "MeanPerplexity", "MinPerplexity", "MaxPerplexity",
-    "UpstreamMean", "RegionMean", "DownstreamMean",
-    "PDSMean", "PDSMax", "Prominence", "Persistence", "Variance",
-    "GC%", "RegionScore", "MotifCount", "Motifs",
-]
+# ─── Display columns ─────────────────────────────────────────────────────────
+# Primary columns follow PRIMARY_COLS order; Sequence_ID added for multi-seq context.
+_DISPLAY_COLS = ["Sequence_ID"] + PRIMARY_COLS
 
 
 # ─── UI helpers ──────────────────────────────────────────────────────────────
@@ -483,7 +480,7 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
 
     runtime_seconds = float(st.session_state.get("runtime", 0.0))
     longest   = int(selected_df["Length"].max())    if not selected_df.empty else 0
-    top_score = float(selected_df["RegionScore"].max()) if not selected_df.empty else 0.0
+    top_score = float(selected_df["Region_Score"].max()) if not selected_df.empty else 0.0
 
     m1, m2, m3, m4 = st.columns(4)
     with m1:
@@ -491,7 +488,7 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
     with m2:
         _metric_card("Longest region",   f"{longest:,} bp", "📏")
     with m3:
-        _metric_card("Top RegionScore",  f"{top_score:.4f}", "🏆")
+        _metric_card("Top Region Score",  f"{top_score:.4f}", "🏆")
     with m4:
         _metric_card("Runtime",          f"{runtime_seconds:.2f}s", "⏱️")
 
@@ -500,23 +497,79 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
         "<div class='section-header'>"
         "<span class='section-icon'>📋</span>"
         "<span class='section-title'>Region Predictions</span>"
-        "<span class='section-subtitle'>Ranked by RegionScore (highest = best)</span>"
+        "<span class='section-subtitle'>Ranked by Region Score (highest = best)</span>"
         "</div>"
     )
 
     top_n    = TOP_N_DISPLAY
-    show_all = st.toggle(
-        f"Show all {len(selected_df)} regions",
-        value=False,
-        key="show_all_regions",
-    )
+    tbl_col1, tbl_col2 = st.columns([3, 1])
+    with tbl_col1:
+        show_all = st.toggle(
+            f"Show all {len(selected_df)} regions",
+            value=False,
+            key="show_all_regions",
+        )
+    with tbl_col2:
+        show_advanced = st.toggle(
+            "Advanced Metrics",
+            value=False,
+            key="show_advanced_metrics",
+            help="Show diagnostic columns: Variance, Std_Dev, CV, AUC_PDS, Kadane core coordinates",
+        )
+
     display_df = selected_df if show_all else selected_df.nsmallest(top_n, "Rank")
-    display_cols = [c for c in _DISPLAY_COLS if c in selected_df.columns]
+    base_cols = [c for c in _DISPLAY_COLS if c in selected_df.columns]
+    if show_advanced:
+        adv_cols = [c for c in ADVANCED_COLS if c in selected_df.columns]
+        display_cols = base_cols + adv_cols
+    else:
+        display_cols = base_cols
     st.caption(
         f"Displaying **{'all' if show_all else min(top_n, len(selected_df))}** "
         f"of **{len(selected_df)}** regions."
+        + (" · Advanced metrics shown." if show_advanced else "")
     )
     st.dataframe(display_df[display_cols], use_container_width=True, hide_index=True)
+
+    st.markdown("---")
+
+    # ── Downloads ──────────────────────────────────────────────────────────
+    _render_html_block("<div class='card'><h3>⬇️ Download Results</h3></div>")
+    dl_adv = st.checkbox(
+        "Include Advanced Metrics in downloads",
+        value=False,
+        key="dl_advanced",
+        help="When enabled, downloaded files will contain Variance, Std_Dev, CV, AUC_PDS, and Kadane core coordinates.",
+    )
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.download_button("CSV",
+            export_table(selected_df, "csv", include_advanced=dl_adv),
+            f"{OUTPUT_BASENAME}.csv", "text/csv",
+            use_container_width=True)
+        st.download_button("Excel",
+            export_table(selected_df, "xlsx", include_advanced=dl_adv),
+            f"{OUTPUT_BASENAME}.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True)
+        st.download_button("BED",
+            export_bed(selected_df), f"{OUTPUT_BASENAME}.bed", "text/plain",
+            use_container_width=True)
+    with c2:
+        st.download_button("GFF",
+            export_gff(selected_df, gff3=False), f"{OUTPUT_BASENAME}.gff", "text/plain",
+            use_container_width=True)
+        st.download_button("GFF3",
+            export_gff(selected_df, gff3=True), f"{OUTPUT_BASENAME}.gff3", "text/plain",
+            use_container_width=True)
+        st.download_button("FASTA",
+            export_fasta(selected_df), f"{OUTPUT_BASENAME}.fasta", "text/plain",
+            use_container_width=True)
+    with c3:
+        st.download_button("JSON",
+            export_table(selected_df, "json", include_advanced=dl_adv),
+            f"{OUTPUT_BASENAME}.json", "application/json",
+            use_container_width=True)
 
     st.markdown("---")
 
@@ -528,7 +581,6 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
         "🌊 PDS Landscape",
         "🏆 Region Ranking",
         "🔎 Motifs",
-        "⬇️ Downloads",
     ])
 
     with tabs[0]:
@@ -579,39 +631,10 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
             f"motifs-{selected_seq}",
         )
         if not selected_df.empty and "Motifs" in selected_df.columns:
-            motif_df = selected_df[["Region_ID", "MotifCount", "Motifs"]].copy()
-            motif_df = motif_df[motif_df["MotifCount"] > 0]
+            motif_df = selected_df[["Region_ID", "Motif_Count", "Motifs"]].copy()
+            motif_df = motif_df[motif_df["Motif_Count"] > 0]
             if not motif_df.empty:
                 st.dataframe(motif_df, use_container_width=True, hide_index=True)
-
-    with tabs[6]:
-        _render_html_block("<div class='card'><h3>⬇️ Download Results</h3></div>")
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            st.download_button("CSV",
-                export_table(selected_df, "csv"), f"{OUTPUT_BASENAME}.csv", "text/csv",
-                use_container_width=True)
-            st.download_button("Excel",
-                export_table(selected_df, "xlsx"), f"{OUTPUT_BASENAME}.xlsx",
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True)
-            st.download_button("BED",
-                export_bed(selected_df), f"{OUTPUT_BASENAME}.bed", "text/plain",
-                use_container_width=True)
-        with c2:
-            st.download_button("GFF",
-                export_gff(selected_df, gff3=False), f"{OUTPUT_BASENAME}.gff", "text/plain",
-                use_container_width=True)
-            st.download_button("GFF3",
-                export_gff(selected_df, gff3=True), f"{OUTPUT_BASENAME}.gff3", "text/plain",
-                use_container_width=True)
-            st.download_button("FASTA",
-                export_fasta(selected_df), f"{OUTPUT_BASENAME}.fasta", "text/plain",
-                use_container_width=True)
-        with c3:
-            st.download_button("JSON",
-                export_table(selected_df, "json"), f"{OUTPUT_BASENAME}.json", "application/json",
-                use_container_width=True)
 
 
 # ─── Motifs ──────────────────────────────────────────────────────────────────
@@ -650,9 +673,9 @@ def _render_motifs(df: pd.DataFrame) -> None:
             f"{html.escape(row['Motif'])} → {html.escape(row['Regex'])}"
             f"</div>"
         )
-    if not df.empty and "MotifCount" in df.columns:
+    if not df.empty and "Motif_Count" in df.columns:
         st.markdown("---")
-        show_cols = [c for c in ["Region_ID", "Sequence_ID", "Length", "MotifCount", "Motifs", "RegionScore", "Rank"]
+        show_cols = [c for c in ["Region_ID", "Sequence_ID", "Length", "Motif_Count", "Motifs", "Region_Score", "Rank"]
                      if c in df.columns]
         st.dataframe(df[show_cols], use_container_width=True, hide_index=True)
 
@@ -677,7 +700,7 @@ def _render_about() -> None:
             <li><strong>PDS (three-window contrast)</strong> — <code>PDS = (UpMean + DnMean) / 2 − CandMean</code>; flanks must exceed candidate.</li>
             <li><strong>Bounded Kadane</strong> — all positive-PDS regions, 100–1000 bp.</li>
             <li><strong>Expansion &amp; Merging</strong> — grow while PDS &gt; 0 or &gt;20% peak; merge gap ≤ 100 bp.</li>
-            <li><strong>RegionScore</strong> = PDSMean × Persistence × log(Length) × Stability.</li>
+            <li><strong>Region_Score</strong> = Perplexity_Depression_Score (PDS) × Persistence × log(Length) × Stability.</li>
             <li><strong>Optional Motif Annotation</strong> — IUPAC / regex; scanned within regions only.</li>
           </ol>
         </div>
