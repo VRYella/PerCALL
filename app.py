@@ -251,7 +251,7 @@ def _render_home() -> None:
   <div class="hero-logo">{image_html}</div>
   <div class="hero-center">
     <div class="hero-brand">REGPLEX</div>
-    <div class="hero-subtitle">Low perplexity region detection via dinucleotide sequence complexity</div>
+    <div class="hero-subtitle">Low Perplexity Region detection via dinucleotide sequence complexity</div>
     <p style="margin:0;max-width:860px;color:var(--muted)">
       REGPLEX is a computational framework for identifying Low Perplexity Regions in genomic DNA
       through dinucleotide sequence complexity analysis. The method integrates local background contrast,
@@ -685,7 +685,7 @@ def _render_about() -> None:
         </div>
         """
     )
-    _show_figure(plot_algorithm_workflow(), "workflow-v13")
+    _show_figure(plot_algorithm_workflow(), "algorithm-workflow")
 
 
 # ─── Main entry point ────────────────────────────────────────────────────────
