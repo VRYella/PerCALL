@@ -465,12 +465,13 @@ def plot_motif_frequency_barplot(consensus_lprs, top_n: int = 15) -> go.Figure:
                     colorbar=dict(title="Frequency")),
         hovertemplate="%{y}: %{x:.3f}<extra></extra>",
     ))
+    fig_height = max(350, 28 * len(labels) + 100)
     fig.update_layout(
         xaxis_title="Motif Frequency (fraction of sequences)",
         yaxis=dict(autorange="reversed"),
-        height=max(350, 28 * len(labels) + 100),
+        height=fig_height,
     )
-    return _apply_base(fig, "Motif Frequency across Consensus LPRs", height=max(350, 28 * len(labels) + 100))
+    return _apply_base(fig, "Motif Frequency across Consensus LPRs", height=fig_height)
 
 
 def plot_boundary_density(stats, nbins: int = 60) -> go.Figure:

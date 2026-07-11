@@ -300,22 +300,22 @@ def _render_home() -> None:
 """
     )
 
-    b1, b2, b3, b4, b5 = st.columns(5)
-    with b1:
+    run_col, example_col, pop_example_col, docs_col, github_col = st.columns(5)
+    with run_col:
         if st.button("▶ Run Analysis", key="home_run", use_container_width=True, type="primary"):
             _jump_to_nav("Analysis")
-    with b2:
+    with example_col:
         if st.button("📂 Load Example", key="home_example", use_container_width=True):
             st.session_state["input_fasta_text"] = _load_example_text()
             _jump_to_nav("Analysis")
-    with b3:
+    with pop_example_col:
         if st.button("🧬 Population Example", key="home_pop_example", use_container_width=True,
                      help="Load 10 synthetic promoter sequences for population analysis demo."):
             st.session_state["input_fasta_text"] = _load_population_example_text()
             _jump_to_nav("Analysis")
-    with b4:
+    with docs_col:
         st.link_button("📖 Documentation", _README_URL, use_container_width=True)
-    with b5:
+    with github_col:
         st.link_button("🐙 GitHub", "https://github.com/VRYella/PerCALL", use_container_width=True)
 
 

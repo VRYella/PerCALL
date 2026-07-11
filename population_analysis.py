@@ -192,7 +192,25 @@ def compute_population_stats(results: list) -> PopulationStats:
 
 
 def _compute_mean_gc_profile(results: list, L: int, gc_window: int = 21) -> np.ndarray:
-    """Compute mean GC% using a sliding window over aligned sequences."""
+    """Compute a mean GC-fraction profile using a sliding window over raw sequences.
+
+    Parameters
+    ----------
+    results : list[AnalysisResult]
+        Analysis results; raw sequences are read from ``r.params['_seq']`` when
+        present (optional — returns an all-zero array when absent).
+    L : int
+        Target signal length (number of positions in the output array).
+    gc_window : int
+        Width of the sliding window used to smooth the per-position GC fraction.
+        Default 21.
+
+    Returns
+    -------
+    np.ndarray  shape (L,), dtype float32
+        Mean GC fraction at each signal position across all sequences.
+        Values are in the range [0, 1].
+    """
     n = len(results)
     gc_mat = np.zeros((n, L), dtype=np.float32)
     half = gc_window // 2
@@ -326,7 +344,24 @@ def compute_consensus_lprs(
 
 
 def _build_gc_map(results: list, L: int) -> np.ndarray:
-    """Build positional GC fraction from region GC_Content values."""
+    """Build a positional GC-fraction array from per-region GC_Content values.
+
+    For each signal position, accumulates the GC fraction of every detected LPR
+    that overlaps that position and returns the mean.  Positions not covered by
+    any LPR default to 0.5 (neutral assumption).
+
+    Parameters
+    ----------
+    results : list[AnalysisResult]
+        Analysis results containing detected regions with ``GC_Content`` fields.
+    L : int
+        Signal length — number of positions in the output array.
+
+    Returns
+    -------
+    np.ndarray  shape (L,), dtype float64
+        Per-position mean GC fraction in [0, 1].
+    """
     gc_sum = np.zeros(L, dtype=np.float64)
     gc_cnt = np.zeros(L, dtype=np.int64)
     for r in results:
