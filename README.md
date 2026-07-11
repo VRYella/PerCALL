@@ -1,175 +1,114 @@
 # REGPLEX v13
 
-**Training-Free Perplexity Valley Detector**
+## Scientific Overview
+REGPLEX identifies **Low Perplexity Regions (LPRs)** in DNA by quantifying local dinucleotide sequence complexity and contrasting candidate segments against immediate genomic background. The method is deterministic, training-free, and species-independent.
 
-REGPLEX identifies extended low-perplexity genomic valleys relative to their local genomic background using a training-free information-theoretic framework.
+## Background
+Many genomic intervals contain sustained local sequence simplification relative to nearby context. REGPLEX operationalizes this as a signal-processing problem using information-theoretic complexity and bounded optimization.
 
----
+## Methodology
+The implementation uses one primary signal (dinucleotide perplexity), one smoothing stage (Savitzky–Golay), one contrast metric (Perplexity Depression Score; PDS), and one constrained segmentation strategy (bounded Kadane optimization), followed by region expansion, merging, and ranking.
 
-## Scientific Hypothesis
-
-> "Identify extended low-perplexity genomic valleys relative to their local genomic background using a training-free information-theoretic framework."
-
-REGPLEX is **not** a promoter predictor, not a motif predictor, and not a classifier.  
-No training data. No species-specific parameters. No machine learning.
-
----
-
-## Algorithm Pipeline
-
-```
-DNA
- ↓
-Dinucleotide Perplexity  (window = 17 nt)
- ↓
-Savitzky-Golay Smoothing  (window=21, order=3)
- ↓
-Perplexity Depression Score (PDS)
- ↓
-Bounded Kadane Valley Detection  (100–1000 bp)
- ↓
-Valley Expansion
- ↓
-Valley Merging  (gap ≤ 100 bp)
- ↓
-Valley Ranking  (ValleyScore)
- ↓
-Optional Motif Annotation
- ↓
+## Algorithm Workflow
+DNA  
+↓  
+Dinucleotide Perplexity (17 nt)  
+↓  
+Savitzky–Golay Smoothing  
+↓  
+Perplexity Depression Score (PDS)  
+↓  
+Bounded Kadane Optimization  
+↓  
+Region Expansion  
+↓  
+Region Merging  
+↓  
+Low Perplexity Region Ranking  
+↓  
+Optional Motif Annotation  
+↓  
 Downloads
+
+## Mathematical Description
+For a candidate window with upstream and downstream flanks:
+
+\[
+\mathrm{PDS} = \frac{\overline{U} + \overline{D}}{2} - \overline{R}
+\]
+
+where \(\overline{U}\), \(\overline{R}\), and \(\overline{D}\) are mean smoothed perplexity in upstream, region, and downstream windows. A position is retained only if both flanks exceed the candidate mean.
+
+Region ranking uses:
+
+\[
+\mathrm{RegionScore} = \mathrm{PDSMean} \times \mathrm{Persistence} \times \log(\mathrm{Length}) \times \frac{1}{\mathrm{Variance}+\varepsilon}
+\]
+
+## Installation
+```bash
+pip install -r requirements.txt
 ```
 
-### Step 1 — Dinucleotide Perplexity
-
-Only dinucleotide perplexity is used. Window = 17 nt (16 dinucleotide transitions).  
-This provides a stable local estimate while remaining highly local.
-
-### Step 2 — Savitzky-Golay Smoothing
-
-Applied **exactly once** (window=21, order=3). Never stacked.
-
-### Step 3 — Perplexity Depression Score
-
-Three-window contrast for each position:
-
-```
-[upstream 100 bp] [spacer 50 bp] [candidate] [spacer 50 bp] [downstream 100 bp]
-```
-
-```
-PDS = ((UpstreamMean + DownstreamMean) / 2) − CandidateMean
-```
-
-Rejected if either flank mean ≤ candidate mean.  
-Positive PDS = genuine depression relative to local background.
-
-### Step 4 — Bounded Kadane
-
-Applied only to the PDS profile. Identifies all positive-PDS valleys of length 100–1000 bp.
-
-### Step 5 — Valley Expansion
-
-Each Kadane core is expanded while:
-- `PDS > 0` OR
-- `PDS > 20% of peak PDS`
-
-### Step 6 — Valley Merging
-
-Adjacent valleys with gap ≤ 100 bp are merged into a single biological domain.
-
-### Step 7 — ValleyScore
-
-```
-ValleyScore = PDSMean × Persistence × log(Length) × Stability
-Stability   = 1 / (Variance + 1e-9)
-```
-
-Normalised to [0, 1]. Ranked by ValleyScore.
-
----
-
-## Output Columns
-
-| Column | Description |
-|--------|-------------|
-| ID | Valley identifier (PV_XXXXXX) |
-| Start / End | Nucleotide coordinates |
-| Length | Valley length (bp) |
-| MeanPerplexity | Mean di-perplexity in valley |
-| MinPerplexity / MaxPerplexity | Range |
-| UpstreamMean | Upstream flank perplexity |
-| CandidateMean | Valley perplexity |
-| DownstreamMean | Downstream flank perplexity |
-| UpstreamDifference | UpstreamMean − CandidateMean |
-| DownstreamDifference | DownstreamMean − CandidateMean |
-| PDSMean / PDSMax | PDS statistics |
-| Prominence | Background − valley minimum |
-| Persistence | Fraction of valley positions with PDS > 0 |
-| AreaUnderValley | Integral of positive PDS |
-| Variance | PDS variance (lower = more stable) |
-| GC% | GC content |
-| MotifCount / Motifs | Optional motif annotation |
-| ValleyScore | Primary ranking score |
-| ValleyScoreNormalized | Normalised 0–1 |
-| Rank | 1 = best |
-
----
-
-## Usage
-
-### Streamlit Web App
-
+## Quick Start
+### Streamlit application
 ```bash
 streamlit run app.py
 ```
 
-### Command Line
-
+### Command line
 ```bash
-python regplex_core.py <fasta> --out valleys.csv
+python regplex_core.py examples/ecoli.fasta --out regplex_regions.csv
 ```
 
-Options:
+## Parameters
+- `--sg-window`: Savitzky–Golay window length (default 21)
+- `--sg-order`: Savitzky–Golay polynomial order (default 3)
+- `--flank-size`: flank window size for PDS (default 100)
+- `--spacer-size`: spacer between flank and candidate (default 50)
+- `--min-candidate`: minimum candidate size for adaptive PDS geometry (default 50)
+- `--max-candidate`: maximum candidate size for adaptive PDS geometry (default 1000)
+- `--min-region`: minimum accepted LPR length (default 100)
+- `--max-region`: maximum bounded-Kadane core length (default 1000)
+- `--merge-gap`: merge gap between adjacent regions (default 100)
 
-```
---sg-window       Savitzky-Golay window (default 21)
---sg-order        Savitzky-Golay order (default 3)
---flank-size      PDS flank window (default 100 bp)
---spacer-size     PDS spacer (default 50 bp)
---min-candidate   PDS min candidate (default 50 bp)
---max-candidate   PDS max candidate (default 1000 bp)
---min-valley      Minimum valley length (default 100 bp)
---max-valley      Maximum valley length (default 1000 bp)
---merge-gap       Valley merge gap (default 100 bp)
-```
+## Outputs
+Primary table columns:
+- `Region_ID`
+- `Start`, `End`, `Length`
+- `MeanPerplexity`, `MinPerplexity`, `MaxPerplexity`
+- `UpstreamMean`, `RegionMean`, `DownstreamMean`
+- `PDSMean`, `PDSMax`
+- `Prominence`, `Persistence`, `Variance`
+- `GC%`
+- `RegionScore`, `Rank`
+- `MotifCount`, `Motifs`, `Sequence`
 
----
+## Examples
+Example FASTA files are available in `examples/`. A synchronized example output table is provided at `examples/sample_output.csv`.
 
-## Requirements
+## Interpretation
+REGPLEX ranks algorithmic candidates by local sequence-complexity depression. Scores are descriptive and should be interpreted as prioritization metrics, not biological proof.
 
-```
-numpy>=1.20.0,<3.0.0
-openpyxl>=3.0.0,<4.0.0
-pandas>=1.3.0,<4.0.0
-plotly>=5.0.0,<7.0.0
-scipy>=1.7.0,<2.0.0
-streamlit>=1.40.0,<2.0.0
-```
+## Motif Annotation
+Motif annotation is optional and executed after LPR detection. Motifs can be provided as regex or IUPAC patterns and are counted only within detected region sequences.
 
----
+## Performance
+The pipeline is NumPy-vectorized for signal computation and uses linear-time bounded segmentation inside contiguous positive-PDS runs.
 
-## Files
+## Limitations
+- REGPLEX detects sequence-complexity depressions, not direct regulatory function.
+- Biological interpretation requires external validation.
+- Ambiguous (`N`) windows are excluded from perplexity estimation.
 
-| File | Description |
-|------|-------------|
-| `app.py` | Streamlit web application |
-| `regplex_core.py` | Core algorithm (perplexity, PDS, Kadane, metrics) |
-| `motif_engine.py` | IUPAC/regex motif scanner |
-| `visualization.py` | Plotly figures (white scientific theme) |
-| `examples/` | Example FASTA files |
-
----
+## Citation
+If you use REGPLEX, cite this repository and associated manuscript package.
 
 ## License
+MIT License.
 
-MIT License
+## References
+1. Shannon CE. *A mathematical theory of communication*. 1948.
+2. Bentley JL. *Programming Pearls: algorithm design techniques*. 1984.
+3. Harris CR et al. *Array programming with NumPy*. 2020.
+4. Virtanen P et al. *SciPy 1.0: Fundamental Algorithms for Scientific Computing in Python*. 2020.
