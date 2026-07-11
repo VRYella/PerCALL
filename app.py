@@ -488,7 +488,7 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
     with m2:
         _metric_card("Longest region",   f"{longest:,} bp", "📏")
     with m3:
-        _metric_card("Top Region_Score",  f"{top_score:.4f}", "🏆")
+        _metric_card("Top Region Score",  f"{top_score:.4f}", "🏆")
     with m4:
         _metric_card("Runtime",          f"{runtime_seconds:.2f}s", "⏱️")
 
@@ -497,7 +497,7 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
         "<div class='section-header'>"
         "<span class='section-icon'>📋</span>"
         "<span class='section-title'>Region Predictions</span>"
-        "<span class='section-subtitle'>Ranked by Region_Score (highest = best)</span>"
+        "<span class='section-subtitle'>Ranked by Region Score (highest = best)</span>"
         "</div>"
     )
 
@@ -700,7 +700,7 @@ def _render_about() -> None:
             <li><strong>PDS (three-window contrast)</strong> — <code>PDS = (UpMean + DnMean) / 2 − CandMean</code>; flanks must exceed candidate.</li>
             <li><strong>Bounded Kadane</strong> — all positive-PDS regions, 100–1000 bp.</li>
             <li><strong>Expansion &amp; Merging</strong> — grow while PDS &gt; 0 or &gt;20% peak; merge gap ≤ 100 bp.</li>
-            <li><strong>Region_Score</strong> = PDS × Persistence × log(Length) × Stability.</li>
+            <li><strong>Region_Score</strong> = Perplexity_Depression_Score (PDS) × Persistence × log(Length) × Stability.</li>
             <li><strong>Optional Motif Annotation</strong> — IUPAC / regex; scanned within regions only.</li>
           </ol>
         </div>

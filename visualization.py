@@ -151,7 +151,7 @@ def plot_region_ranking(regions: list[dict]) -> go.Figure:
     fig = go.Figure(go.Bar(
         x=ids,
         y=scores,
-        marker=dict(color=pds, colorscale=[[0.0, "#e0e7ff"], [0.5, _TEAL], [1.0, _BLUE]], colorbar=dict(title="PDS")),
+        marker=dict(color=pds, colorscale=[[0.0, "#e0e7ff"], [0.5, _TEAL], [1.0, _BLUE]], colorbar=dict(title="Perplexity Depression Score")),
         customdata=np.array([[l, p] for l, p in zip(lens, pds)], dtype=object),
         hovertemplate="<b>%{x}</b><br>Region_Score: %{y:.4f}<br>Length: %{customdata[0]} bp<br>PDS: %{customdata[1]:.4f}<extra></extra>",
     ))

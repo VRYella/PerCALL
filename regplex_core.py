@@ -677,7 +677,7 @@ def analyze_sequence(sequence_id: str, seq: str, **kwargs) -> AnalysisResult:
         region["Sequence_ID"] = sequence_id
         regions.append(region)
 
-    regions.sort(key=lambda r: r["Start"])
+    regions.sort(key=lambda r: r["Signal_Start"])
     regions = normalize_region_score(regions)
 
     return AnalysisResult(
