@@ -251,7 +251,7 @@ def _render_home() -> None:
   <div class="hero-logo">{image_html}</div>
   <div class="hero-center">
     <div class="hero-brand">REGPLEX</div>
-    <div class="hero-subtitle">Low Perplexity Region Detection via Dinucleotide Sequence Complexity</div>
+    <div class="hero-subtitle">Low perplexity region detection via dinucleotide sequence complexity</div>
     <p style="margin:0;max-width:860px;color:var(--muted)">
       REGPLEX is a computational framework for identifying Low Perplexity Regions in genomic DNA
       through dinucleotide sequence complexity analysis. The method integrates local background contrast,
@@ -676,7 +676,7 @@ def _render_about() -> None:
           <ol class="algo-list">
             <li><strong>Dinucleotide Perplexity</strong> — window = 17 nt; 16 dinucleotide transitions.</li>
             <li><strong>Savitzky–Golay Smoothing</strong> — window=21, order=3; applied once.</li>
-            <li><strong>PDS (three-window contrast)</strong> — <code>PDS = (UpMean + DnMean) / 2 − CandMean</code>; local contrast quantifies valley support.</li>
+            <li><strong>PDS (three-window contrast)</strong> — <code>PDS = (UpMean + DnMean) / 2 − CandMean</code>; flanks must exceed candidate.</li>
             <li><strong>Bounded Kadane</strong> — all positive-PDS valleys, 100–1000 bp.</li>
             <li><strong>Expansion &amp; Merging</strong> — grow while PDS &gt; 0 or &gt;20% peak; merge gap ≤ 100 bp.</li>
             <li><strong>ValleyScore</strong> = PDSMean × Persistence × log(Length) × Stability.</li>
