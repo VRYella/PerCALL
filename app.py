@@ -36,6 +36,15 @@ from regplex_core import (
     export_table,
     parse_fasta,
 )
+from population_analysis import (
+    is_population_mode,
+    compute_population_stats,
+    compute_consensus_lprs,
+    build_occurrence_matrix,
+    population_summary_table,
+    compute_motif_frequencies,
+    export_occurrence_matrix,
+)
 from visualization import (
     plot_algorithm_workflow,
     plot_motif_architecture,
@@ -44,11 +53,21 @@ from visualization import (
     plot_smoothed_perplexity,
     plot_three_window,
     plot_region_ranking,
+    plot_mean_perplexity_profile,
+    plot_mean_pds_profile,
+    plot_lpr_frequency,
+    plot_positional_heatmap,
+    plot_consensus_lpr_track,
+    plot_region_length_distribution,
+    plot_region_score_distribution,
+    plot_motif_frequency_barplot,
+    plot_boundary_density,
 )
 
 st.set_page_config(page_title="REGPLEX", layout="wide", initial_sidebar_state="collapsed")
 
-_NAV_ITEMS = ["Home", "Analysis", "Results", "Motifs", "About"]
+_NAV_ITEMS_BASE = ["Home", "Analysis", "Results", "Motifs", "About"]
+_NAV_ITEMS_POP  = ["Home", "Analysis", "Results", "Motifs", "Population Analysis", "About"]
 _README_URL = "https://github.com/VRYella/PerCALL#readme"
 
 # ─── Default motif sets ──────────────────────────────────────────────────────
@@ -145,6 +164,13 @@ def _load_example_text() -> str:
     return example_path.read_text(encoding="utf-8")
 
 
+def _load_population_example_text() -> str:
+    example_path = Path(__file__).with_name("examples") / "population_example.fasta"
+    if not example_path.exists():
+        return ""
+    return example_path.read_text(encoding="utf-8")
+
+
 def _jump_to_nav(label: str) -> None:
     st.session_state["jump_nav"] = label
     st.rerun()
@@ -172,12 +198,17 @@ def _render_topbar() -> None:
     )
 
 
-def _render_nav() -> int:
+def _render_nav(pop_mode: bool) -> int:
+    nav_items = _NAV_ITEMS_POP if pop_mode else _NAV_ITEMS_BASE
     if "jump_nav" in st.session_state:
         st.session_state["main_nav"] = st.session_state.pop("jump_nav")
-    tab = st.radio("Navigation", _NAV_ITEMS, horizontal=True,
+    # ensure the stored value is still a valid choice
+    current = st.session_state.get("main_nav", nav_items[0])
+    if current not in nav_items:
+        st.session_state["main_nav"] = nav_items[0]
+    tab = st.radio("Navigation", nav_items, horizontal=True,
                    label_visibility="collapsed", key="main_nav")
-    return _NAV_ITEMS.index(tab)
+    return nav_items.index(tab)
 
 
 def _show_figure(fig, key: str) -> None:
@@ -269,17 +300,22 @@ def _render_home() -> None:
 """
     )
 
-    b1, b2, b3, b4 = st.columns(4)
-    with b1:
+    run_col, example_col, pop_example_col, docs_col, github_col = st.columns(5)
+    with run_col:
         if st.button("▶ Run Analysis", key="home_run", use_container_width=True, type="primary"):
             _jump_to_nav("Analysis")
-    with b2:
+    with example_col:
         if st.button("📂 Load Example", key="home_example", use_container_width=True):
             st.session_state["input_fasta_text"] = _load_example_text()
             _jump_to_nav("Analysis")
-    with b3:
+    with pop_example_col:
+        if st.button("🧬 Population Example", key="home_pop_example", use_container_width=True,
+                     help="Load 10 synthetic promoter sequences for population analysis demo."):
+            st.session_state["input_fasta_text"] = _load_population_example_text()
+            _jump_to_nav("Analysis")
+    with docs_col:
         st.link_button("📖 Documentation", _README_URL, use_container_width=True)
-    with b4:
+    with github_col:
         st.link_button("🐙 GitHub", "https://github.com/VRYella/PerCALL", use_container_width=True)
 
 
@@ -404,7 +440,7 @@ def _render_analysis() -> None:
             )
         _render_html_block("".join(lines))
 
-    run_col, reset_col, example_col = st.columns([2, 1, 1])
+    run_col, reset_col, example_col, pop_example_col = st.columns([2, 1, 1, 1])
     with run_col:
         run_clicked = st.button("▶ Run REGPLEX", type="primary", use_container_width=True)
     with reset_col:
@@ -415,6 +451,11 @@ def _render_analysis() -> None:
     with example_col:
         if st.button("📂 Load Example", use_container_width=True):
             st.session_state["input_fasta_text"] = _load_example_text()
+            st.rerun()
+    with pop_example_col:
+        if st.button("🧬 Population Example", use_container_width=True,
+                     help="Load 10 equal-length synthetic promoter sequences for population analysis demo."):
+            st.session_state["input_fasta_text"] = _load_population_example_text()
             st.rerun()
 
     if run_clicked:
@@ -680,6 +721,186 @@ def _render_motifs(df: pd.DataFrame) -> None:
         st.dataframe(df[show_cols], use_container_width=True, hide_index=True)
 
 
+# ─── Population Analysis ──────────────────────────────────────────────────────
+
+def _render_population(results: list[AnalysisResult], df: pd.DataFrame) -> None:
+    _render_html_block(
+        "<div class='card'>"
+        "<h3>Population Analysis</h3>"
+        "<p style='margin:0;color:var(--muted)'>"
+        "Population-level statistics across all equally-sized sequences: "
+        "mean profiles, LPR frequency, consensus regions, heatmaps, and motif conservation."
+        "</p>"
+        "</div>"
+    )
+
+    if not is_population_mode(results):
+        _render_html_block(
+            "<div class='empty-state'>"
+            "<div>Population Analysis requires ≥2 sequences of identical length. "
+            "Run Analysis first or upload a multi-sequence FASTA with equal-length entries.</div>"
+            "</div>"
+        )
+        return
+
+    # ── Parameters ─────────────────────────────────────────────────────────
+    with st.expander("⚙️ Population Parameters", expanded=True):
+        pc1, pc2 = st.columns(2)
+        with pc1:
+            min_support = st.slider(
+                "Minimum Support Fraction",
+                min_value=0.1, max_value=1.0, value=0.5, step=0.05,
+                help="Fraction of sequences that must contain an LPR at a position to be included in a consensus region.",
+                key="pop_min_support",
+            )
+        with pc2:
+            merge_gap = st.number_input(
+                "Consensus merge gap (bp)", min_value=0, max_value=500, value=50,
+                help="Merge consensus positions within this gap.",
+                key="pop_merge_gap",
+            )
+        heatmap_signal = st.radio(
+            "Heatmap signal",
+            ["perplexity", "pds"],
+            horizontal=True,
+            key="pop_heatmap_signal",
+        )
+
+    # ── Compute ────────────────────────────────────────────────────────────
+    with st.spinner("Computing population statistics …"):
+        stats = compute_population_stats(results)
+        consensus = compute_consensus_lprs(stats, results=results, min_support=min_support, merge_gap=int(merge_gap))
+        motif_text = st.session_state.get("motif_text", "")
+        if motif_text:
+            compiled_motifs = compile_motifs(motif_text)
+            consensus = compute_motif_frequencies(results, consensus, compiled_motifs)
+        occ_matrix = build_occurrence_matrix(results, consensus)
+        summary_df = population_summary_table(consensus)
+
+    # ── Metrics ────────────────────────────────────────────────────────────
+    m1, m2, m3, m4 = st.columns(4)
+    with m1:
+        _metric_card("Sequences", str(stats.n_seq), "🧬")
+    with m2:
+        _metric_card("Signal length", f"{stats.signal_length:,} nt", "📏")
+    with m3:
+        _metric_card("Consensus LPRs", str(len(consensus)), "🏔️")
+    with m4:
+        peak_freq = float(stats.lpr_frequency.max()) if stats.signal_length > 0 else 0.0
+        _metric_card("Peak LPR Freq", f"{peak_freq:.1%}", "📈")
+
+    st.markdown("---")
+
+    # ── Consensus summary table ────────────────────────────────────────────
+    _render_html_block(
+        "<div class='section-header'>"
+        "<span class='section-icon'>📋</span>"
+        "<span class='section-title'>Consensus LPR Summary</span>"
+        "</div>"
+    )
+    if not summary_df.empty:
+        st.dataframe(summary_df, use_container_width=True, hide_index=True)
+    else:
+        st.info("No consensus regions found at current support threshold.")
+
+    st.markdown("---")
+
+    # ── Plots ──────────────────────────────────────────────────────────────
+    plot_tabs = st.tabs([
+        "📈 Mean Perplexity",
+        "🌊 Mean PDS",
+        "📊 LPR Frequency",
+        "🔥 Heatmap",
+        "🎯 Consensus Track",
+        "📐 Length Dist.",
+        "🏆 Score Dist.",
+        "🧱 Boundaries",
+        "🧩 Motif Freq.",
+    ])
+
+    with plot_tabs[0]:
+        _show_figure(plot_mean_perplexity_profile(stats), "pop-mean-perp")
+
+    with plot_tabs[1]:
+        _show_figure(plot_mean_pds_profile(stats), "pop-mean-pds")
+
+    with plot_tabs[2]:
+        _show_figure(plot_lpr_frequency(stats, consensus), "pop-lpr-freq")
+
+    with plot_tabs[3]:
+        _show_figure(plot_positional_heatmap(results, signal=heatmap_signal), "pop-heatmap")
+
+    with plot_tabs[4]:
+        _show_figure(plot_consensus_lpr_track(stats, consensus), "pop-consensus-track")
+
+    with plot_tabs[5]:
+        _show_figure(plot_region_length_distribution(stats), "pop-len-dist")
+
+    with plot_tabs[6]:
+        _show_figure(plot_region_score_distribution(stats), "pop-score-dist")
+
+    with plot_tabs[7]:
+        _show_figure(plot_boundary_density(stats), "pop-boundary")
+
+    with plot_tabs[8]:
+        _show_figure(plot_motif_frequency_barplot(consensus), "pop-motif-freq")
+
+    st.markdown("---")
+
+    # ── Occurrence matrix ──────────────────────────────────────────────────
+    _render_html_block(
+        "<div class='section-header'>"
+        "<span class='section-icon'>🔲</span>"
+        "<span class='section-title'>Region Occurrence Matrix</span>"
+        "<span class='section-subtitle'>1 = LPR overlaps consensus region · 0 = absent</span>"
+        "</div>"
+    )
+    if not occ_matrix.empty:
+        st.dataframe(occ_matrix, use_container_width=True)
+        dl1, dl2 = st.columns(2)
+        with dl1:
+            st.download_button(
+                "Download Occurrence Matrix (CSV)",
+                export_occurrence_matrix(occ_matrix, "csv"),
+                "regplex_occurrence_matrix.csv",
+                "text/csv",
+                use_container_width=True,
+            )
+        with dl2:
+            st.download_button(
+                "Download Occurrence Matrix (Excel)",
+                export_occurrence_matrix(occ_matrix, "xlsx"),
+                "regplex_occurrence_matrix.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )
+    else:
+        st.info("No consensus regions to display.")
+
+    st.markdown("---")
+
+    # ── Population summary download ────────────────────────────────────────
+    _render_html_block("<div class='card'><h3>⬇️ Download Population Results</h3></div>")
+    if not summary_df.empty:
+        dl_a, dl_b = st.columns(2)
+        with dl_a:
+            st.download_button(
+                "Download Population Summary (CSV)",
+                summary_df.to_csv(index=False).encode(),
+                "regplex_population_summary.csv",
+                "text/csv",
+                use_container_width=True,
+            )
+        with dl_b:
+            st.download_button(
+                "Download Population Summary (Excel)",
+                export_occurrence_matrix(summary_df, "xlsx"),
+                "regplex_population_summary.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )
+
+
 # ─── About ───────────────────────────────────────────────────────────────────
 
 def _render_about() -> None:
@@ -714,20 +935,27 @@ def _render_about() -> None:
 def main() -> None:
     _load_styles()
     _render_topbar()
-    active_tab = _render_nav()
 
     results: list[AnalysisResult] = st.session_state.get("results", [])
     df = st.session_state.get("regions_df", pd.DataFrame())
+    pop_mode = is_population_mode(results)
 
-    if active_tab == 0:
+    active_tab = _render_nav(pop_mode)
+    nav_items = _NAV_ITEMS_POP if pop_mode else _NAV_ITEMS_BASE
+
+    label = nav_items[active_tab]
+
+    if label == "Home":
         _render_home()
-    elif active_tab == 1:
+    elif label == "Analysis":
         _render_analysis()
-    elif active_tab == 2:
+    elif label == "Results":
         _render_results(results, df)
-    elif active_tab == 3:
+    elif label == "Motifs":
         _render_motifs(df)
-    elif active_tab == 4:
+    elif label == "Population Analysis":
+        _render_population(results, df)
+    elif label == "About":
         _render_about()
 
     st.markdown("---")

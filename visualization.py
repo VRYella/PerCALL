@@ -174,6 +174,341 @@ def plot_motif_architecture(regions: list[dict]) -> go.Figure:
     return _apply_base(fig, "Motif Annotation by Region", height=370)
 
 
+# ==========================================================================
+# Population Analysis Visualizations
+# ==========================================================================
+
+def plot_mean_perplexity_profile(stats) -> go.Figure:
+    """Mean dinucleotide perplexity ± SD across all sequences.
+
+    Parameters
+    ----------
+    stats : PopulationStats
+
+    Returns
+    -------
+    go.Figure
+    """
+    L = stats.signal_length
+    if L == 0:
+        return _empty_figure("Mean Perplexity Profile")
+
+    x = np.arange(L)
+    mu = stats.mean_perplexity
+    sd = stats.std_perplexity
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=np.concatenate([x, x[::-1]]),
+        y=np.concatenate([mu + sd, (mu - sd)[::-1]]),
+        fill="toself",
+        fillcolor="rgba(30,58,138,0.12)",
+        line=dict(color="rgba(0,0,0,0)"),
+        showlegend=True,
+        name="± SD",
+    ))
+    fig.add_trace(go.Scatter(
+        x=x, y=mu, mode="lines",
+        name=f"Mean Perplexity (n={stats.n_seq})",
+        line=dict(color=_BLUE, width=2.2),
+    ))
+    fig.update_layout(xaxis_title="Signal position (nt)", yaxis_title="Mean Perplexity")
+    return _apply_base(fig, "Mean Dinucleotide Perplexity Profile", height=390)
+
+
+def plot_mean_pds_profile(stats) -> go.Figure:
+    """Mean PDS ± SD across all sequences.
+
+    Parameters
+    ----------
+    stats : PopulationStats
+
+    Returns
+    -------
+    go.Figure
+    """
+    L = stats.signal_length
+    if L == 0:
+        return _empty_figure("Mean PDS Profile")
+
+    x = np.arange(L)
+    mu = stats.mean_pds
+    sd = stats.std_pds
+
+    fig = go.Figure()
+    fig.add_hline(y=0, line=dict(color=_GRID, dash="dot"))
+    fig.add_trace(go.Scatter(
+        x=np.concatenate([x, x[::-1]]),
+        y=np.concatenate([mu + sd, (mu - sd)[::-1]]),
+        fill="toself",
+        fillcolor="rgba(15,118,110,0.12)",
+        line=dict(color="rgba(0,0,0,0)"),
+        showlegend=True,
+        name="± SD",
+    ))
+    pos_mu = np.where(mu > 0, mu, 0.0)
+    fig.add_trace(go.Scatter(
+        x=x, y=pos_mu, mode="lines",
+        name="Mean PDS (positive)",
+        line=dict(color=_GREEN, width=2.0),
+        fill="tozeroy",
+        fillcolor="rgba(16,185,129,0.15)",
+    ))
+    fig.add_trace(go.Scatter(
+        x=x, y=mu, mode="lines",
+        name=f"Mean PDS (n={stats.n_seq})",
+        line=dict(color=_TEAL, width=1.8),
+    ))
+    fig.update_layout(xaxis_title="Signal position (nt)", yaxis_title="Mean PDS")
+    return _apply_base(fig, "Mean Perplexity Depression Score (PDS) Profile", height=390)
+
+
+def plot_lpr_frequency(stats, consensus_lprs=None) -> go.Figure:
+    """LPR frequency plot — fraction of sequences with LPR at each position.
+
+    Parameters
+    ----------
+    stats : PopulationStats
+    consensus_lprs : list[ConsensusLPR] | None
+        When provided, consensus regions are highlighted.
+
+    Returns
+    -------
+    go.Figure
+    """
+    L = stats.signal_length
+    if L == 0:
+        return _empty_figure("LPR Frequency Plot")
+
+    x = np.arange(L)
+    fig = go.Figure()
+    fig.add_hline(y=0.5, line=dict(color=_AMBER, dash="dash", width=1.2),
+                  annotation_text="50% support", annotation_position="right")
+    fig.add_trace(go.Scatter(
+        x=x, y=stats.lpr_frequency, mode="lines",
+        name=f"LPR Frequency (n={stats.n_seq})",
+        line=dict(color=_INDIGO, width=2.2),
+        fill="tozeroy",
+        fillcolor="rgba(79,70,229,0.13)",
+    ))
+    if consensus_lprs:
+        for c in consensus_lprs:
+            fig.add_vrect(
+                x0=c.consensus_start, x1=c.consensus_end,
+                fillcolor="rgba(220,38,38,0.10)",
+                line_color=_CRIMSON, line_width=0.8, opacity=0.8,
+                annotation_text=c.region_id,
+                annotation_position="top left",
+                annotation_font=dict(size=9, color=_CRIMSON),
+            )
+    fig.update_layout(xaxis_title="Signal position (nt)", yaxis_title="LPR Frequency")
+    return _apply_base(fig, "LPR Frequency Plot", height=390)
+
+
+def plot_positional_heatmap(results, signal: str = "perplexity") -> go.Figure:
+    """Sequence × Position heatmap of perplexity or PDS.
+
+    Parameters
+    ----------
+    results : list[AnalysisResult]
+    signal : str, default 'perplexity'
+        Signal to visualise. One of ``'perplexity'`` or ``'pds'``.
+
+    Returns
+    -------
+    go.Figure
+    """
+    if not results:
+        return _empty_figure("Positional Heatmap")
+
+    n = len(results)
+    L = len(results[0].di)
+    mat = np.full((n, L), np.nan, dtype=np.float64)
+    seq_ids = []
+
+    for i, r in enumerate(results):
+        arr = r.di if signal == "perplexity" else r.pds
+        arr = arr.astype(np.float64)
+        mat[i, :len(arr)] = arr
+        seq_ids.append(r.sequence_id)
+
+    colorscale = "RdYlBu_r" if signal == "perplexity" else "Viridis"
+    title_str = "Perplexity" if signal == "perplexity" else "PDS"
+
+    fig = go.Figure(go.Heatmap(
+        z=mat,
+        x=np.arange(L),
+        y=seq_ids,
+        colorscale=colorscale,
+        colorbar=dict(title=title_str),
+        hovertemplate="Sequence: %{y}<br>Position: %{x}<br>" + title_str + ": %{z:.3f}<extra></extra>",
+    ))
+    fig.update_layout(
+        xaxis_title="Signal position (nt)",
+        yaxis_title="Sequence",
+        yaxis=dict(tickfont=dict(size=max(8, min(14, 240 // max(n, 1))))),
+    )
+    return _apply_base(fig, f"Sequence × Position Heatmap ({title_str})", height=max(320, 40 * n + 80))
+
+
+def plot_consensus_lpr_track(stats, consensus_lprs) -> go.Figure:
+    """Consensus LPR track overlaid on the mean perplexity profile.
+
+    Parameters
+    ----------
+    stats : PopulationStats
+    consensus_lprs : list[ConsensusLPR]
+
+    Returns
+    -------
+    go.Figure
+    """
+    if not consensus_lprs or stats.signal_length == 0:
+        return _empty_figure("Consensus LPR Track")
+
+    x = np.arange(stats.signal_length)
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=x, y=stats.mean_perplexity, mode="lines",
+        name="Mean Perplexity",
+        line=dict(color=_BLUE, width=2.0),
+    ))
+    for c in consensus_lprs:
+        fig.add_vrect(
+            x0=c.consensus_start, x1=c.consensus_end,
+            fillcolor="rgba(220,38,38,0.15)",
+            line_color=_CRIMSON, line_width=1.2, opacity=0.9,
+            annotation_text=f"{c.region_id}<br>{c.support_fraction*100:.0f}%",
+            annotation_position="top left",
+            annotation_font=dict(size=9, color=_CRIMSON),
+        )
+    fig.update_layout(xaxis_title="Signal position (nt)", yaxis_title="Mean Perplexity")
+    return _apply_base(fig, "Consensus LPR Track", height=390)
+
+
+def plot_region_length_distribution(stats) -> go.Figure:
+    """Histogram of individual LPR lengths across all sequences.
+
+    Parameters
+    ----------
+    stats : PopulationStats
+
+    Returns
+    -------
+    go.Figure
+    """
+    if len(stats.region_lengths) == 0:
+        return _empty_figure("Region Length Distribution")
+
+    fig = go.Figure(go.Histogram(
+        x=stats.region_lengths, nbinsx=40,
+        marker=dict(color=_TEAL, line=dict(color=_BLUE, width=0.6)),
+        name="LPR Length",
+    ))
+    fig.update_layout(xaxis_title="Region Length (bp)", yaxis_title="Count")
+    return _apply_base(fig, "Region Length Distribution", height=360)
+
+
+def plot_region_score_distribution(stats) -> go.Figure:
+    """Histogram of individual Region_Score values across all sequences.
+
+    Parameters
+    ----------
+    stats : PopulationStats
+
+    Returns
+    -------
+    go.Figure
+    """
+    if len(stats.region_scores) == 0:
+        return _empty_figure("Region Score Distribution")
+
+    fig = go.Figure(go.Histogram(
+        x=stats.region_scores, nbinsx=40,
+        marker=dict(color=_INDIGO, line=dict(color=_BLUE, width=0.6)),
+        name="Region Score",
+    ))
+    fig.update_layout(xaxis_title="Region Score", yaxis_title="Count")
+    return _apply_base(fig, "Region Score Distribution", height=360)
+
+
+def plot_motif_frequency_barplot(consensus_lprs, top_n: int = 15) -> go.Figure:
+    """Barplot of motif conservation frequencies across consensus LPRs.
+
+    Parameters
+    ----------
+    consensus_lprs : list[ConsensusLPR]
+    top_n : int  Maximum motifs to display per consensus region.
+
+    Returns
+    -------
+    go.Figure
+    """
+    if not consensus_lprs:
+        return _empty_figure("Motif Frequency")
+
+    # gather all motifs across consensus LPRs
+    motif_set: dict[str, float] = {}
+    for c in consensus_lprs:
+        for m, f in c.motif_frequencies.items():
+            motif_set[m] = max(motif_set.get(m, 0.0), f)
+
+    if not motif_set:
+        return _empty_figure("Motif Frequency")
+
+    sorted_motifs = sorted(motif_set.items(), key=lambda kv: kv[1], reverse=True)[:top_n]
+    labels = [kv[0] for kv in sorted_motifs]
+    freqs  = [kv[1] for kv in sorted_motifs]
+
+    fig = go.Figure(go.Bar(
+        x=freqs, y=labels, orientation="h",
+        marker=dict(color=freqs, colorscale=[[0, "#e0e7ff"], [1, _INDIGO]],
+                    colorbar=dict(title="Frequency")),
+        hovertemplate="%{y}: %{x:.3f}<extra></extra>",
+    ))
+    fig_height = max(350, 28 * len(labels) + 100)
+    fig.update_layout(
+        xaxis_title="Motif Frequency (fraction of sequences)",
+        yaxis=dict(autorange="reversed"),
+        height=fig_height,
+    )
+    return _apply_base(fig, "Motif Frequency across Consensus LPRs", height=fig_height)
+
+
+def plot_boundary_density(stats, nbins: int = 60) -> go.Figure:
+    """Dual histogram of LPR boundary start/end positions.
+
+    Parameters
+    ----------
+    stats : PopulationStats
+    nbins : int
+
+    Returns
+    -------
+    go.Figure
+    """
+    if len(stats.boundary_starts) == 0:
+        return _empty_figure("Region Boundary Density")
+
+    fig = go.Figure()
+    fig.add_trace(go.Histogram(
+        x=stats.boundary_starts, nbinsx=nbins,
+        marker=dict(color=_GREEN, opacity=0.7),
+        name="Region Starts",
+    ))
+    fig.add_trace(go.Histogram(
+        x=stats.boundary_ends, nbinsx=nbins,
+        marker=dict(color=_AMBER, opacity=0.7),
+        name="Region Ends",
+    ))
+    fig.update_layout(
+        barmode="overlay",
+        xaxis_title="Signal position (nt)",
+        yaxis_title="Count",
+    )
+    return _apply_base(fig, "Region Boundary Density", height=370)
+
+
 def plot_algorithm_workflow() -> go.Figure:
     labels = [
         "DNA",
