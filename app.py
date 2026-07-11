@@ -12,14 +12,14 @@ sys.path.insert(0, str(Path(__file__).parent))
 import pandas as pd
 import streamlit as st
 
-from motif_engine import annotate_domains, compile_motifs, iupac_to_regex
+from motif_engine import annotate_regions, compile_motifs, iupac_to_regex
 from regplex_core import (
     FLANK_SIZE,
     MAX_CANDIDATE,
-    MAX_VALLEY_LENGTH,
+    MAX_REGION_LENGTH,
     MERGE_GAP,
     MIN_CANDIDATE,
-    MIN_VALLEY_LENGTH,
+    MIN_REGION_LENGTH,
     PERPLEXITY_WINDOW,
     SG_POLY_ORDER,
     SG_WINDOW_LENGTH,
@@ -27,7 +27,7 @@ from regplex_core import (
     TOP_N_DISPLAY,
     AnalysisResult,
     analyze_sequence,
-    domains_dataframe,
+    regions_dataframe,
     export_bed,
     export_fasta,
     export_gff,
@@ -41,7 +41,7 @@ from visualization import (
     plot_perplexity_landscape,
     plot_smoothed_perplexity,
     plot_three_window,
-    plot_valley_ranking,
+    plot_region_ranking,
 )
 
 st.set_page_config(page_title="REGPLEX", layout="wide", initial_sidebar_state="collapsed")
@@ -78,7 +78,7 @@ PLOT_CONFIG = {
 
 _RESET_SESSION_KEYS = (
     "results",
-    "domains_df",
+    "regions_df",
     "runtime",
     "input_fasta_text",
     "motif_text",
@@ -88,13 +88,11 @@ _RESET_SESSION_KEYS = (
 
 # ─── Display columns (no support columns) ───────────────────────────────────
 _DISPLAY_COLS = [
-    "Rank", "ID", "Start", "End", "Length",
-    "MeanPerplexity", "MinPerplexity",
-    "UpstreamMean", "CandidateMean", "DownstreamMean",
-    "UpstreamDifference", "DownstreamDifference",
-    "PDSMean", "PDSMax",
-    "Prominence", "Persistence", "AreaUnderValley", "Variance",
-    "GC%", "MotifCount", "ValleyScore", "ValleyScoreNormalized",
+    "Rank", "Region_ID", "Start", "End", "Length",
+    "MeanPerplexity", "MinPerplexity", "MaxPerplexity",
+    "UpstreamMean", "RegionMean", "DownstreamMean",
+    "PDSMean", "PDSMax", "Prominence", "Persistence", "Variance",
+    "GC%", "RegionScore", "MotifCount", "Motifs",
 ]
 
 
@@ -231,7 +229,7 @@ def _run_analysis(
     results: list[AnalysisResult] = []
     for header, sequence in records:
         result = analyze_sequence(header, sequence, **params)
-        annotate_domains(result.domains, motifs)
+        annotate_regions(result.regions, motifs)
         results.append(result)
     return results, time.perf_counter() - started
 
@@ -254,9 +252,7 @@ def _render_home() -> None:
     <div class="hero-subtitle">Low Perplexity Region Detection via Dinucleotide Sequence Complexity</div>
     <p style="margin:0;max-width:860px;color:var(--muted)">
       REGPLEX is a computational framework for identifying Low Perplexity Regions in genomic DNA
-      through dinucleotide sequence complexity analysis. The method integrates local background contrast,
-      Savitzky-Golay smoothing, bounded optimization, and motif annotation to characterize extended
-      regions of reduced sequence complexity across diverse genomes.
+      through dinucleotide sequence complexity analysis with local background contrast, Savitzky-Golay smoothing, bounded optimization, and optional motif annotation.
     </p>
     <div class="hero-chips">
       <span class="hero-chip">Dinucleotide Perplexity</span>
@@ -325,22 +321,22 @@ def _render_analysis() -> None:
     st.markdown("#### ⚙️ Detection Parameters")
     p1, p2, p3 = st.columns(3)
     with p1:
-        min_valley_length = st.number_input(
-            "Min valley length (bp)", min_value=50, max_value=10000,
-            value=MIN_VALLEY_LENGTH,
-            help="Valleys shorter than this are discarded. Default 100 bp.",
+        min_region_length = st.number_input(
+            "Min region length (bp)", min_value=50, max_value=10000,
+            value=MIN_REGION_LENGTH,
+            help="Regions shorter than this are discarded. Default 100 bp.",
         )
     with p2:
-        max_valley_length = st.number_input(
-            "Max valley length (bp)", min_value=100, max_value=10000,
-            value=MAX_VALLEY_LENGTH,
+        max_region_length = st.number_input(
+            "Max region length (bp)", min_value=100, max_value=10000,
+            value=MAX_REGION_LENGTH,
             help="Kadane core upper bound. Default 1000 bp.",
         )
     with p3:
         merge_gap = st.number_input(
             "Merge gap (bp)", min_value=0, max_value=2000,
             value=MERGE_GAP,
-            help="Merge adjacent valleys whose gap ≤ this value. Default 100 bp.",
+            help="Merge adjacent regions whose gap ≤ this value. Default 100 bp.",
         )
 
     with st.expander("Advanced parameters"):
@@ -385,7 +381,7 @@ def _render_analysis() -> None:
         st.markdown("**Non-B DNA motifs (fixed)**")
         st.code("\n".join(_DEFAULT_NON_B_DNA_MOTIFS), language="text")
     with b2_col:
-        st.markdown("**Promoter motifs – IUPAC (fixed)**")
+        st.markdown("**Reference IUPAC motifs (fixed)**")
         st.code("\n".join(_DEFAULT_PROMOTER_IUPAC_MOTIFS), language="text")
 
     custom_motif_text = st.text_area(
@@ -434,8 +430,8 @@ def _render_analysis() -> None:
             "spacer_size":       int(spacer_size),
             "min_candidate":     int(min_candidate),
             "max_candidate":     int(max_candidate),
-            "min_valley_length": int(min_valley_length),
-            "max_valley_length": int(max_valley_length),
+            "min_region_length": int(min_region_length),
+            "max_region_length": int(max_region_length),
             "merge_gap":         int(merge_gap),
         }
 
@@ -446,7 +442,7 @@ def _render_analysis() -> None:
                 status.update(label=f"Invalid motif regex: {exc}", state="error")
                 return
             st.session_state["results"]    = results
-            st.session_state["domains_df"] = domains_dataframe(results)
+            st.session_state["regions_df"] = regions_dataframe(results)
             st.session_state["runtime"]    = runtime_seconds
             st.session_state["motif_text"] = motif_text
             n_seqs = len(results)
@@ -464,7 +460,7 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
     if df.empty:
         _render_html_block(
             "<div class='empty-state'>"
-            "<div>No valleys detected yet. Run Analysis first.</div>"
+            "<div>No regions detected yet. Run Analysis first.</div>"
             "</div>"
         )
         return
@@ -484,39 +480,38 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
 
     runtime_seconds = float(st.session_state.get("runtime", 0.0))
     longest   = int(selected_df["Length"].max())    if not selected_df.empty else 0
-    top_score = float(selected_df["ValleyScore"].max()) if not selected_df.empty else 0.0
-    mean_pds  = float(selected_df["PDSMean"].mean())   if not selected_df.empty else 0.0
+    top_score = float(selected_df["RegionScore"].max()) if not selected_df.empty else 0.0
 
     m1, m2, m3, m4 = st.columns(4)
     with m1:
-        _metric_card("Valleys detected", str(len(result.domains)), "🏔️")
+        _metric_card("Regions detected", str(len(result.regions)), "🏔️")
     with m2:
-        _metric_card("Longest valley",   f"{longest:,} bp", "📏")
+        _metric_card("Longest region",   f"{longest:,} bp", "📏")
     with m3:
-        _metric_card("Top ValleyScore",  f"{top_score:.4f}", "🏆")
+        _metric_card("Top RegionScore",  f"{top_score:.4f}", "🏆")
     with m4:
         _metric_card("Runtime",          f"{runtime_seconds:.2f}s", "⏱️")
 
-    # ── Interactive valley table — ALWAYS VISIBLE ──────────────────────────
+    # ── Interactive region table — ALWAYS VISIBLE ──────────────────────────
     _render_html_block(
         "<div class='section-header'>"
         "<span class='section-icon'>📋</span>"
-        "<span class='section-title'>Valley Predictions</span>"
-        "<span class='section-subtitle'>Ranked by ValleyScore (highest = best)</span>"
+        "<span class='section-title'>Region Predictions</span>"
+        "<span class='section-subtitle'>Ranked by RegionScore (highest = best)</span>"
         "</div>"
     )
 
     top_n    = TOP_N_DISPLAY
     show_all = st.toggle(
-        f"Show all {len(selected_df)} valleys",
+        f"Show all {len(selected_df)} regions",
         value=False,
-        key="show_all_valleys",
+        key="show_all_regions",
     )
     display_df = selected_df if show_all else selected_df.nsmallest(top_n, "Rank")
     display_cols = [c for c in _DISPLAY_COLS if c in selected_df.columns]
     st.caption(
         f"Displaying **{'all' if show_all else min(top_n, len(selected_df))}** "
-        f"of **{len(selected_df)}** valleys."
+        f"of **{len(selected_df)}** regions."
     )
     st.dataframe(display_df[display_cols], use_container_width=True, hide_index=True)
 
@@ -528,50 +523,50 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
         "🔵 Smoothed Perplexity",
         "🪟 Three-Window",
         "🌊 PDS Landscape",
-        "🏆 Valley Ranking",
+        "🏆 Region Ranking",
         "🔎 Motifs",
         "⬇️ Downloads",
     ])
 
     with tabs[0]:
         _show_figure(
-            plot_perplexity_landscape(result.di, result.domains),
+            plot_perplexity_landscape(result.di, result.regions),
             f"raw-perplexity-{selected_seq}",
         )
 
     with tabs[1]:
         _show_figure(
-            plot_smoothed_perplexity(result.di, result.smoothed_di, result.domains),
+            plot_smoothed_perplexity(result.di, result.smoothed_di, result.regions),
             f"smoothed-{selected_seq}",
         )
 
     with tabs[2]:
-        if result.domains:
-            valley_ids  = [d.get("ID", f"PV_{i+1:06d}") for i, d in enumerate(result.domains)]
-            selected_id = st.selectbox("Select valley", valley_ids, key="three_window_select")
-            sel_domain  = next(d for d in result.domains if d.get("ID") == selected_id)
+        if result.regions:
+            region_ids  = [d.get("Region_ID", f"LPR_{i+1:06d}") for i, d in enumerate(result.regions)]
+            selected_id = st.selectbox("Select region", region_ids, key="three_window_select")
+            sel_region  = next(d for d in result.regions if d.get("Region_ID") == selected_id)
             _show_figure(
                 plot_three_window(
                     result.smoothed_di,
                     result.pds,
-                    sel_domain,
+                    sel_region,
                     flank_size=result.params.get("flank_size", 100),
                     spacer_size=result.params.get("spacer_size", 50),
                 ),
                 f"three-window-{selected_seq}-{selected_id}",
             )
         else:
-            st.info("No valleys to display.")
+            st.info("No regions to display.")
 
     with tabs[3]:
         _show_figure(
-            plot_pds_landscape(result.pds, result.domains),
+            plot_pds_landscape(result.pds, result.regions),
             f"pds-{selected_seq}",
         )
 
     with tabs[4]:
         _show_figure(
-            plot_valley_ranking(result.domains),
+            plot_region_ranking(result.regions),
             f"rank-{selected_seq}",
         )
 
@@ -581,7 +576,7 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
             f"motifs-{selected_seq}",
         )
         if not selected_df.empty and "Motifs" in selected_df.columns:
-            motif_df = selected_df[["ID", "MotifCount", "Motifs"]].copy()
+            motif_df = selected_df[["Region_ID", "MotifCount", "Motifs"]].copy()
             motif_df = motif_df[motif_df["MotifCount"] > 0]
             if not motif_df.empty:
                 st.dataframe(motif_df, use_container_width=True, hide_index=True)
@@ -591,28 +586,28 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
         c1, c2, c3 = st.columns(3)
         with c1:
             st.download_button("CSV",
-                export_table(selected_df, "csv"), "regplex_v13_valleys.csv", "text/csv",
+                export_table(selected_df, "csv"), "regplex_v13_regions.csv", "text/csv",
                 use_container_width=True)
             st.download_button("Excel",
-                export_table(selected_df, "xlsx"), "regplex_v13_valleys.xlsx",
+                export_table(selected_df, "xlsx"), "regplex_v13_regions.xlsx",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True)
             st.download_button("BED",
-                export_bed(selected_df), "regplex_v13_valleys.bed", "text/plain",
+                export_bed(selected_df), "regplex_v13_regions.bed", "text/plain",
                 use_container_width=True)
         with c2:
             st.download_button("GFF",
-                export_gff(selected_df, gff3=False), "regplex_v13_valleys.gff", "text/plain",
+                export_gff(selected_df, gff3=False), "regplex_v13_regions.gff", "text/plain",
                 use_container_width=True)
             st.download_button("GFF3",
-                export_gff(selected_df, gff3=True), "regplex_v13_valleys.gff3", "text/plain",
+                export_gff(selected_df, gff3=True), "regplex_v13_regions.gff3", "text/plain",
                 use_container_width=True)
             st.download_button("FASTA",
-                export_fasta(selected_df), "regplex_v13_valleys.fasta", "text/plain",
+                export_fasta(selected_df), "regplex_v13_regions.fasta", "text/plain",
                 use_container_width=True)
         with c3:
             st.download_button("JSON",
-                export_table(selected_df, "json"), "regplex_v13_valleys.json", "application/json",
+                export_table(selected_df, "json"), "regplex_v13_regions.json", "application/json",
                 use_container_width=True)
 
 
@@ -630,7 +625,7 @@ def _render_motifs(df: pd.DataFrame) -> None:
         st.markdown("**Non-B DNA motifs (fixed)**")
         st.code("\n".join(_DEFAULT_NON_B_DNA_MOTIFS), language="text")
     with m2:
-        st.markdown("**Promoter motifs – IUPAC (fixed)**")
+        st.markdown("**Reference IUPAC motifs (fixed)**")
         st.code("\n".join(_DEFAULT_PROMOTER_IUPAC_MOTIFS), language="text")
 
     custom_text = st.text_area(
@@ -654,7 +649,7 @@ def _render_motifs(df: pd.DataFrame) -> None:
         )
     if not df.empty and "MotifCount" in df.columns:
         st.markdown("---")
-        show_cols = [c for c in ["ID", "Sequence_ID", "Length", "MotifCount", "Motifs", "ValleyScore"]
+        show_cols = [c for c in ["Region_ID", "Sequence_ID", "Length", "MotifCount", "Motifs", "RegionScore", "Rank"]
                      if c in df.columns]
         st.dataframe(df[show_cols], use_container_width=True, hide_index=True)
 
@@ -677,10 +672,10 @@ def _render_about() -> None:
             <li><strong>Dinucleotide Perplexity</strong> — window = 17 nt; 16 dinucleotide transitions.</li>
             <li><strong>Savitzky-Golay Smoothing</strong> — window=21, order=3; applied once.</li>
             <li><strong>PDS (three-window contrast)</strong> — <code>PDS = (UpMean + DnMean) / 2 − CandMean</code>; flanks must exceed candidate.</li>
-            <li><strong>Bounded Kadane</strong> — all positive-PDS valleys, 100–1000 bp.</li>
+            <li><strong>Bounded Kadane</strong> — all positive-PDS regions, 100–1000 bp.</li>
             <li><strong>Expansion &amp; Merging</strong> — grow while PDS &gt; 0 or &gt;20% peak; merge gap ≤ 100 bp.</li>
-            <li><strong>ValleyScore</strong> = PDSMean × Persistence × log(Length) × Stability.</li>
-            <li><strong>Optional Motif Annotation</strong> — IUPAC / regex; scanned within valleys only.</li>
+            <li><strong>RegionScore</strong> = PDSMean × Persistence × log(Length) × Stability.</li>
+            <li><strong>Optional Motif Annotation</strong> — IUPAC / regex; scanned within regions only.</li>
           </ol>
         </div>
         """
@@ -696,7 +691,7 @@ def main() -> None:
     active_tab = _render_nav()
 
     results: list[AnalysisResult] = st.session_state.get("results", [])
-    df = st.session_state.get("domains_df", pd.DataFrame())
+    df = st.session_state.get("regions_df", pd.DataFrame())
 
     if active_tab == 0:
         _render_home()

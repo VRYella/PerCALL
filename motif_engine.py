@@ -39,9 +39,10 @@ def compile_motifs(text: str) -> list[tuple[str, re.Pattern]]:
     return motifs
 
 
-def annotate_domains(domains: list[dict], compiled_motifs: list[tuple[str, re.Pattern]]) -> list[dict]:
-    for domain in domains:
-        sequence = domain.get("Sequence", "")
+def annotate_regions(regions: list[dict], compiled_motifs: list[tuple[str, re.Pattern]]) -> list[dict]:
+    """Annotate detected regions with motif counts and per-pattern hit summaries."""
+    for region in regions:
+        sequence = region.get("Sequence", "")
         hits: list[str] = []
         total = 0
         for motif, pattern in compiled_motifs:
@@ -49,6 +50,7 @@ def annotate_domains(domains: list[dict], compiled_motifs: list[tuple[str, re.Pa
             if count:
                 hits.append(f"{motif}:{count}")
                 total += count
-        domain["MotifCount"] = total
-        domain["Motifs"] = ";".join(hits)
-    return domains
+        region["MotifCount"] = total
+        region["Motifs"] = ";".join(hits)
+    return regions
+

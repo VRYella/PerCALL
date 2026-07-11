@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import io
 import math
-import warnings
 from collections import deque
 from dataclasses import dataclass
 from typing import Iterable
@@ -12,28 +11,28 @@ import numpy as np
 import pandas as pd
 from scipy.signal import savgol_filter
 
-# ─── Tunable scientific defaults ────────────────────────────────────────────
-PERPLEXITY_WINDOW = 17    # 17 nt → 16 dinucleotide transitions (stable local estimate)
-SG_WINDOW_LENGTH  = 21    # Savitzky-Golay window length (must be odd)
-SG_POLY_ORDER     = 3     # Savitzky-Golay polynomial order
-FLANK_SIZE        = 100   # PDS upstream/downstream flank window (bp)
-SPACER_SIZE       = 50    # PDS spacer between flank and candidate (bp)
-MIN_CANDIDATE     = 50    # Minimum PDS candidate window (bp)
-MAX_CANDIDATE     = 1000  # Maximum PDS candidate window (bp)
-MIN_VALLEY_LENGTH = 100   # Minimum accepted valley length (bp)
-MAX_VALLEY_LENGTH = 1000  # Maximum accepted valley length (bp)
-MERGE_GAP                  = 100   # Merge adjacent valleys within this distance (bp)
-TOP_N_DISPLAY              = 20    # Default top-N display limit
-EXPANSION_THRESHOLD_FRACTION = 0.2  # Fraction of peak PDS used in valley expansion
-EPSILON                    = 1e-9
+# ==========================================================================
+# 1. Global Parameters
+# ==========================================================================
+PERPLEXITY_WINDOW = 17
+SG_WINDOW_LENGTH = 21
+SG_POLY_ORDER = 3
+FLANK_SIZE = 100
+SPACER_SIZE = 50
+MIN_CANDIDATE = 50
+MAX_CANDIDATE = 1000
+MIN_REGION_LENGTH = 100
+MAX_REGION_LENGTH = 1000
+MERGE_GAP = 100
+TOP_N_DISPLAY = 20
+EXPANSION_THRESHOLD_FRACTION = 0.2
+EPSILON = 1e-9
 
 _IUPAC_DNA = set("ACGTN")
 _MAP = np.full(256, 4, dtype=np.uint8)
 for _base, _idx in zip("ACGT", range(4)):
     _MAP[ord(_base)] = _idx
 
-
-# ─── Data structure ─────────────────────────────────────────────────────────
 
 @dataclass
 class AnalysisResult:
@@ -42,13 +41,25 @@ class AnalysisResult:
     di: np.ndarray
     smoothed_di: np.ndarray
     pds: np.ndarray
-    domains: list[dict]
+    regions: list[dict]
     params: dict
 
 
-# ─── FASTA parser ───────────────────────────────────────────────────────────
-
+# ==========================================================================
+# Utility Functions
+# ==========================================================================
 def parse_fasta(text: str) -> list[tuple[str, str]]:
+    """Purpose: Parse FASTA text into sanitized DNA records.
+
+    Parameters:
+    - text: FASTA-formatted string.
+
+    Returns:
+    - List of (header, sequence) tuples with A/C/G/T/N symbols only.
+
+    Computational complexity:
+    - O(n) time and O(n) space for input size n.
+    """
     records: list[tuple[str, str]] = []
     header = None
     chunks: list[str] = []
@@ -74,10 +85,18 @@ def parse_fasta(text: str) -> list[tuple[str, str]]:
     return records
 
 
-# ─── Prefix-sum utilities ───────────────────────────────────────────────────
-
 def _prefix(arr: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Return (cumulative sum, cumulative valid count) arrays of length n+1."""
+    """Purpose: Build prefix sums and valid-value counts for NaN-aware means.
+
+    Parameters:
+    - arr: Input numeric array.
+
+    Returns:
+    - Tuple (prefix_sum, prefix_count), each of length len(arr)+1.
+
+    Computational complexity:
+    - O(n) time and O(n) space.
+    """
     valid = np.isfinite(arr).astype(np.float64)
     values = np.where(np.isfinite(arr), arr.astype(np.float64), 0.0)
     csum = np.empty(len(arr) + 1, dtype=np.float64)
@@ -88,13 +107,21 @@ def _prefix(arr: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return csum, ccount
 
 
-def _window_means(
-    csum: np.ndarray,
-    ccount: np.ndarray,
-    starts: np.ndarray,
-    ends: np.ndarray,
-) -> np.ndarray:
-    """Vectorised window-mean computation from prefix arrays."""
+def _window_means(csum: np.ndarray, ccount: np.ndarray, starts: np.ndarray, ends: np.ndarray) -> np.ndarray:
+    """Purpose: Compute vectorized NaN-aware means for many windows.
+
+    Parameters:
+    - csum: Prefix sum array.
+    - ccount: Prefix valid-count array.
+    - starts: Window starts.
+    - ends: Window ends (exclusive).
+
+    Returns:
+    - Array of window means with NaN for invalid windows.
+
+    Computational complexity:
+    - O(k) time and O(k) space for k windows.
+    """
     out = np.full(starts.shape, np.nan, dtype=np.float64)
     limit = len(csum) - 1
     valid = (starts >= 0) & (ends <= limit) & (ends > starts)
@@ -111,9 +138,22 @@ def _window_means(
     return out
 
 
-# ─── Step 1 – Dinucleotide perplexity ───────────────────────────────────────
-
+# ==========================================================================
+# 2. Dinucleotide Perplexity
+# ==========================================================================
 def _compute_entropy_perplexity(indices: np.ndarray, n_states: int) -> np.ndarray:
+    """Purpose: Convert per-window state indices into entropy-derived perplexity.
+
+    Parameters:
+    - indices: 2D integer array of encoded state observations per window.
+    - n_states: Number of categorical states.
+
+    Returns:
+    - Per-window perplexity values.
+
+    Computational complexity:
+    - O(w*s) time and O(w*s) space for w windows and s states.
+    """
     if len(indices) == 0:
         return np.array([], dtype=np.float32)
     counts = np.zeros((len(indices), n_states), dtype=np.int16)
@@ -125,11 +165,17 @@ def _compute_entropy_perplexity(indices: np.ndarray, n_states: int) -> np.ndarra
 
 
 def compute_di_perplexity(seq: str, window: int = PERPLEXITY_WINDOW) -> np.ndarray:
-    """Compute dinucleotide perplexity with a sliding window.
+    """Purpose: Compute local dinucleotide perplexity from DNA sequence.
 
-    With window=17 there are 16 dinucleotide transitions, giving a stable
-    local estimate while remaining highly local.  This is the ONLY primary
-    signal used in REGPLEX v13.
+    Parameters:
+    - seq: DNA sequence.
+    - window: Sliding window length (default 17 nt).
+
+    Returns:
+    - Dinucleotide perplexity profile as float32 array.
+
+    Computational complexity:
+    - O(n) time and O(n) space for sequence length n.
     """
     if len(seq) < window:
         return np.array([], dtype=np.float32)
@@ -145,14 +191,23 @@ def compute_di_perplexity(seq: str, window: int = PERPLEXITY_WINDOW) -> np.ndarr
     return p
 
 
-# ─── Step 2 – Savitzky-Golay smoothing ──────────────────────────────────────
+# ==========================================================================
+# 3. Savitzky–Golay Smoothing
+# ==========================================================================
+def smooth_perplexity(arr: np.ndarray, window_length: int = SG_WINDOW_LENGTH, poly_order: int = SG_POLY_ORDER) -> np.ndarray:
+    """Purpose: Apply one Savitzky–Golay smoothing pass to perplexity signal.
 
-def smooth_perplexity(
-    arr: np.ndarray,
-    window_length: int = SG_WINDOW_LENGTH,
-    poly_order: int = SG_POLY_ORDER,
-) -> np.ndarray:
-    """Apply a single Savitzky-Golay pass.  Never called more than once."""
+    Parameters:
+    - arr: Input perplexity profile.
+    - window_length: Smoothing window (odd).
+    - poly_order: Polynomial order.
+
+    Returns:
+    - Smoothed perplexity profile.
+
+    Computational complexity:
+    - O(n) time and O(n) space.
+    """
     n = len(arr)
     if n == 0:
         return arr.copy()
@@ -175,8 +230,9 @@ def smooth_perplexity(
     return smoothed
 
 
-# ─── Step 3 – Perplexity Depression Score ───────────────────────────────────
-
+# ==========================================================================
+# 4. Perplexity Depression Score
+# ==========================================================================
 def compute_pds(
     smoothed_di: np.ndarray,
     flank_size: int = FLANK_SIZE,
@@ -184,75 +240,70 @@ def compute_pds(
     min_candidate: int = MIN_CANDIDATE,
     max_candidate: int = MAX_CANDIDATE,
 ) -> np.ndarray:
-    """Compute Perplexity Depression Score (PDS) for every genomic position.
+    """Purpose: Compute PDS using bilateral local-background contrast.
 
-    Three-window layout around each position:
+    Parameters:
+    - smoothed_di: Smoothed perplexity profile.
+    - flank_size: Upstream/downstream flank length.
+    - spacer_size: Spacer between flank and candidate.
+    - min_candidate: Minimum candidate length.
+    - max_candidate: Maximum candidate length.
 
-        [upstream flank] [spacer] [candidate] [spacer] [downstream flank]
-           flank_size     spacer    cand_w     spacer     flank_size
+    Returns:
+    - PDS profile (NaN where bilateral contrast criteria fail).
 
-    The candidate window width is set to the geometric mean of the allowed
-    bounds, making it adaptive to the configured detection range.
-
-    PDS  =  ((UpstreamMean + DownstreamMean) / 2)  −  CandidateMean
-
-    Biological filters applied before assigning PDS:
-      • UpstreamMean   > CandidateMean  (upstream background is higher)
-      • DownstreamMean > CandidateMean  (downstream background is higher)
-
-    Positions failing either filter are set to NaN.
-    Positive PDS values indicate genuine depressions relative to local
-    background; negative values indicate local peaks or uniform regions.
+    Computational complexity:
+    - O(n) time and O(n) space.
     """
     n = len(smoothed_di)
     if n == 0:
         return np.array([], dtype=np.float32)
 
-    # Adaptive candidate width: geometric mean of bounds (≈ 224 bp for 50–1000)
     cand_w = int(round(math.sqrt(min_candidate * max_candidate)))
     cand_w = min(max(cand_w, min_candidate), max_candidate)
 
     csum, ccount = _prefix(smoothed_di)
     centers = np.arange(n, dtype=np.int64)
-
     half_cand = cand_w // 2
+
     cand_s = centers - half_cand
     cand_e = cand_s + cand_w
-
     up_e = cand_s - spacer_size
     up_s = up_e - flank_size
-
     dn_s = cand_e + spacer_size
     dn_e = dn_s + flank_size
 
-    up_mean   = _window_means(csum, ccount, up_s, up_e)
-    cand_mean = _window_means(csum, ccount, cand_s, cand_e)
-    dn_mean   = _window_means(csum, ccount, dn_s, dn_e)
+    up_mean = _window_means(csum, ccount, up_s, up_e)
+    reg_mean = _window_means(csum, ccount, cand_s, cand_e)
+    dn_mean = _window_means(csum, ccount, dn_s, dn_e)
 
-    contrast = ((up_mean + dn_mean) / 2.0) - cand_mean
-
+    contrast = ((up_mean + dn_mean) / 2.0) - reg_mean
     valid = (
         np.isfinite(up_mean)
-        & np.isfinite(cand_mean)
+        & np.isfinite(reg_mean)
         & np.isfinite(dn_mean)
-        & (up_mean > cand_mean)
-        & (dn_mean > cand_mean)
+        & (up_mean > reg_mean)
+        & (dn_mean > reg_mean)
     )
     return np.where(valid, contrast, np.nan).astype(np.float32)
 
 
-# ─── Step 4 – Bounded Kadane valley detection ───────────────────────────────
+# ==========================================================================
+# 5. Region Detection
+# ==========================================================================
+def _bounded_max_mean(arr: np.ndarray, min_len: int, max_len: int) -> tuple[int | None, int | None, float]:
+    """Purpose: Find max-mean segment under length bounds within one run.
 
-def _bounded_max_mean(
-    arr: np.ndarray,
-    min_len: int,
-    max_len: int,
-) -> tuple[int | None, int | None, float]:
-    """Find the contiguous subarray with maximum mean and length in [min_len, max_len].
+    Parameters:
+    - arr: Positive-PDS run values.
+    - min_len: Minimum segment length.
+    - max_len: Maximum segment length.
 
-    Uses a monotone-deque O(n) algorithm: for each end position j, the deque
-    tracks candidate start positions with minimum prefix sum, which maximises
-    the sum — and therefore the mean — of the selected segment.
+    Returns:
+    - (start, end, max_mean) for best segment; None values when unavailable.
+
+    Computational complexity:
+    - O(n) time and O(n) space.
     """
     n = len(arr)
     if n < min_len:
@@ -260,9 +311,11 @@ def _bounded_max_mean(
     pref = np.empty(n + 1, dtype=np.float64)
     pref[0] = 0.0
     pref[1:] = np.cumsum(arr)
+
     best_mean = -np.inf
     best_i = best_j = None
     dq: deque[int] = deque()
+
     for j in range(n):
         i_min = j - max_len + 1
         i_max = j - min_len + 1
@@ -279,72 +332,74 @@ def _bounded_max_mean(
             if mean > best_mean:
                 best_mean = mean
                 best_i, best_j = i, j
+
     return best_i, best_j, float(best_mean)
 
 
-def _find_all_pds_valleys(
-    pds: np.ndarray,
-    min_valley_length: int,
-    max_valley_length: int,
-) -> list[tuple[int, int]]:
-    """Return valley cores from all contiguous positive-PDS runs.
+def _find_all_pds_regions(pds: np.ndarray, min_region_length: int, max_region_length: int) -> list[tuple[int, int]]:
+    """Purpose: Detect positive-PDS core regions using bounded Kadane segmentation.
 
-    For each run of length >= min_valley_length:
-    - If the run fits within max_valley_length, use the whole run as a core.
-    - Otherwise, apply bounded max-mean Kadane to extract the strongest
-      sub-core of length in [min_valley_length, max_valley_length].
+    Parameters:
+    - pds: Perplexity Depression Score profile.
+    - min_region_length: Minimum core length.
+    - max_region_length: Maximum core length.
 
-    Returns a list of (core_start, core_end) index tuples.  All detected
-    valleys are returned — not only the best one.
+    Returns:
+    - List of (core_start, core_end) index tuples.
+
+    Computational complexity:
+    - O(n) time and O(n) space.
     """
     n = len(pds)
-    if n < min_valley_length:
+    if n < min_region_length:
         return []
 
     positive = np.isfinite(pds) & (pds > 0)
-
-    # Extract all contiguous positive runs
     padded = np.concatenate([[False], positive, [False]])
     delta = np.diff(padded.view(np.int8))
     starts = np.flatnonzero(delta > 0)
-    ends   = np.flatnonzero(delta < 0) - 1
+    ends = np.flatnonzero(delta < 0) - 1
 
     cores: list[tuple[int, int]] = []
     for run_s, run_e in zip(starts, ends):
         run_len = run_e - run_s + 1
-        if run_len < min_valley_length:
+        if run_len < min_region_length:
             continue
-        if run_len <= max_valley_length:
+        if run_len <= max_region_length:
             cores.append((int(run_s), int(run_e)))
         else:
             seg = pds[run_s: run_e + 1].astype(np.float64)
-            s, e, mv = _bounded_max_mean(seg, min_valley_length, max_valley_length)
+            s, e, mv = _bounded_max_mean(seg, min_region_length, max_region_length)
             if s is not None and np.isfinite(mv):
                 cores.append((int(run_s + s), int(run_s + e)))
     return cores
 
 
-# ─── Step 5 – Valley expansion ──────────────────────────────────────────────
+# ==========================================================================
+# 6. Region Expansion
+# ==========================================================================
+def _expand_region_pds(pds: np.ndarray, core_start: int, core_end: int) -> tuple[int, int]:
+    """Purpose: Expand a detected core while support remains above expansion rule.
 
-def _expand_valley_pds(
-    pds: np.ndarray,
-    core_start: int,
-    core_end: int,
-) -> tuple[int, int]:
-    """Expand valley boundaries while PDS > 0 OR PDS > 20 % of peak PDS.
+    Parameters:
+    - pds: PDS profile.
+    - core_start: Core start index.
+    - core_end: Core end index.
 
-    Vectorised O(n) implementation: builds a boolean include-mask, then
-    scans left/right from the core boundaries for the first excluded position.
+    Returns:
+    - Expanded (start, end) indices.
+
+    Computational complexity:
+    - O(n) time and O(n) space.
     """
     n = len(pds)
     core_finite = pds[core_start: core_end + 1]
     core_finite = core_finite[np.isfinite(core_finite)]
     peak_pds = float(np.max(core_finite)) if core_finite.size else 0.0
-    threshold = EXPANSION_THRESHOLD_FRACTION * peak_pds  # expand until PDS drops below this
+    threshold = EXPANSION_THRESHOLD_FRACTION * peak_pds
 
     include = np.isfinite(pds) & ((pds > 0) | (pds > threshold))
 
-    # Left expansion
     if core_start == 0:
         left = 0
     else:
@@ -352,7 +407,6 @@ def _expand_valley_pds(
         false_in_rev = np.flatnonzero(~rev)
         left = 0 if false_in_rev.size == 0 else int(core_start - false_in_rev[0])
 
-    # Right expansion
     if core_end >= n - 1:
         right = n - 1
     else:
@@ -363,10 +417,22 @@ def _expand_valley_pds(
     return left, right
 
 
-# ─── Step 6 – Valley merging ─────────────────────────────────────────────────
+# ==========================================================================
+# 7. Region Merging
+# ==========================================================================
+def _merge_regions(intervals: list[tuple[int, int]], gap: int) -> list[tuple[int, int]]:
+    """Purpose: Merge adjacent region intervals within configured genomic gap.
 
-def _merge_valleys(intervals: list[tuple[int, int]], gap: int) -> list[tuple[int, int]]:
-    """Merge adjacent valleys whose gap is ≤ gap bp."""
+    Parameters:
+    - intervals: Region intervals.
+    - gap: Maximum merge distance.
+
+    Returns:
+    - Merged and sorted region intervals.
+
+    Computational complexity:
+    - O(k log k) time and O(k) space for k intervals.
+    """
     if not intervals:
         return []
     merged = [sorted(intervals)[0]]
@@ -379,10 +445,11 @@ def _merge_valleys(intervals: list[tuple[int, int]], gap: int) -> list[tuple[int
     return merged
 
 
-# ─── Step 7 – Valley metrics ─────────────────────────────────────────────────
-
-def _valley_metrics(
-    valley_index: int,
+# ==========================================================================
+# 8. Region Ranking
+# ==========================================================================
+def _region_metrics(
+    region_index: int,
     start: int,
     end: int,
     di: np.ndarray,
@@ -393,7 +460,26 @@ def _valley_metrics(
     flank_size: int,
     spacer_size: int,
 ) -> dict:
-    """Compute all metrics for a single valley."""
+    """Purpose: Compute summary statistics and raw ranking score for one region.
+
+    Parameters:
+    - region_index: Sequential region index.
+    - start: Region start in signal coordinates.
+    - end: Region end in signal coordinates.
+    - di: Raw dinucleotide perplexity profile.
+    - smoothed_di: Smoothed perplexity profile.
+    - pds: PDS profile.
+    - seq: Input DNA sequence.
+    - p_window: Perplexity window length.
+    - flank_size: Flank length for local context.
+    - spacer_size: Spacer length for local context.
+
+    Returns:
+    - Region metrics dictionary.
+
+    Computational complexity:
+    - O(m) time and O(m) space for region span m.
+    """
     sl = slice(start, end + 1)
     n = len(smoothed_di)
 
@@ -409,148 +495,136 @@ def _valley_metrics(
         f = a[np.isfinite(a)]
         return float(np.max(f)) if f.size else float("nan")
 
-    # Perplexity stats (raw di)
     di_seg = di[sl]
     mean_perplexity = _fmean(di_seg)
-    min_perplexity  = _fmin(di_seg)
-    max_perplexity  = _fmax(di_seg)
+    min_perplexity = _fmin(di_seg)
+    max_perplexity = _fmax(di_seg)
 
-    # PDS stats
-    pds_seg    = pds[sl]
+    pds_seg = pds[sl]
     pds_finite = pds_seg[np.isfinite(pds_seg)]
-    pds_mean   = float(np.mean(pds_finite))   if pds_finite.size else 0.0
-    pds_max    = float(np.max(pds_finite))    if pds_finite.size else 0.0
+    pds_mean = float(np.mean(pds_finite)) if pds_finite.size else 0.0
+    pds_max = float(np.max(pds_finite)) if pds_finite.size else 0.0
     persistence = float(np.mean(pds_finite > 0)) if pds_finite.size else 0.0
-    area        = float(np.sum(np.maximum(pds_finite, 0.0))) if pds_finite.size else 0.0
-    variance    = float(np.var(pds_finite))   if pds_finite.size > 1 else 0.0
+    variance = float(np.var(pds_finite)) if pds_finite.size > 1 else 0.0
 
-    # Prominence: background mean − valley minimum
-    bg_up_s  = max(0, start - spacer_size - flank_size)
-    bg_up_e  = max(0, start - spacer_size)
-    bg_dn_s  = min(n, end + spacer_size + 1)
-    bg_dn_e  = min(n, end + spacer_size + 1 + flank_size)
+    bg_up_s = max(0, start - spacer_size - flank_size)
+    bg_up_e = max(0, start - spacer_size)
+    bg_dn_s = min(n, end + spacer_size + 1)
+    bg_dn_e = min(n, end + spacer_size + 1 + flank_size)
+
     bg_parts = []
     if bg_up_e > bg_up_s:
-        bg_parts.append(smoothed_di[bg_up_s: bg_up_e])
+        bg_parts.append(smoothed_di[bg_up_s:bg_up_e])
     if bg_dn_e > bg_dn_s:
-        bg_parts.append(smoothed_di[bg_dn_s: bg_dn_e])
+        bg_parts.append(smoothed_di[bg_dn_s:bg_dn_e])
+
     if bg_parts:
         bg_all = np.concatenate(bg_parts)
         bg_finite = bg_all[np.isfinite(bg_all)]
         background = float(np.mean(bg_finite)) if bg_finite.size else float("nan")
     else:
         background = float("nan")
-    val_seg_s = smoothed_di[max(0, start): end + 1]
-    val_min   = _fmin(val_seg_s)
-    prominence = max(0.0, background - val_min) if np.isfinite(background) and np.isfinite(val_min) else 0.0
 
-    # Three-window means (using smoothed profile, valley boundaries as candidate)
-    up_mean   = _fmean(smoothed_di[bg_up_s: bg_up_e]) if bg_up_e > bg_up_s else float("nan")
-    cand_mean = _fmean(smoothed_di[max(0, start): end + 1])
-    dn_mean   = _fmean(smoothed_di[bg_dn_s: bg_dn_e]) if bg_dn_e > bg_dn_s else float("nan")
-    upstream_diff   = up_mean - cand_mean   if np.isfinite(up_mean)   and np.isfinite(cand_mean) else float("nan")
-    downstream_diff = dn_mean - cand_mean   if np.isfinite(dn_mean)   and np.isfinite(cand_mean) else float("nan")
+    reg_seg = smoothed_di[max(0, start): end + 1]
+    reg_mean = _fmean(reg_seg)
+    reg_min = _fmin(reg_seg)
+    prominence = max(0.0, background - reg_min) if np.isfinite(background) and np.isfinite(reg_min) else 0.0
 
-    # Nucleotide-coordinate mapping (signal positions → sequence positions)
+    up_mean = _fmean(smoothed_di[bg_up_s:bg_up_e]) if bg_up_e > bg_up_s else float("nan")
+    dn_mean = _fmean(smoothed_di[bg_dn_s:bg_dn_e]) if bg_dn_e > bg_dn_s else float("nan")
+
     start_nt = max(0, int(start))
-    end_nt   = min(len(seq) - 1, int(end + p_window - 1))
+    end_nt = min(len(seq) - 1, int(end + p_window - 1))
     sequence = seq[start_nt: end_nt + 1]
-    length   = end_nt - start_nt + 1
-    gc       = (sequence.count("G") + sequence.count("C")) / max(len(sequence), 1)
+    length = end_nt - start_nt + 1
+    gc = (sequence.count("G") + sequence.count("C")) / max(len(sequence), 1)
 
-    # ValleyScore = PDSMean × Persistence × log(Length) × Stability
-    # · PDSMean:    depth of the valley below local background
-    # · Persistence: fraction of positions with PDS > 0 (robustness)
-    # · log(Length): rewards longer valleys without over-weighting
-    # · Stability:  penalises noisy valleys via inverse variance
-    log_length       = math.log(max(end - start + 1, 1))
-    stability        = 1.0 / (variance + EPSILON)
-    valley_score_raw = pds_mean * persistence * log_length * stability
+    log_length = math.log(max(end - start + 1, 1))
+    stability = 1.0 / (variance + EPSILON)
+    region_score_raw = pds_mean * persistence * log_length * stability
 
     return {
-        "ID":                 f"PV_{valley_index:06d}",
-        "Signal_Start":       int(start),
-        "Signal_End":         int(end),
-        "Start":              int(start_nt),
-        "End":                int(end_nt),
-        "Length":             int(length),
-        "MeanPerplexity":     mean_perplexity,
-        "MinPerplexity":      min_perplexity,
-        "MaxPerplexity":      max_perplexity,
-        "UpstreamMean":       up_mean,
-        "CandidateMean":      cand_mean,
-        "DownstreamMean":     dn_mean,
-        "UpstreamDifference": upstream_diff,
-        "DownstreamDifference": downstream_diff,
-        "PDSMean":            pds_mean,
-        "PDSMax":             pds_max,
-        "Prominence":         prominence,
-        "Persistence":        persistence,
-        "AreaUnderValley":    area,
-        "Variance":           variance,
-        "GC%":                gc,
-        "MotifCount":         0,
-        "Motifs":             "",
-        "Sequence":           sequence,
-        "ValleyScore_raw":    valley_score_raw,
+        "Region_ID": f"LPR_{region_index:06d}",
+        "Signal_Start": int(start),
+        "Signal_End": int(end),
+        "Start": int(start_nt),
+        "End": int(end_nt),
+        "Length": int(length),
+        "MeanPerplexity": mean_perplexity,
+        "MinPerplexity": min_perplexity,
+        "MaxPerplexity": max_perplexity,
+        "UpstreamMean": up_mean,
+        "RegionMean": reg_mean,
+        "DownstreamMean": dn_mean,
+        "PDSMean": pds_mean,
+        "PDSMax": pds_max,
+        "Prominence": prominence,
+        "Persistence": persistence,
+        "Variance": variance,
+        "GC%": gc,
+        "MotifCount": 0,
+        "Motifs": "",
+        "Sequence": sequence,
+        "RegionScore_raw": region_score_raw,
     }
 
 
-# ─── Step 8 – Valley score normalisation & ranking ──────────────────────────
+def normalize_region_score(regions: list[dict]) -> list[dict]:
+    """Purpose: Convert raw region scores to non-negative ranked values.
 
-def normalize_valley_score(domains: list[dict]) -> list[dict]:
-    """Normalise ValleyScore to [0, 1] and assign genomic rank (1 = best)."""
-    if not domains:
-        return domains
-    raw = np.array([max(0.0, float(d.get("ValleyScore_raw", 0.0))) for d in domains], dtype=np.float64)
-    lo, hi = float(raw.min()), float(raw.max())
-    span = hi - lo
-    norm = np.where(raw > 0, 1.0, 0.0) if span < EPSILON else (raw - lo) / span
-    for i, d in enumerate(domains):
-        d["ValleyScore"]           = float(raw[i])
-        d["ValleyScoreNormalized"] = float(norm[i])
-        d.pop("ValleyScore_raw", None)
-    ranked = sorted(range(len(domains)), key=lambda idx: domains[idx]["ValleyScore"], reverse=True)
+    Parameters:
+    - regions: Region metric dictionaries.
+
+    Returns:
+    - Same list with RegionScore and Rank fields added.
+
+    Computational complexity:
+    - O(k log k) time and O(k) space for k regions.
+    """
+    if not regions:
+        return regions
+
+    raw = np.array([max(0.0, float(r.get("RegionScore_raw", 0.0))) for r in regions], dtype=np.float64)
+    for i, region in enumerate(regions):
+        region["RegionScore"] = float(raw[i])
+        region.pop("RegionScore_raw", None)
+
+    ranked = sorted(range(len(regions)), key=lambda idx: regions[idx]["RegionScore"], reverse=True)
     for rank, idx in enumerate(ranked, 1):
-        domains[idx]["Rank"] = rank
-    return domains
+        regions[idx]["Rank"] = rank
 
+    return regions
 
-# ─── Main pipeline ───────────────────────────────────────────────────────────
 
 def analyze_sequence(sequence_id: str, seq: str, **kwargs) -> AnalysisResult:
-    """REGPLEX v13 analysis pipeline.
+    """Purpose: Run complete REGPLEX low-perplexity region workflow for one sequence.
 
-    Steps
-    -----
-    1. Dinucleotide perplexity (window = 17 nt).
-    2. Savitzky-Golay smoothing — applied exactly once.
-    3. Perplexity Depression Score (PDS): three-window background contrast.
-    4. Bounded Kadane valley detection on the PDS profile.
-    5. Valley expansion while PDS > 0 OR PDS > 20 % of peak PDS.
-    6. Valley merging (gap ≤ 100 bp).
-    7. Valley metrics, ValleyScore, normalisation, and ranking.
+    Parameters:
+    - sequence_id: Sequence identifier.
+    - seq: DNA sequence.
+    - kwargs: Optional pipeline parameter overrides.
+
+    Returns:
+    - AnalysisResult containing signals, detected regions, and parameters.
+
+    Computational complexity:
+    - O(n) average signal processing plus O(k log k) interval merge/rank.
     """
     params = {
         "perplexity_window": int(kwargs.get("perplexity_window", PERPLEXITY_WINDOW)),
-        "sg_window_length":  int(kwargs.get("sg_window_length",  SG_WINDOW_LENGTH)),
-        "sg_poly_order":     int(kwargs.get("sg_poly_order",     SG_POLY_ORDER)),
-        "flank_size":        int(kwargs.get("flank_size",        FLANK_SIZE)),
-        "spacer_size":       int(kwargs.get("spacer_size",       SPACER_SIZE)),
-        "min_candidate":     int(kwargs.get("min_candidate",     MIN_CANDIDATE)),
-        "max_candidate":     int(kwargs.get("max_candidate",     MAX_CANDIDATE)),
-        "min_valley_length": int(kwargs.get("min_valley_length", MIN_VALLEY_LENGTH)),
-        "max_valley_length": int(kwargs.get("max_valley_length", MAX_VALLEY_LENGTH)),
-        "merge_gap":         int(kwargs.get("merge_gap",         MERGE_GAP)),
+        "sg_window_length": int(kwargs.get("sg_window_length", SG_WINDOW_LENGTH)),
+        "sg_poly_order": int(kwargs.get("sg_poly_order", SG_POLY_ORDER)),
+        "flank_size": int(kwargs.get("flank_size", FLANK_SIZE)),
+        "spacer_size": int(kwargs.get("spacer_size", SPACER_SIZE)),
+        "min_candidate": int(kwargs.get("min_candidate", MIN_CANDIDATE)),
+        "max_candidate": int(kwargs.get("max_candidate", MAX_CANDIDATE)),
+        "min_region_length": int(kwargs.get("min_region_length", MIN_REGION_LENGTH)),
+        "max_region_length": int(kwargs.get("max_region_length", MAX_REGION_LENGTH)),
+        "merge_gap": int(kwargs.get("merge_gap", MERGE_GAP)),
     }
 
-    # Step 1: dinucleotide perplexity
     di = compute_di_perplexity(seq, params["perplexity_window"])
-
-    # Step 2: Savitzky-Golay smoothing (single pass)
     smoothed_di = smooth_perplexity(di, params["sg_window_length"], params["sg_poly_order"])
-
-    # Step 3: Perplexity Depression Score
     pds = compute_pds(
         smoothed_di,
         flank_size=params["flank_size"],
@@ -559,26 +633,15 @@ def analyze_sequence(sequence_id: str, seq: str, **kwargs) -> AnalysisResult:
         max_candidate=params["max_candidate"],
     )
 
-    # Step 4: Bounded Kadane — find all positive-PDS valley cores
-    cores = _find_all_pds_valleys(
-        pds,
-        params["min_valley_length"],
-        params["max_valley_length"],
-    )
+    cores = _find_all_pds_regions(pds, params["min_region_length"], params["max_region_length"])
+    expanded = [_expand_region_pds(pds, cs, ce) for cs, ce in cores]
+    merged = _merge_regions(expanded, params["merge_gap"])
+    merged = [(s, e) for s, e in merged if e - s + 1 >= params["min_region_length"]]
 
-    # Step 5: Expand each core while PDS > 0 or > 20 % of peak
-    expanded = [_expand_valley_pds(pds, cs, ce) for cs, ce in cores]
-
-    # Step 6: Merge adjacent expanded valleys
-    merged = _merge_valleys(expanded, params["merge_gap"])
-    # Re-filter by minimum length after merging (expansion may have shortened edges)
-    merged = [(s, e) for s, e in merged if e - s + 1 >= params["min_valley_length"]]
-
-    # Step 7: Compute metrics and scoring
-    domains: list[dict] = []
+    regions: list[dict] = []
     for idx, (s, e) in enumerate(merged, 1):
-        d = _valley_metrics(
-            valley_index=idx,
+        region = _region_metrics(
+            region_index=idx,
             start=s,
             end=e,
             di=di,
@@ -589,11 +652,11 @@ def analyze_sequence(sequence_id: str, seq: str, **kwargs) -> AnalysisResult:
             flank_size=params["flank_size"],
             spacer_size=params["spacer_size"],
         )
-        d["Sequence_ID"] = sequence_id
-        domains.append(d)
+        region["Sequence_ID"] = sequence_id
+        regions.append(region)
 
-    domains.sort(key=lambda d: d["Signal_Start"])
-    domains = normalize_valley_score(domains)
+    regions.sort(key=lambda r: r["Signal_Start"])
+    regions = normalize_region_score(regions)
 
     return AnalysisResult(
         sequence_id=sequence_id,
@@ -601,21 +664,45 @@ def analyze_sequence(sequence_id: str, seq: str, **kwargs) -> AnalysisResult:
         di=di,
         smoothed_di=smoothed_di,
         pds=pds,
-        domains=domains,
+        regions=regions,
         params=params,
     )
 
 
-# ─── Output helpers ──────────────────────────────────────────────────────────
+# ==========================================================================
+# 9. Export Utilities
+# ==========================================================================
+def regions_dataframe(results: Iterable[AnalysisResult]) -> pd.DataFrame:
+    """Purpose: Convert sequence analysis results into one tabular dataframe.
 
-def domains_dataframe(results: Iterable[AnalysisResult]) -> pd.DataFrame:
+    Parameters:
+    - results: Iterable of AnalysisResult objects.
+
+    Returns:
+    - Combined pandas DataFrame of all detected regions.
+
+    Computational complexity:
+    - O(r) time and O(r) space for total region count r.
+    """
     rows: list[dict] = []
     for result in results:
-        rows.extend(result.domains)
+        rows.extend(result.regions)
     return pd.DataFrame(rows)
 
 
 def export_table(df: pd.DataFrame, fmt: str) -> bytes:
+    """Purpose: Export tabular region results to standard serialized formats.
+
+    Parameters:
+    - df: Region dataframe.
+    - fmt: One of csv/tsv/xlsx/json.
+
+    Returns:
+    - Encoded bytes for the requested format.
+
+    Computational complexity:
+    - O(r*c) time and O(r*c) space for r rows and c columns.
+    """
     fmt = fmt.lower()
     if fmt == "csv":
         return df.to_csv(index=False).encode()
@@ -632,43 +719,76 @@ def export_table(df: pd.DataFrame, fmt: str) -> bytes:
 
 
 def export_bed(df: pd.DataFrame) -> bytes:
-    bed = df[["Sequence_ID", "Start", "End", "ID", "ValleyScore"]].copy()
+    """Purpose: Export detected regions in BED interval format.
+
+    Parameters:
+    - df: Region dataframe.
+
+    Returns:
+    - BED content bytes.
+
+    Computational complexity:
+    - O(r) time and O(r) space.
+    """
+    bed = df[["Sequence_ID", "Start", "End", "Region_ID", "RegionScore"]].copy()
     bed["Start"] = bed["Start"].astype(int)
-    bed["End"]   = bed["End"].astype(int) + 1
+    bed["End"] = bed["End"].astype(int) + 1
     return bed.to_csv(index=False, sep="\t", header=False).encode()
 
 
 def export_fasta(df: pd.DataFrame) -> bytes:
+    """Purpose: Export detected region sequences as FASTA entries.
+
+    Parameters:
+    - df: Region dataframe.
+
+    Returns:
+    - FASTA content bytes.
+
+    Computational complexity:
+    - O(total_sequence_length) time and space.
+    """
     lines: list[str] = []
     for _, row in df.iterrows():
         lines.append(
-            f">{row['ID']}|{row['Sequence_ID']}:{row['Start']}-{row['End']}"
-            f"|ValleyScore={row['ValleyScore']:.4f}"
+            f">{row['Region_ID']}|{row['Sequence_ID']}:{row['Start']}-{row['End']}"
+            f"|RegionScore={row['RegionScore']:.4f}"
         )
         lines.append(str(row["Sequence"]))
     return ("\n".join(lines) + ("\n" if lines else "")).encode()
 
 
 def export_gff(df: pd.DataFrame, gff3: bool = False) -> bytes:
+    """Purpose: Export detected regions in GFF/GFF3 annotation format.
+
+    Parameters:
+    - df: Region dataframe.
+    - gff3: Whether to include GFF3 header.
+
+    Returns:
+    - GFF or GFF3 content bytes.
+
+    Computational complexity:
+    - O(r) time and O(r) space.
+    """
     rows: list[str] = []
     for _, row in df.iterrows():
         attr = (
-            f"ID={row['ID']};"
-            f"ValleyScore={row['ValleyScore']:.4f};"
+            f"ID={row['Region_ID']};"
+            f"RegionScore={row['RegionScore']:.4f};"
             f"PDSMean={row.get('PDSMean', 0.0):.4f};"
             f"Persistence={row['Persistence']:.4f};"
             f"Prominence={row.get('Prominence', 0.0):.4f};"
-            f"AreaUnderValley={row.get('AreaUnderValley', 0.0):.4f};"
             f"Motifs={row.get('Motifs', '')}"
         )
         rows.append(
             "\t".join([
                 str(row["Sequence_ID"]),
                 "REGPLEX",
-                "perplexity_valley",
+                "low_perplexity_region",
                 str(int(row["Start"]) + 1),
                 str(int(row["End"]) + 1),
-                f"{float(row['ValleyScore']):.4f}",
+                f"{float(row['RegionScore']):.4f}",
                 ".",
                 ".",
                 attr,
@@ -678,23 +798,30 @@ def export_gff(df: pd.DataFrame, gff3: bool = False) -> bytes:
     return (prefix + "\n".join(rows) + ("\n" if rows else "")).encode()
 
 
-# ─── CLI ─────────────────────────────────────────────────────────────────────
-
 def cli() -> None:
-    parser = argparse.ArgumentParser(
-        description="REGPLEX v13 — training-free perplexity valley detector"
-    )
+    """Purpose: Run command-line REGPLEX analysis and write CSV output.
+
+    Parameters:
+    - None (arguments parsed from command line).
+
+    Returns:
+    - None.
+
+    Computational complexity:
+    - O(total_input_length) dominated by per-sequence analysis.
+    """
+    parser = argparse.ArgumentParser(description="REGPLEX — low perplexity region detector")
     parser.add_argument("fasta", help="Input FASTA file")
-    parser.add_argument("--out", default="regplex_valleys.csv", help="Output CSV path")
-    parser.add_argument("--sg-window",    type=int,   default=SG_WINDOW_LENGTH,  help="Savitzky-Golay window (odd)")
-    parser.add_argument("--sg-order",     type=int,   default=SG_POLY_ORDER,     help="Savitzky-Golay polynomial order")
-    parser.add_argument("--flank-size",   type=int,   default=FLANK_SIZE,        help="PDS flank window (bp)")
-    parser.add_argument("--spacer-size",  type=int,   default=SPACER_SIZE,       help="PDS spacer (bp)")
-    parser.add_argument("--min-candidate",type=int,   default=MIN_CANDIDATE,     help="Min PDS candidate window (bp)")
-    parser.add_argument("--max-candidate",type=int,   default=MAX_CANDIDATE,     help="Max PDS candidate window (bp)")
-    parser.add_argument("--min-valley",   type=int,   default=MIN_VALLEY_LENGTH, help="Min valley length (bp)")
-    parser.add_argument("--max-valley",   type=int,   default=MAX_VALLEY_LENGTH, help="Max valley length (bp)")
-    parser.add_argument("--merge-gap",    type=int,   default=MERGE_GAP,         help="Valley merge gap (bp)")
+    parser.add_argument("--out", default="regplex_regions.csv", help="Output CSV path")
+    parser.add_argument("--sg-window", type=int, default=SG_WINDOW_LENGTH, help="Savitzky-Golay window (odd)")
+    parser.add_argument("--sg-order", type=int, default=SG_POLY_ORDER, help="Savitzky-Golay polynomial order")
+    parser.add_argument("--flank-size", type=int, default=FLANK_SIZE, help="PDS flank window (bp)")
+    parser.add_argument("--spacer-size", type=int, default=SPACER_SIZE, help="PDS spacer (bp)")
+    parser.add_argument("--min-candidate", type=int, default=MIN_CANDIDATE, help="Min PDS candidate window (bp)")
+    parser.add_argument("--max-candidate", type=int, default=MAX_CANDIDATE, help="Max PDS candidate window (bp)")
+    parser.add_argument("--min-region", type=int, default=MIN_REGION_LENGTH, help="Min region length (bp)")
+    parser.add_argument("--max-region", type=int, default=MAX_REGION_LENGTH, help="Max region length (bp)")
+    parser.add_argument("--merge-gap", type=int, default=MERGE_GAP, help="Region merge gap (bp)")
     args = parser.parse_args()
 
     with open(args.fasta, encoding="utf-8") as handle:
@@ -711,15 +838,15 @@ def cli() -> None:
             spacer_size=args.spacer_size,
             min_candidate=args.min_candidate,
             max_candidate=args.max_candidate,
-            min_valley_length=args.min_valley,
-            max_valley_length=args.max_valley,
+            min_region_length=args.min_region,
+            max_region_length=args.max_region,
             merge_gap=args.merge_gap,
         )
         for header, sequence in records
     ]
-    df = domains_dataframe(results)
+    df = regions_dataframe(results)
     df.to_csv(args.out, index=False)
-    print(f"Saved {len(df)} valleys to {args.out}")
+    print(f"Saved {len(df)} low-perplexity regions to {args.out}")
 
 
 if __name__ == "__main__":
