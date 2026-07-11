@@ -44,7 +44,7 @@ from visualization import (
     plot_valley_ranking,
 )
 
-st.set_page_config(page_title="REGPLEX v13", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="REGPLEX", layout="wide", initial_sidebar_state="collapsed")
 
 _NAV_ITEMS = ["Home", "Analysis", "Results", "Motifs", "About"]
 _README_URL = "https://github.com/VRYella/PerCALL#readme"
@@ -161,13 +161,12 @@ def _render_topbar() -> None:
               {_svg_logo()}
               <div>
                 <h1>REGPLEX</h1>
-                <span>v13 · Perplexity Valley Detector</span>
+                <span>Low perplexity region analysis in genomic DNA</span>
               </div>
             </div>
             <div class="top-links">
               <a href="https://github.com/VRYella/PerCALL" target="_blank" rel="noopener noreferrer">GitHub</a>
               <a href="{_README_URL}" target="_blank" rel="noopener noreferrer">Documentation</a>
-              <span class="top-version-badge">v13</span>
             </div>
           </div>
         </div>
@@ -242,7 +241,7 @@ def _run_analysis(
 def _render_home() -> None:
     img_b64 = _load_hero_image_b64()
     image_html = (
-        f'<img src="data:image/png;base64,{img_b64}" class="hero-image" alt="REGPLEX v13 workflow"/>'
+        f'<img src="data:image/png;base64,{img_b64}" class="hero-image" alt="REGPLEX workflow"/>'
         if img_b64
         else '<div class="hero-image-missing">Logo unavailable</div>'
     )
@@ -252,18 +251,23 @@ def _render_home() -> None:
   <div class="hero-logo">{image_html}</div>
   <div class="hero-center">
     <div class="hero-brand">REGPLEX</div>
-    <div class="hero-subtitle">Perplexity Valley Detector</div>
+    <div class="hero-subtitle">Identification of Low Perplexity Regions in Genomic DNA Using Dinucleotide Sequence Complexity</div>
+    <p style="margin:0;max-width:860px;color:var(--muted)">
+      REGPLEX is a computational framework for identifying Low Perplexity Regions (LPRs) in genomic DNA
+      through dinucleotide sequence complexity analysis. The method integrates local background contrast,
+      Savitzky–Golay smoothing, bounded optimization, and motif annotation to characterize extended
+      regions of reduced sequence complexity across diverse genomes.
+    </p>
     <div class="hero-chips">
-      <span class="hero-chip">Training-free</span>
-      <span class="hero-chip">Species-independent</span>
       <span class="hero-chip">Dinucleotide Perplexity</span>
+      <span class="hero-chip">Low Perplexity Regions</span>
+      <span class="hero-chip">Local Background Contrast</span>
+      <span class="hero-chip">Savitzky–Golay Smoothing</span>
+      <span class="hero-chip">Bounded Optimization</span>
       <span class="hero-chip">Motif Annotation</span>
+      <span class="hero-chip">Training-Free</span>
+      <span class="hero-chip">Species-Independent</span>
     </div>
-  </div>
-  <div class="hero-metrics">
-    <div class="metric-card"><div class="metric-label">Method</div><div class="metric-value" style="font-size:18px">Info-Theoretic</div></div>
-    <div class="metric-card"><div class="metric-label">Window</div><div class="metric-value" style="font-size:18px">17 nt</div></div>
-    <div class="metric-card"><div class="metric-label">Version</div><div class="metric-value" style="font-size:18px">v13</div></div>
   </div>
 </div>
 """
@@ -288,8 +292,8 @@ def _render_home() -> None:
 def _render_analysis() -> None:
     _render_html_block(
         "<div class='card'>"
-        "<h3>🔬 Analysis</h3>"
-        "<p style='margin:0;color:var(--muted)'>Upload or paste a FASTA sequence, tune parameters, then run.</p>"
+        "<h3>Analysis</h3>"
+        "<p style='margin:0;color:var(--muted)'>Provide FASTA input and configure detection parameters for LPR identification.</p>"
         "</div>"
     )
 
@@ -406,7 +410,7 @@ def _render_analysis() -> None:
 
     run_col, reset_col, example_col = st.columns([2, 1, 1])
     with run_col:
-        run_clicked = st.button("▶ Run REGPLEX v13", type="primary", use_container_width=True)
+        run_clicked = st.button("▶ Run REGPLEX", type="primary", use_container_width=True)
     with reset_col:
         if st.button("↺ Reset", use_container_width=True):
             for key in _RESET_SESSION_KEYS:
@@ -435,7 +439,7 @@ def _render_analysis() -> None:
             "merge_gap":         int(merge_gap),
         }
 
-        with st.status("Running REGPLEX v13 …", expanded=False) as status:
+        with st.status("Running REGPLEX …", expanded=False) as status:
             try:
                 results, runtime_seconds = _run_analysis(fasta_text, params, motif_text)
             except re.error as exc:
@@ -470,6 +474,13 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
     )
     result      = next(r for r in results if r.sequence_id == selected_seq)
     selected_df = df[df["Sequence_ID"] == selected_seq].copy()
+
+    _render_html_block(
+        "<div class='card'>"
+        "<h3>Results</h3>"
+        "<p style='margin:0;color:var(--muted)'>Inspect ranked LPR calls, signal profiles, and sequence-level motif architecture.</p>"
+        "</div>"
+    )
 
     runtime_seconds = float(st.session_state.get("runtime", 0.0))
     longest   = int(selected_df["Length"].max())    if not selected_df.empty else 0
@@ -610,9 +621,8 @@ def _render_results(results: list[AnalysisResult], df: pd.DataFrame) -> None:
 def _render_motifs(df: pd.DataFrame) -> None:
     _render_html_block(
         "<div class='card'>"
-        "<h3>🧩 Motif Annotation</h3>"
-        "<p style='margin:0;color:var(--muted)'>Validate motif syntax and inspect valley-level counts. "
-        "Motifs do not affect valley detection.</p>"
+        "<h3>Motif Annotation</h3>"
+        "<p style='margin:0;color:var(--muted)'>Review motif definitions and valley-level motif counts for interpreted LPR intervals.</p>"
         "</div>"
     )
     m1, m2 = st.columns(2)
@@ -655,28 +665,23 @@ def _render_about() -> None:
     _render_html_block(
         """
         <div class="card">
-          <h3>🧬 Scientific Basis</h3>
-          <blockquote class="hypothesis-quote">
-            Extended low-perplexity genomic valleys are identified relative to local background
-            using a training-free information-theoretic framework. No species-specific parameters required.
-          </blockquote>
+          <h3>Scientific Basis</h3>
+          <p style="margin:0;color:var(--muted)">
+            REGPLEX identifies Low Perplexity Regions by quantifying local dinucleotide sequence complexity
+            and evaluating candidate intervals against adjacent genomic background.
+          </p>
         </div>
         <div class="card">
-          <h3>⚙️ Algorithm Pipeline</h3>
+          <h3>Algorithm Pipeline</h3>
           <ol class="algo-list">
             <li><strong>Dinucleotide Perplexity</strong> — window = 17 nt; 16 dinucleotide transitions.</li>
             <li><strong>Savitzky–Golay Smoothing</strong> — window=21, order=3; applied once.</li>
-            <li><strong>PDS (three-window contrast)</strong> — <code>PDS = (UpMean + DnMean) / 2 − CandMean</code>; flanks must exceed candidate.</li>
+            <li><strong>PDS (three-window contrast)</strong> — <code>PDS = (UpMean + DnMean) / 2 − CandMean</code>; local contrast quantifies valley support.</li>
             <li><strong>Bounded Kadane</strong> — all positive-PDS valleys, 100–1000 bp.</li>
             <li><strong>Expansion &amp; Merging</strong> — grow while PDS &gt; 0 or &gt;20% peak; merge gap ≤ 100 bp.</li>
             <li><strong>ValleyScore</strong> = PDSMean × Persistence × log(Length) × Stability.</li>
             <li><strong>Optional Motif Annotation</strong> — IUPAC / regex; scanned within valleys only.</li>
           </ol>
-        </div>
-        <div class="card">
-          <h3>🚫 Out of Scope</h3>
-          <p style="margin:0;color:var(--muted)">Not a promoter predictor · Not a classifier · No training data ·
-          No ML · No ensemble voting · No species-specific parameters.</p>
         </div>
         """
     )
@@ -706,7 +711,7 @@ def main() -> None:
 
     st.markdown("---")
     st.markdown(
-        "**REGPLEX v13** · Training-Free Perplexity Valley Detector · MIT License"
+        "**REGPLEX** · Dinucleotide complexity analysis for genomic low perplexity regions"
     )
 
 
