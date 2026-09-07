@@ -57,7 +57,7 @@ def _bound_interval_by_max_pds(
     if span_bp <= config.max_region_length:
         return interval
 
-    max_windows = max(1, (config.max_region_length - config.perplexity_window) // config.step_size + 1)
+    max_windows = (config.max_region_length - config.perplexity_window) // config.step_size + 1
     if max_windows <= 0:
         return None
 

@@ -98,7 +98,11 @@ def smooth_perplexity(arr: np.ndarray, window_length: int = SG_WINDOW_LENGTH, po
     return smooth_profile(arr, window_length, poly_order)
 
 
-def compute_pds(smoothed_di: np.ndarray, flank_size: int = FLANK_SIZE, **_: int) -> np.ndarray:
+def compute_pds(smoothed_di: np.ndarray, flank_size: int = FLANK_SIZE, **kwargs: int) -> np.ndarray:
+    unsupported = [k for k in ("spacer_size", "min_candidate", "max_candidate") if k in kwargs]
+    if unsupported:
+        names = ", ".join(unsupported)
+        raise ValueError(f"Unsupported legacy parameters in refactored predictor: {names}")
     bg = estimate_local_background(smoothed_di, flank_size)
     return calculate_perplexity_depression(smoothed_di, bg)
 

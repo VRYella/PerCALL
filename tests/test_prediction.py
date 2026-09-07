@@ -37,3 +37,11 @@ def test_oversized_positive_interval_is_bounded_to_highest_mean_segment():
     assert bounded[0] <= 3 <= bounded[1]
     span_bp = cfg.perplexity_window + (bounded[1] - bounded[0]) * cfg.step_size
     assert span_bp <= cfg.max_region_length
+
+
+def test_bound_interval_returns_none_when_max_shorter_than_window():
+    cfg = PerplexityConfig(perplexity_window=17, step_size=1, max_region_length=10)
+    pds = np.ones(20, dtype=np.float32)
+    pref_sum, pref_cnt = _prefix_nanmean(pds)
+    bounded = _bound_interval_by_max_pds((0, len(pds) - 1), pref_sum, pref_cnt, cfg)
+    assert bounded is None
