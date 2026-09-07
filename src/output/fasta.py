@@ -9,6 +9,6 @@ def export_region_fasta(df: pd.DataFrame, sequence: str) -> bytes:
         start = int(row["Start"])
         end = int(row["End"])
         rank = int(row["Rank"])
-        lines.append(f">region_{rank}|{row['Sequence_ID']}:{start}-{end}")
+        lines.append(f">region_{rank}|{row['Sequence_ID']}:{start + 1}-{end + 1}")
         lines.append(sequence[start:end + 1])
     return ("\n".join(lines) + ("\n" if lines else "")).encode()

@@ -19,7 +19,13 @@ def render_download_page() -> None:
     seq_ids = [result.sequence_id for result in results]
     sequence_id = st.selectbox("Sequence", seq_ids, key="download_sequence")
     result = next(r for r in results if r.sequence_id == sequence_id)
-    source_sequence = next(seq for header, seq in records if header == sequence_id)
+
+    record_map = {header: seq for header, seq in records}
+    source_sequence = record_map.get(sequence_id)
+    if source_sequence is None:
+        st.error("Source sequence is unavailable for this result. Re-run analysis before downloading FASTA.")
+        return
+
     df = results_dataframe(result)
 
     st.download_button("CSV", export_csv(df), file_name="percall_regions.csv", mime="text/csv")
