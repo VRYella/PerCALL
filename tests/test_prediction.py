@@ -24,3 +24,17 @@ def test_long_repetitive_sequence_not_entirely_called():
     result = predict_regulatory_regions("repeat", sequence, cfg)
     assert len(result.candidate_regions) >= 1
     assert all(region.length <= cfg.max_region_length for region in result.candidate_regions)
+
+
+def test_oversized_positive_interval_is_bounded_to_max_length():
+    sequence = "A" * 2500
+    cfg = PerplexityConfig(
+        perplexity_window=17,
+        min_region_length=100,
+        max_region_length=300,
+        min_perplexity_depression=0.0,
+        min_persistence_bp=100,
+    )
+    result = predict_regulatory_regions("oversized", sequence, cfg)
+    assert len(result.candidate_regions) >= 1
+    assert all(region.length <= cfg.max_region_length for region in result.candidate_regions)

@@ -10,7 +10,6 @@ import pandas as pd
 from src.models.dataclasses import PerplexityConfig, PredictionResult
 from src.output.bed import export_bed as _export_bed
 from src.output.csv import export_csv as _export_csv
-from src.output.csv import results_dataframe
 from src.output.fasta import export_region_fasta
 from src.output.gff import export_gff as _export_gff
 from src.perplexity.profile import calculate_perplexity_profile, smooth_profile
@@ -64,9 +63,24 @@ def _config_from_kwargs(kwargs: dict) -> PerplexityConfig:
         min_region_length=int(kwargs.get("min_region_length", MIN_REGION_LENGTH)),
         max_region_length=int(kwargs.get("max_region_length", MAX_REGION_LENGTH)),
         min_perplexity_depression=float(kwargs.get("min_pds", kwargs.get("min_perplexity_depression", 0.25))),
-        min_persistence_bp=int(kwargs.get("min_persistence_bp", 80)),
+        min_persistence_bp=int(kwargs.get("min_persistence_bp", kwargs.get("min_region_length", MIN_REGION_LENGTH))),
         merge_distance=int(kwargs.get("merge_gap", MERGE_GAP)),
     )
+
+
+def _config_to_params(config: PerplexityConfig) -> dict:
+    return {
+        "perplexity_window": config.perplexity_window,
+        "step_size": config.step_size,
+        "sg_window_length": config.smoothing_window,
+        "sg_poly_order": config.smoothing_poly_order,
+        "flank_size": config.flank_size,
+        "min_region_length": config.min_region_length,
+        "max_region_length": config.max_region_length,
+        "min_pds": config.min_perplexity_depression,
+        "min_persistence_bp": config.min_persistence_bp,
+        "merge_gap": config.merge_distance,
+    }
 
 
 def compute_di_perplexity(seq: str, window: int = PERPLEXITY_WINDOW) -> np.ndarray:
@@ -117,7 +131,7 @@ def _prediction_to_analysis_result(prediction: PredictionResult, params: dict) -
 def analyze_sequence(sequence_id: str, seq: str, **kwargs) -> AnalysisResult:
     config = _config_from_kwargs(kwargs)
     prediction = predict_regulatory_regions(sequence_id=sequence_id, sequence=seq, config=config)
-    return _prediction_to_analysis_result(prediction, params={**kwargs})
+    return _prediction_to_analysis_result(prediction, params=_config_to_params(config))
 
 
 def regions_dataframe(results: Iterable[AnalysisResult]) -> pd.DataFrame:
@@ -173,12 +187,38 @@ def cli() -> None:
     parser = argparse.ArgumentParser(description="PerCALL candidate regulatory region detector")
     parser.add_argument("fasta", help="Input FASTA")
     parser.add_argument("--out", default="percall_regions.csv")
+    parser.add_argument("--perplexity-window", type=int, default=PERPLEXITY_WINDOW)
+    parser.add_argument("--step-size", type=int, default=1)
+    parser.add_argument("--sg-window", type=int, default=SG_WINDOW_LENGTH)
+    parser.add_argument("--sg-order", type=int, default=SG_POLY_ORDER)
+    parser.add_argument("--flank-size", type=int, default=FLANK_SIZE)
+    parser.add_argument("--min-region", type=int, default=MIN_REGION_LENGTH)
+    parser.add_argument("--max-region", type=int, default=MAX_REGION_LENGTH)
+    parser.add_argument("--min-pds", type=float, default=0.25)
+    parser.add_argument("--min-persistence", type=int, default=MIN_REGION_LENGTH)
+    parser.add_argument("--merge-gap", type=int, default=MERGE_GAP)
     args = parser.parse_args()
 
     with open(args.fasta, encoding="utf-8") as handle:
         records = parse_fasta(handle.read())
 
-    results = [analyze_sequence(header, sequence) for header, sequence in records]
+    results = [
+        analyze_sequence(
+            header,
+            sequence,
+            perplexity_window=args.perplexity_window,
+            step_size=args.step_size,
+            sg_window_length=args.sg_window,
+            sg_poly_order=args.sg_order,
+            flank_size=args.flank_size,
+            min_region_length=args.min_region,
+            max_region_length=args.max_region,
+            min_pds=args.min_pds,
+            min_persistence_bp=args.min_persistence,
+            merge_gap=args.merge_gap,
+        )
+        for header, sequence in records
+    ]
     df = regions_dataframe(results)
     df.to_csv(args.out, index=False)
     print(f"Saved {len(df)} candidate regions to {args.out}")

@@ -18,6 +18,21 @@ def _interval_span_bp(start_w: int, end_w: int, config: PerplexityConfig) -> int
     return int(config.perplexity_window + (n_windows - 1) * config.step_size)
 
 
+
+
+def _longest_contiguous_run(mask: np.ndarray) -> int:
+    max_run = 0
+    current = 0
+    for value in mask:
+        if value:
+            current += 1
+            if current > max_run:
+                max_run = current
+        else:
+            current = 0
+    return max_run
+
+
 def _bound_interval_by_max_pds(
     interval: tuple[int, int],
     pds: np.ndarray,
@@ -84,7 +99,8 @@ def predict_regulatory_regions(sequence_id: str, sequence: str, config: Perplexi
         start_bp = int(start_w * config.step_size)
         end_bp_inclusive = min(len(clean) - 1, start_bp + span_bp - 1)
 
-        persistence_windows = int(np.sum(pds_slice >= config.min_perplexity_depression))
+        persistence_mask = pds_slice >= config.min_perplexity_depression
+        persistence_windows = _longest_contiguous_run(persistence_mask)
         persistence_bp = int(config.perplexity_window + (persistence_windows - 1) * config.step_size) if persistence_windows else 0
 
         regions.append(CandidateRegion(
