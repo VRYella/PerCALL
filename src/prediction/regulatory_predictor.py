@@ -76,7 +76,7 @@ def predict_regulatory_regions(sequence_id: str, sequence: str, config: Perplexi
         step_size=config.step_size,
         window_size=config.perplexity_window,
     )
-    intervals = merge_intervals(intervals, config.merge_distance, config.step_size)
+    intervals = merge_intervals(intervals, config.merge_distance, config.step_size, window_size=config.perplexity_window)
 
     bounded: list[tuple[int, int]] = []
     for interval in intervals:

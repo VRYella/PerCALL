@@ -13,16 +13,19 @@ def calculate_perplexity_profile(sequence: str, config: PerplexityConfig) -> Per
         empty = np.array([], dtype=np.float32)
         return PerplexityProfile(positions=np.array([], dtype=np.int64), raw_perplexity=empty, smoothed_perplexity=empty)
 
+    ambiguous = has_ambiguous_base(sequence, config.perplexity_window, config.step_size)
     dinucleotide_indices = encode_dinucleotides(sequence, config.perplexity_window, config.step_size)
+
     counts = np.zeros((len(dinucleotide_indices), 16), dtype=np.int16)
-    np.add.at(counts, (np.arange(len(dinucleotide_indices))[:, None], dinucleotide_indices), 1)
+    valid_rows = np.flatnonzero(~ambiguous)
+    if valid_rows.size:
+        np.add.at(counts, (valid_rows[:, None], dinucleotide_indices[valid_rows]), 1)
+
     probs = counts / max(config.perplexity_window - 1, 1)
     entropy = shannon_entropy(probs)
-    raw = perplexity_from_entropy(entropy)
-
-    ambiguous = has_ambiguous_base(sequence, config.perplexity_window, config.step_size)
-    raw = raw.astype(np.float32)
+    raw = perplexity_from_entropy(entropy).astype(np.float32)
     raw[ambiguous] = np.nan
+
     smoothed = smooth_profile(raw, config.smoothing_window, config.smoothing_poly_order)
     positions = np.arange(len(raw), dtype=np.int64) * config.step_size
     return PerplexityProfile(positions=positions, raw_perplexity=raw, smoothed_perplexity=smoothed)

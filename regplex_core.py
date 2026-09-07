@@ -54,6 +54,11 @@ class AnalysisResult:
 
 
 def _config_from_kwargs(kwargs: dict) -> PerplexityConfig:
+    unsupported = [k for k in ("spacer_size", "min_candidate", "max_candidate") if k in kwargs]
+    if unsupported:
+        names = ", ".join(unsupported)
+        raise ValueError(f"Unsupported legacy parameters in refactored predictor: {names}")
+
     return PerplexityConfig(
         perplexity_window=int(kwargs.get("perplexity_window", PERPLEXITY_WINDOW)),
         step_size=int(kwargs.get("step_size", 1)),
@@ -97,7 +102,7 @@ def compute_pds(smoothed_di: np.ndarray, flank_size: int = FLANK_SIZE, **_: int)
     return calculate_perplexity_depression(smoothed_di, bg)
 
 
-def _prediction_to_analysis_result(prediction: PredictionResult, params: dict) -> AnalysisResult:
+def _prediction_to_analysis_result(prediction: PredictionResult, params: dict, sequence: str) -> AnalysisResult:
     regions: list[dict] = []
     for region in prediction.candidate_regions:
         regions.append(
@@ -114,6 +119,7 @@ def _prediction_to_analysis_result(prediction: PredictionResult, params: dict) -
                 "Rank": region.rank,
                 "Perplexity_Depression_Score": region.mean_pds,
                 "Region_Score": region.mean_pds,
+                "Sequence": sequence[region.start:region.end + 1],
             }
         )
 
@@ -131,7 +137,7 @@ def _prediction_to_analysis_result(prediction: PredictionResult, params: dict) -
 def analyze_sequence(sequence_id: str, seq: str, **kwargs) -> AnalysisResult:
     config = _config_from_kwargs(kwargs)
     prediction = predict_regulatory_regions(sequence_id=sequence_id, sequence=seq, config=config)
-    return _prediction_to_analysis_result(prediction, params=_config_to_params(config))
+    return _prediction_to_analysis_result(prediction, params=_config_to_params(config), sequence=seq)
 
 
 def regions_dataframe(results: Iterable[AnalysisResult]) -> pd.DataFrame:
@@ -165,11 +171,9 @@ def export_bed(df: pd.DataFrame) -> bytes:
 
 def export_fasta(df: pd.DataFrame, sequence_map: dict[str, str] | None = None) -> bytes:
     if sequence_map is None:
-        if "Sequence" not in df.columns:
-            raise ValueError("export_fasta requires either a Sequence column or sequence_map input.")
         lines: list[str] = []
         for _, row in df.iterrows():
-            lines.append(f">region_{int(row['Rank'])}|{row['Sequence_ID']}:{int(row['Start'])}-{int(row['End'])}")
+            lines.append(f">region_{int(row['Rank'])}|{row['Sequence_ID']}:{int(row['Start']) + 1}-{int(row['End']) + 1}")
             lines.append(str(row["Sequence"]))
         return ("\n".join(lines) + ("\n" if lines else "")).encode()
 

@@ -33,15 +33,23 @@ def detect_candidate_intervals(
     return regions
 
 
-def merge_intervals(intervals: list[tuple[int, int]], merge_distance: int, step_size: int) -> list[tuple[int, int]]:
+def merge_intervals(
+    intervals: list[tuple[int, int]],
+    merge_distance: int,
+    step_size: int,
+    window_size: int = 1,
+) -> list[tuple[int, int]]:
     if not intervals:
         return []
     sorted_intervals = sorted(intervals)
     merged = [sorted_intervals[0]]
-    max_gap_windows = merge_distance // max(step_size, 1)
+
     for start, end in sorted_intervals[1:]:
         ps, pe = merged[-1]
-        if start <= pe + max_gap_windows + 1:
+        prev_end_bp = pe * step_size + (window_size - 1)
+        curr_start_bp = start * step_size
+        gap_bp = curr_start_bp - prev_end_bp - 1
+        if gap_bp <= merge_distance:
             merged[-1] = (ps, max(pe, end))
         else:
             merged.append((start, end))
