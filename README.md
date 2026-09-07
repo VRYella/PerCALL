@@ -79,7 +79,7 @@ tests/
 ## Run
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements.txt  # installs numpy, scipy, pandas, plotly, streamlit, openpyxl
 streamlit run app.py
 ```
 

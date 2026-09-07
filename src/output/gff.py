@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 
 
-def export_gff(df: pd.DataFrame) -> bytes:
+def export_gff(df: pd.DataFrame, gff3: bool = True) -> bytes:
     rows: list[str] = []
     for _, row in df.iterrows():
         attrs = (
@@ -12,7 +12,7 @@ def export_gff(df: pd.DataFrame) -> bytes:
             f"max_pds={float(row['Max_PDS']):.4f};"
             f"background={float(row['Background_Perplexity']):.4f}"
         )
-        rows.append("	".join([
+        rows.append("\t".join([
             str(row["Sequence_ID"]),
             "PerCALL",
             "candidate_regulatory_region",
@@ -23,7 +23,5 @@ def export_gff(df: pd.DataFrame) -> bytes:
             ".",
             attrs,
         ]))
-    return ("##gff-version 3
-" + "
-".join(rows) + ("
-" if rows else "")).encode()
+    prefix = "##gff-version 3\n" if gff3 else ""
+    return (prefix + "\n".join(rows) + ("\n" if rows else "")).encode()

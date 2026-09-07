@@ -151,7 +151,14 @@ def export_bed(df: pd.DataFrame) -> bytes:
 
 def export_fasta(df: pd.DataFrame, sequence_map: dict[str, str] | None = None) -> bytes:
     if sequence_map is None:
-        return b""
+        if "Sequence" not in df.columns:
+            raise ValueError("export_fasta requires either a Sequence column or sequence_map input.")
+        lines: list[str] = []
+        for _, row in df.iterrows():
+            lines.append(f">region_{int(row['Rank'])}|{row['Sequence_ID']}:{int(row['Start'])}-{int(row['End'])}")
+            lines.append(str(row["Sequence"]))
+        return ("\n".join(lines) + ("\n" if lines else "")).encode()
+
     chunks = []
     for sequence_id, sub_df in df.groupby("Sequence_ID"):
         chunks.append(export_region_fasta(sub_df, sequence_map.get(sequence_id, "")).decode())
@@ -159,8 +166,7 @@ def export_fasta(df: pd.DataFrame, sequence_map: dict[str, str] | None = None) -
 
 
 def export_gff(df: pd.DataFrame, gff3: bool = True) -> bytes:
-    _ = gff3
-    return _export_gff(df)
+    return _export_gff(df, gff3=gff3)
 
 
 def cli() -> None:

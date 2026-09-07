@@ -26,6 +26,7 @@ def predict_regulatory_regions(sequence_id: str, sequence: str, config: Perplexi
     )
     intervals = [iv for iv in intervals if (iv[1] - iv[0] + 1) * config.step_size <= config.max_region_length]
     intervals = merge_intervals(intervals, config.merge_distance, config.step_size)
+    intervals = [iv for iv in intervals if (iv[1] - iv[0] + 1) * config.step_size <= config.max_region_length]
 
     regions: list[CandidateRegion] = []
     for start_w, end_w in intervals:
