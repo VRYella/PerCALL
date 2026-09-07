@@ -18,8 +18,6 @@ def _interval_span_bp(start_w: int, end_w: int, config: PerplexityConfig) -> int
     return int(config.perplexity_window + (n_windows - 1) * config.step_size)
 
 
-
-
 def _longest_contiguous_run(mask: np.ndarray) -> int:
     max_run = 0
     current = 0
@@ -33,9 +31,25 @@ def _longest_contiguous_run(mask: np.ndarray) -> int:
     return max_run
 
 
+def _prefix_nanmean(values: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    finite = np.isfinite(values)
+    safe = np.where(finite, values, 0.0).astype(np.float64)
+    pref_sum = np.concatenate(([0.0], np.cumsum(safe)))
+    pref_cnt = np.concatenate(([0], np.cumsum(finite.astype(np.int64))))
+    return pref_sum, pref_cnt
+
+
+def _window_mean(pref_sum: np.ndarray, pref_cnt: np.ndarray, start: int, end: int) -> float:
+    count = pref_cnt[end + 1] - pref_cnt[start]
+    if count <= 0:
+        return float("-inf")
+    return float((pref_sum[end + 1] - pref_sum[start]) / count)
+
+
 def _bound_interval_by_max_pds(
     interval: tuple[int, int],
-    pds: np.ndarray,
+    pref_sum: np.ndarray,
+    pref_cnt: np.ndarray,
     config: PerplexityConfig,
 ) -> tuple[int, int] | None:
     start_w, end_w = interval
@@ -48,14 +62,10 @@ def _bound_interval_by_max_pds(
         return None
 
     best: tuple[int, int] | None = None
-    best_score = -np.inf
+    best_score = float("-inf")
     for left in range(start_w, end_w - max_windows + 2):
         right = left + max_windows - 1
-        seg = pds[left:right + 1]
-        finite = seg[np.isfinite(seg)]
-        if finite.size == 0:
-            continue
-        score = float(np.mean(finite))
+        score = _window_mean(pref_sum, pref_cnt, left, right)
         if score > best_score:
             best_score = score
             best = (left, right)
@@ -78,9 +88,10 @@ def predict_regulatory_regions(sequence_id: str, sequence: str, config: Perplexi
     )
     intervals = merge_intervals(intervals, config.merge_distance, config.step_size, window_size=config.perplexity_window)
 
+    pref_sum, pref_cnt = _prefix_nanmean(pds)
     bounded: list[tuple[int, int]] = []
     for interval in intervals:
-        bounded_interval = _bound_interval_by_max_pds(interval, pds, config)
+        bounded_interval = _bound_interval_by_max_pds(interval, pref_sum, pref_cnt, config)
         if bounded_interval is not None:
             bounded.append(bounded_interval)
 

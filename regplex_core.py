@@ -17,6 +17,7 @@ from src.prediction.background import estimate_local_background
 from src.prediction.depression import calculate_perplexity_depression
 from src.prediction.regulatory_predictor import predict_regulatory_regions
 from src.preprocessing.fasta import parse_fasta
+from src.preprocessing.sequence import clean_sequence
 
 PERPLEXITY_WINDOW = 17
 SG_WINDOW_LENGTH = 21
@@ -136,8 +137,9 @@ def _prediction_to_analysis_result(prediction: PredictionResult, params: dict, s
 
 def analyze_sequence(sequence_id: str, seq: str, **kwargs) -> AnalysisResult:
     config = _config_from_kwargs(kwargs)
-    prediction = predict_regulatory_regions(sequence_id=sequence_id, sequence=seq, config=config)
-    return _prediction_to_analysis_result(prediction, params=_config_to_params(config), sequence=seq)
+    normalized = clean_sequence(seq)
+    prediction = predict_regulatory_regions(sequence_id=sequence_id, sequence=normalized, config=config)
+    return _prediction_to_analysis_result(prediction, params=_config_to_params(config), sequence=normalized)
 
 
 def regions_dataframe(results: Iterable[AnalysisResult]) -> pd.DataFrame:
