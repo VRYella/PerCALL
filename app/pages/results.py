@@ -23,5 +23,4 @@ def render_results_page() -> None:
 
     st.markdown("#### Why these regions were predicted")
     for region in result.candidate_regions:
-        st.code(f"Region: {sequence_id}:{region.start}-{region.end}
-" + region_summary_text(region))
+        st.code(f"Region: {sequence_id}:{region.start}-{region.end}\n" + region_summary_text(region))

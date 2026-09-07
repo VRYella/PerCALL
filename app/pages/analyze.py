@@ -5,6 +5,7 @@ import streamlit as st
 from src.models.dataclasses import PerplexityConfig
 from src.prediction.regulatory_predictor import predict_regulatory_regions
 from src.preprocessing.fasta import parse_fasta
+from src.preprocessing.validation import SequenceValidationError
 
 
 def render_analyze_page() -> None:
@@ -41,7 +42,16 @@ def render_analyze_page() -> None:
             flank_size = st.number_input("Flank size", min_value=5, max_value=2000, value=100)
 
     if st.button("Run analysis", type="primary"):
-        records = parse_fasta(fasta_text)
+        try:
+            records = parse_fasta(fasta_text)
+        except SequenceValidationError as exc:
+            st.error(str(exc))
+            return
+
+        if not records:
+            st.error("No valid sequence records found. Provide FASTA or a plain DNA sequence.")
+            return
+
         config = PerplexityConfig(
             perplexity_window=int(perplexity_window),
             step_size=int(step_size),

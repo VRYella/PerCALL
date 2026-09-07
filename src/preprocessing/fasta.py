@@ -29,5 +29,7 @@ def parse_fasta(text: str) -> list[tuple[str, str]]:
 
     if header is not None:
         flush()
+    elif chunks:
+        records.append(("query", normalize_and_validate_sequence("".join(chunks))))
 
     return records

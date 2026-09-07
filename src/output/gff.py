@@ -17,7 +17,7 @@ def export_gff(df: pd.DataFrame, gff3: bool = True) -> bytes:
             "PerCALL",
             "candidate_regulatory_region",
             str(int(row["Start"]) + 1),
-            str(int(row["End"])),
+            str(int(row["End"]) + 1),
             f"{float(row['Mean_PDS']):.4f}",
             ".",
             ".",

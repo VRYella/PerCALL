@@ -20,6 +20,7 @@ def test_synthetic_low_perplexity_segment_detected():
 
 def test_long_repetitive_sequence_not_entirely_called():
     sequence = "A" * 2000
-    cfg = PerplexityConfig(min_region_length=100, max_region_length=500)
+    cfg = PerplexityConfig(min_region_length=100, max_region_length=500, min_perplexity_depression=0.0, min_persistence_bp=100)
     result = predict_regulatory_regions("repeat", sequence, cfg)
+    assert len(result.candidate_regions) >= 1
     assert all(region.length <= cfg.max_region_length for region in result.candidate_regions)
