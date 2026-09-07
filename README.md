@@ -88,3 +88,28 @@ streamlit run app.py
 ```bash
 python regplex_core.py examples/ecoli.fasta --out percall_regions.csv
 ```
+
+## Supervised fine-tuning pipeline (human + E. coli)
+
+`supervised_finetune.py` adds a leakage-safe supervised benchmark workflow with:
+
+- real labeled promoter/non-promoter FASTA datasets for **human** and **E. coli**
+- canonical deduplication (sequence + reverse-complement grouping) before splitting
+- stratified **train/val/test** splitting by species and class
+- hyperparameter tuning on validation split
+- metric reporting: **precision, recall, F1, MCC** + confusion counts
+
+Run:
+
+```bash
+python supervised_finetune.py \
+  --cache-dir /tmp/regplex_supervised_data \
+  --output-json /tmp/regplex_supervised_report.json
+```
+
+Dataset provenance used by the pipeline:
+
+- `human_non_tata.fa` (positive) and `human_nonprom_big.fa` (negative)
+- `Ecoli_prom.fa` (positive) and `Ecoli_non_prom.fa` (negative)
+- source repository: `nmach22/Promoter-Classification`
+- original biological sources documented there include EPDnew (human promoters) and RegulonDB (E. coli promoters)
