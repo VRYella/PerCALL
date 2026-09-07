@@ -9,6 +9,7 @@ for idx, base in enumerate("ACGT"):
 
 def encode_dinucleotides(sequence: str, window_size: int, step_size: int = 1) -> np.ndarray:
     arr = _BASE_MAP[np.frombuffer(sequence.encode(), dtype=np.uint8)]
+    arr = np.where(arr == 4, 0, arr)
     windows = np.lib.stride_tricks.sliding_window_view(arr, window_size)[::step_size]
     left = windows[:, :-1]
     right = windows[:, 1:]
