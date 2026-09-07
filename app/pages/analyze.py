@@ -10,38 +10,43 @@ from src.preprocessing.validation import SequenceValidationError
 
 def render_analyze_page() -> None:
     st.subheader("Analyze")
-    fasta_text = st.text_area("FASTA input", height=220)
+    st.markdown('<div class="section-subtitle">Paste FASTA and tune algorithm controls</div>', unsafe_allow_html=True)
 
-    st.markdown("#### Analysis")
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        perplexity_window = st.number_input("Perplexity window", min_value=5, max_value=200, value=17)
-    with c2:
-        step_size = st.number_input("Step size", min_value=1, max_value=20, value=1)
-    with c3:
-        min_region = st.number_input("Min region length", min_value=20, max_value=5000, value=100)
-    with c4:
-        max_region = st.number_input("Max region length", min_value=50, max_value=10000, value=1000)
+    with st.form("analysis_form", clear_on_submit=False):
+        fasta_text = st.text_area("FASTA input", height=240, placeholder=">seq_1\nATGCGT...\n>seq_2\n...")
 
-    st.markdown("#### Detection")
-    d1, d2, d3 = st.columns(3)
-    with d1:
-        min_pds = st.number_input("Minimum PDS", min_value=0.0, max_value=10.0, value=0.25, step=0.05)
-    with d2:
-        persistence = st.number_input("Persistence (bp)", min_value=10, max_value=5000, value=80)
-    with d3:
-        merge_distance = st.number_input("Merge distance", min_value=0, max_value=5000, value=100)
+        st.markdown("#### Analysis geometry")
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            perplexity_window = st.number_input("Perplexity window", min_value=5, max_value=200, value=17)
+        with c2:
+            step_size = st.number_input("Step size", min_value=1, max_value=20, value=1)
+        with c3:
+            min_region = st.number_input("Min region length", min_value=20, max_value=5000, value=100)
+        with c4:
+            max_region = st.number_input("Max region length", min_value=50, max_value=10000, value=1000)
 
-    with st.expander("Advanced", expanded=False):
-        a1, a2, a3 = st.columns(3)
-        with a1:
-            smoothing_window = st.number_input("Smoothing window", min_value=3, max_value=401, value=21, step=2)
-        with a2:
-            smoothing_order = st.number_input("Smoothing polynomial order", min_value=1, max_value=10, value=3)
-        with a3:
-            flank_size = st.number_input("Flank size", min_value=5, max_value=2000, value=100)
+        st.markdown("#### Detection controls")
+        d1, d2, d3 = st.columns(3)
+        with d1:
+            min_pds = st.number_input("Minimum PDS", min_value=0.0, max_value=10.0, value=0.25, step=0.05)
+        with d2:
+            persistence = st.number_input("Persistence (bp)", min_value=10, max_value=5000, value=80)
+        with d3:
+            merge_distance = st.number_input("Merge distance", min_value=0, max_value=5000, value=100)
 
-    if st.button("Run analysis", type="primary"):
+        with st.expander("Advanced smoothing and background parameters", expanded=False):
+            a1, a2, a3 = st.columns(3)
+            with a1:
+                smoothing_window = st.number_input("Smoothing window", min_value=3, max_value=401, value=21, step=2)
+            with a2:
+                smoothing_order = st.number_input("Smoothing polynomial order", min_value=1, max_value=10, value=3)
+            with a3:
+                flank_size = st.number_input("Flank size", min_value=5, max_value=2000, value=100)
+
+        run_analysis = st.form_submit_button("Run analysis", type="primary", use_container_width=True)
+
+    if run_analysis:
         try:
             records = parse_fasta(fasta_text)
         except SequenceValidationError as exc:

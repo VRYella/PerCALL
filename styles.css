@@ -17,7 +17,7 @@
 }
 
 body, .stApp {
-  background: var(--bg);
+  background: linear-gradient(180deg, #f8fafc 0%, #eff6ff 100%);
   color: var(--text);
   font-family: var(--font-body);
   font-size: 18px;
@@ -90,7 +90,8 @@ div[data-testid="stRadio"] div[data-baseweb="radio"] { display: none !important;
 
 .hero-section { display: grid; grid-template-columns: auto 1fr; gap: 1.25rem; align-items: center; margin-bottom: 1rem; }
 .hero-center { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0.5rem; }
-.hero-brand { font-family: var(--font-heading); font-size: 48px; font-weight: 800; color: var(--primary); line-height: 1; }
+.hero-center { margin: 0.6rem 0 1.2rem; padding: 1.2rem; border: 1px solid var(--border); border-radius: 16px; background: rgba(255,255,255,0.85); box-shadow: var(--shadow); }
+.hero-brand { font-family: var(--font-heading); font-size: 48px; font-weight: 800; color: var(--primary); line-height: 1; letter-spacing: -0.04em; }
 .hero-subtitle { font-size: 26px; font-weight: 700; color: var(--text); line-height: 1.25; }
 .hero-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; }
 .hero-chip { border: 1px solid var(--primary); background: #eff6ff; color: var(--primary); border-radius: 999px; padding: 0.3rem 0.8rem; font-size: 14px; font-weight: 700; }
@@ -109,6 +110,13 @@ div[data-testid="stRadio"] div[data-baseweb="radio"] { display: none !important;
 [data-testid="stLinkButton"] a { border-radius: 12px; min-height: 46px; font-weight: 700; }
 .stButton > button[kind="primary"] { border: none; color: #fff; background: linear-gradient(95deg, var(--primary) 10%, var(--secondary) 90%); font-size: 18px; }
 .stButton > button { border: 1px solid var(--border); color: var(--primary); background: #f0f9ff; }
+.stDownloadButton > button { width: 100%; border: 1px solid var(--border); background: #f8fafc; color: var(--primary); }
+[data-testid="stMetric"] { background: white; border: 1px solid var(--border); border-radius: 12px; padding: 0.6rem 0.9rem; box-shadow: var(--shadow); }
+[data-testid="stMetricLabel"] { color: var(--muted); font-weight: 700; }
+[data-testid="stMetricValue"] { color: var(--primary); font-family: var(--font-heading); }
+
+.stExpander { border: 1px solid var(--border); border-radius: 10px; background: white; }
+[data-testid="stForm"] { padding: 1rem; border: 1px solid var(--border); border-radius: 12px; background: white; box-shadow: var(--shadow); }
 
 [data-testid="stTabs"] [role="tablist"] { width: 100%; gap: 0.35rem; border-bottom: 2px solid var(--border); }
 [data-testid="stTabs"] [role="tab"] { flex: 1; height: 56px; border: 1px solid var(--border); border-bottom: none; border-radius: 10px 10px 0 0; background: #e0f2fe; color: var(--muted); font-family: var(--font-heading); font-size: 18px; font-weight: 700; }
