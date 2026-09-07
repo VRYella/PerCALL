@@ -45,10 +45,10 @@ class SplitConfig:
 
 @dataclass(frozen=True)
 class HyperParamConfig:
-    ngram_ranges: tuple[tuple[int, int], ...] = ((3, 3), (4, 4), (3, 4), (4, 5))
-    alphas: tuple[float, ...] = (1e-5, 3e-5, 1e-4, 3e-4)
-    n_features: int = 2**18
-    max_iter: int = 2500
+    ngram_ranges: tuple[tuple[int, int], ...] = ((4, 7), (5, 6), (5, 8), (3, 8))
+    alphas: tuple[float, ...] = (1e-6, 3e-6, 1e-5, 3e-5, 1e-4)
+    n_features: int = 2**20
+    max_iter: int = 3000
 
 
 def reverse_complement(seq: str) -> str:
