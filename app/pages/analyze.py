@@ -8,7 +8,7 @@ import streamlit as st
 from src.motifs import compile_motifs, load_motifs_from_path
 from src.models.dataclasses import PerplexityConfig
 from src.prediction.regulatory_predictor import predict_regulatory_regions
-from src.preprocessing.input_sources import InputSourceError, load_sequence_records
+from src.preprocessing.input_sources import InputSourceError, list_local_input_files, load_sequence_records
 
 
 def render_analyze_page() -> None:
@@ -31,7 +31,11 @@ def render_analyze_page() -> None:
         elif input_source == "Upload file":
             uploaded_file = st.file_uploader("Upload FASTA/text", type=["fa", "fasta", "fna", "txt"])
         elif input_source == "Disk file":
-            disk_path = st.text_input("Absolute file path", placeholder="/home/runner/work/REGPLEX/REGPLEX/examples/ecoli.fasta")
+            local_files = list_local_input_files()
+            if local_files:
+                disk_path = st.selectbox("Indexed absolute file path", local_files)
+            else:
+                st.info("No indexed local FASTA/text files were found under the workspace or /tmp.")
         else:
             accession = st.text_input("NCBI nucleotide accession", placeholder="NC_000913.3")
 

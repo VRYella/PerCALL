@@ -8,30 +8,26 @@ from src.preprocessing.fasta import parse_fasta
 from src.preprocessing.validation import SequenceValidationError
 
 NCBI_EFETCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+LOCAL_INPUT_SUFFIXES = {".fa", ".fasta", ".fna", ".txt"}
 
 
 class InputSourceError(ValueError):
     pass
 
 
-def _is_within(path: Path, root: Path) -> bool:
-    try:
-        path.relative_to(root)
-        return True
-    except ValueError:
-        return False
+def _allowed_local_roots() -> list[Path]:
+    return [Path.cwd().resolve(), Path("/tmp").resolve()]
 
 
-def _resolve_allowed_input_path(path: str) -> Path:
-    fasta_path = Path(path).expanduser()
-    if not fasta_path.is_absolute():
-        raise InputSourceError("Disk input must use an absolute path.")
-    resolved = fasta_path.resolve()
-    allowed_roots = [Path.cwd().resolve(), Path("/tmp").resolve()]
-    if not any(_is_within(resolved, root) for root in allowed_roots):
-        roots = ", ".join(str(root) for root in allowed_roots)
-        raise InputSourceError(f"Disk input must stay within approved roots: {roots}")
-    return resolved
+def list_local_input_files() -> list[str]:
+    files: set[str] = set()
+    for root in _allowed_local_roots():
+        if not root.exists():
+            continue
+        for candidate in root.rglob("*"):
+            if candidate.is_file() and candidate.suffix.lower() in LOCAL_INPUT_SUFFIXES:
+                files.add(str(candidate.resolve()))
+    return sorted(files)
 
 
 def _decode_uploaded_text(uploaded_bytes: bytes) -> str:
@@ -52,11 +48,12 @@ def load_records_from_text(text: str) -> list[tuple[str, str]]:
 
 
 def load_records_from_path(path: str) -> list[tuple[str, str]]:
-    fasta_path = _resolve_allowed_input_path(path)
-    if not fasta_path.exists():
-        raise InputSourceError(f"Input file does not exist: {fasta_path}")
-    if not fasta_path.is_file():
-        raise InputSourceError(f"Input path is not a file: {fasta_path}")
+    requested = path.strip()
+    allowed_files = {candidate: Path(candidate) for candidate in list_local_input_files()}
+    fasta_path = allowed_files.get(requested)
+    if fasta_path is None:
+        roots = ", ".join(str(root) for root in _allowed_local_roots())
+        raise InputSourceError(f"Disk input must be an indexed FASTA/text file under: {roots}")
     return load_records_from_text(fasta_path.read_text(encoding="utf-8"))
 
 
@@ -91,4 +88,4 @@ def load_sequence_records(
         return load_records_from_path(file_path), "Disk file"
     if accession.strip():
         return load_records_from_accession(accession), f"NCBI accession: {accession.strip()}"
-    raise InputSourceError("Provide pasted sequence text, an uploaded file, a disk path, or an NCBI accession.")
+    raise InputSourceError("Provide pasted sequence text, an uploaded file, an indexed local file, or an NCBI accession.")

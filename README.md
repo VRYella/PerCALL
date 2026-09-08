@@ -90,7 +90,7 @@ The **Analyze** page accepts:
 
 - pasted FASTA or raw DNA
 - uploaded FASTA/text files
-- absolute disk paths
+- indexed local FASTA/text files from the workspace or `/tmp`
 - NCBI nucleotide accessions
 
 Motifs are read from `regulatory_motifs.txt` by default, and you can append custom tab-delimited `name<TAB>pattern` lines from the UI.

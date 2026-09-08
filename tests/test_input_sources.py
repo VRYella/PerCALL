@@ -20,6 +20,6 @@ def test_load_sequence_records_requires_one_source():
     try:
         load_sequence_records()
     except InputSourceError as exc:
-        assert "Provide pasted sequence text" in str(exc)
+        assert "indexed local file" in str(exc)
     else:
         raise AssertionError("Expected InputSourceError")

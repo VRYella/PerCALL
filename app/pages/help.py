@@ -19,7 +19,7 @@ Interpretation:
     with st.expander("Recommended usage workflow"):
         st.markdown(
             """
-1. Choose pasted text, uploaded FASTA, disk path, or NCBI accession in **Analyze**.
+1. Choose pasted text, uploaded FASTA, an indexed local file, or an NCBI accession in **Analyze**.
 2. Run analysis with default parameters first.
 3. Enable the bundled motif library or add custom motif text when needed.
 4. Explore overlays and diagnostics in **Visualization**.
