@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 import streamlit as st
 
@@ -89,10 +90,14 @@ def render_analyze_page() -> None:
         compiled_motifs = []
         if use_default_library:
             compiled_motifs.extend(load_motifs_from_path(default_motif_path))
-        if uploaded_motif_file is not None:
-            compiled_motifs.extend(compile_motifs(uploaded_motif_file.getvalue().decode("utf-8")))
-        if custom_motifs.strip():
-            compiled_motifs.extend(compile_motifs(custom_motifs))
+        try:
+            if uploaded_motif_file is not None:
+                compiled_motifs.extend(compile_motifs(uploaded_motif_file.getvalue().decode("utf-8")))
+            if custom_motifs.strip():
+                compiled_motifs.extend(compile_motifs(custom_motifs))
+        except (OSError, UnicodeDecodeError, re.error, ValueError) as exc:
+            st.error(f"Unable to compile motif library: {exc}")
+            return
 
         config = PerplexityConfig(
             perplexity_window=int(perplexity_window),
