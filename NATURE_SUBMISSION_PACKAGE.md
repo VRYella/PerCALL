@@ -1,14 +1,14 @@
-# REGPLEX v13 Nature Submission Package
+# REGPLEX Nature-Style Submission Package
 
 ## Abstract
-REGPLEX is a training-free method for identifying **Low Perplexity Regions (LPRs)** in DNA sequences using information-theoretic dinucleotide complexity. The workflow computes dinucleotide perplexity (17 nt), applies Savitzky–Golay smoothing, derives a Perplexity Depression Score (PDS) by bilateral local-context contrast, performs bounded Kadane optimization, expands and merges candidate regions, and ranks final intervals with a deterministic region score. The method is species-independent and fully explainable at each computational step.
+REGPLEX is a training-free method for identifying **candidate regulatory regions** in DNA sequences using information-theoretic dinucleotide complexity and optional motif annotation. The workflow computes dinucleotide perplexity, applies Savitzky–Golay smoothing, derives a Perplexity Depression Score (PDS) by local-context contrast, detects bounded regions, and annotates them against a curated text-backed motif library spanning promoter-associated and non-B-DNA-like sequence patterns. The method is species-independent, explainable, and designed for transparent prioritization rather than definitive functional labeling.
 
 ## Introduction
 Sequence complexity varies across local genomic contexts. REGPLEX formalizes this variation as a regional depression in dinucleotide perplexity relative to neighboring windows. The framework is designed for algorithmic detection of candidate intervals without model training, feature learning, or species-specific calibration.
 
 ## Methods
 ### Study design
-All sequences are analyzed independently after FASTA sanitization. Input is converted to uppercase DNA, uracil is mapped to thymine, and only `A/C/G/T/N` symbols are retained.
+All sequences are analyzed independently after FASTA sanitization. Inputs may originate from pasted sequence text, uploaded or disk-backed FASTA/text files, or live NCBI nucleotide accession retrieval. Input is converted to uppercase DNA, uracil is mapped to thymine, and only `A/C/G/T/N` symbols are retained.
 
 ### Algorithm workflow
 DNA  
@@ -27,7 +27,7 @@ Region Merging
 ↓  
 Low Perplexity Region Ranking  
 ↓  
-Optional Motif Annotation  
+Motif Annotation from `regulatory_motifs.txt`  
 ↓  
 Downloads
 
@@ -61,17 +61,23 @@ Positive-PDS runs are segmented with bounded Kadane optimization (default 100–
 
 `Rank=1` denotes highest score.
 
-### Optional motif annotation
-Motif patterns (regex or IUPAC) are compiled and matched within detected region sequences only. Output includes total motif count and per-pattern summary.
+### Motif annotation
+Motif patterns are loaded from a plain-text library where each line is either a raw pattern or a tab-delimited `name<TAB>pattern` entry. IUPAC-only patterns are expanded to regular expressions, while explicit regex patterns are compiled directly. Region-level output reports total motif burden and per-pattern counts.
 
 ## Results Reporting
-REGPLEX reports algorithmic candidate intervals with coordinates, perplexity statistics, local context means, PDS statistics, prominence, persistence, variance, GC fraction, region score, rank, and optional motif summaries. These outputs prioritize regions for downstream study.
+REGPLEX reports algorithmic candidate intervals with coordinates, perplexity statistics, local context means, PDS statistics, persistence, rank, motif count, and motif summaries. These outputs prioritize regions for downstream study, targeted wet-lab follow-up, and comparative motif-aware screening.
+
+## Software validation and testing
+The repository contains an automated pytest suite covering entropy calculation, perplexity profiling, background estimation, depression scoring, interval detection, prediction bounding, and the supervised benchmarking split logic. The current release additionally verifies motif parsing, sequence-source loading from text and disk, and motif annotation on detected intervals.
+
+## Limitations
+REGPLEX is not a replacement for a curated external regulatory database, ChIP-seq evidence, transcriptomic validation, or structure-probing assays. Motif hits are sequence-level annotations only; they do not prove occupancy, promoter activity, chromatin state, or stable non-B structure formation.
 
 ## Discussion
 REGPLEX provides an explainable and training-free approach for sequence-based region detection using local information-theoretic context. The method is intended for computational prioritization and does not by itself establish biochemical activity or causal regulatory function.
 
 ## Figure Legend Guidance
-Workflow figures should depict the exact implemented pipeline: dinucleotide perplexity → SG smoothing → PDS → bounded Kadane → expansion → merging → ranking → optional motif annotation.
+Workflow figures should depict the exact implemented pipeline: input acquisition → dinucleotide perplexity → SG smoothing → PDS → bounded region detection → ranking → motif annotation → export.
 
 ## Supplementary Notes
 - Deterministic execution for fixed inputs and parameters.
@@ -79,11 +85,11 @@ Workflow figures should depict the exact implemented pipeline: dinucleotide perp
 - Biological validation remains external to this algorithmic workflow.
 
 ## Code Availability
-Repository: <https://github.com/VRYella/PerCALL>
+Repository: <https://github.com/VRYella/REGPLEX>
 
 Primary modules:
 - `regplex_core.py` (analysis pipeline)
-- `motif_engine.py` (motif parsing/annotation)
+- `src/motifs.py` (motif parsing/annotation)
 - `visualization.py` (figures)
 - `app.py` (Streamlit interface)
 - `styles.css` (UI styling)
@@ -93,7 +99,7 @@ Example FASTA files are distributed under `examples/`. Reproducible outputs can 
 
 ```bash
 streamlit run app.py
-python regplex_core.py examples/ecoli.fasta --out regplex_regions.csv
+python regplex_core.py examples/ecoli.fasta --motifs-file regulatory_motifs.txt --out regplex_regions.csv
 ```
 
 ## References

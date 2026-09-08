@@ -20,7 +20,7 @@ def export_gff(df: pd.DataFrame, gff3: bool = True) -> bytes:
         )
         rows.append("\t".join([
             str(row["Sequence_ID"]),
-            "PerCALL",
+            "REGPLEX",
             "candidate_regulatory_region",
             str(int(row["Start"]) + 1),
             str(int(row["End"]) + 1),

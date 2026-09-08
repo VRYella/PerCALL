@@ -19,6 +19,8 @@ def results_dataframe(result: PredictionResult) -> pd.DataFrame:
             "Max_PDS": region.max_pds,
             "Persistence": region.persistence,
             "Rank": region.rank,
+            "Motif_Count": region.motif_count,
+            "Motifs": region.motifs,
         })
     return pd.DataFrame(rows)
 

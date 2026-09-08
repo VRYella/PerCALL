@@ -18,8 +18,14 @@ def render_visualization_page() -> None:
     seq_ids = [result.sequence_id for result in results]
     sequence_id = st.selectbox("Sequence", seq_ids, key="viz_sequence")
     result = next(r for r in results if r.sequence_id == sequence_id)
+    motif_df = pd.DataFrame(
+        [
+            {"Region": f"{region.start}-{region.end}", "Motif_Count": region.motif_count, "Motifs": region.motifs or "—"}
+            for region in result.candidate_regions
+        ]
+    )
 
-    st.markdown('<div class="section-subtitle">Interactive profile, region overlays, and signal diagnostics</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-subtitle">Interactive REGPLEX profiles, region overlays, and motif diagnostics</div>', unsafe_allow_html=True)
 
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -39,7 +45,7 @@ def render_visualization_page() -> None:
     fig = add_region_highlights(fig, result.candidate_regions)
     fig.update_layout(height=520, template="plotly_white", margin=dict(l=20, r=20, t=40, b=20))
 
-    tabs = st.tabs(["Profile & Regions", "PDS Distribution", "Region Quality"])
+    tabs = st.tabs(["Profile & Regions", "PDS Distribution", "Region Quality", "Motif Burden"])
     with tabs[0]:
         st.plotly_chart(fig, use_container_width=True)
     with tabs[1]:
@@ -69,3 +75,11 @@ def render_visualization_page() -> None:
             scatter.update_layout(template="plotly_white", height=460, margin=dict(l=20, r=20, t=40, b=20))
             st.plotly_chart(scatter, use_container_width=True)
             st.dataframe(quality, hide_index=True, use_container_width=True)
+    with tabs[3]:
+        if motif_df.empty or not motif_df["Motif_Count"].any():
+            st.info("No motif hits were detected with the active motif library.")
+        else:
+            motif_bar = px.bar(motif_df, x="Region", y="Motif_Count", hover_data=["Motifs"], color="Motif_Count", color_continuous_scale="Tealgrn")
+            motif_bar.update_layout(template="plotly_white", height=460, margin=dict(l=20, r=20, t=40, b=20))
+            st.plotly_chart(motif_bar, use_container_width=True)
+            st.dataframe(motif_df, hide_index=True, use_container_width=True)

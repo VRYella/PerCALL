@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from src.models.dataclasses import PerplexityConfig, PredictionResult
+from src.motifs import CompiledMotif, load_motifs_from_path
 from src.output.bed import export_bed as _export_bed
 from src.output.csv import export_csv as _export_csv
 from src.output.fasta import export_region_fasta
@@ -17,6 +18,7 @@ from src.prediction.background import estimate_local_background
 from src.prediction.depression import calculate_perplexity_depression
 from src.prediction.regulatory_predictor import predict_regulatory_regions
 from src.preprocessing.fasta import parse_fasta
+from src.preprocessing.input_sources import load_records_from_accession
 from src.preprocessing.sequence import clean_sequence
 
 PERPLEXITY_WINDOW = 17
@@ -39,6 +41,8 @@ PRIMARY_COLS = [
     "Max_PDS",
     "Persistence",
     "Rank",
+    "Motif_Count",
+    "Motifs",
 ]
 ADVANCED_COLS: list[str] = []
 
@@ -122,6 +126,8 @@ def _prediction_to_analysis_result(prediction: PredictionResult, params: dict, s
                 "Max_PDS": region.max_pds,
                 "Persistence": region.persistence,
                 "Rank": region.rank,
+                "Motif_Count": region.motif_count,
+                "Motifs": region.motifs,
                 "Perplexity_Depression_Score": region.mean_pds,
                 "Region_Score": region.mean_pds,
                 "Sequence": sequence[region.start:region.end + 1],
@@ -139,10 +145,15 @@ def _prediction_to_analysis_result(prediction: PredictionResult, params: dict, s
     )
 
 
-def analyze_sequence(sequence_id: str, seq: str, **kwargs) -> AnalysisResult:
+def analyze_sequence(sequence_id: str, seq: str, compiled_motifs: list[CompiledMotif] | None = None, **kwargs) -> AnalysisResult:
     config = _config_from_kwargs(kwargs)
     normalized = clean_sequence(seq)
-    prediction = predict_regulatory_regions(sequence_id=sequence_id, sequence=normalized, config=config)
+    prediction = predict_regulatory_regions(
+        sequence_id=sequence_id,
+        sequence=normalized,
+        config=config,
+        compiled_motifs=compiled_motifs,
+    )
     return _prediction_to_analysis_result(prediction, params=_config_to_params(config), sequence=normalized)
 
 
@@ -194,9 +205,11 @@ def export_gff(df: pd.DataFrame, gff3: bool = True) -> bytes:
 
 
 def cli() -> None:
-    parser = argparse.ArgumentParser(description="PerCALL candidate regulatory region detector")
-    parser.add_argument("fasta", help="Input FASTA")
-    parser.add_argument("--out", default="percall_regions.csv")
+    parser = argparse.ArgumentParser(description="REGPLEX candidate regulatory region detector")
+    parser.add_argument("fasta", nargs="?", help="Input FASTA")
+    parser.add_argument("--accession", help="NCBI nucleotide accession to fetch as FASTA")
+    parser.add_argument("--out", default="regplex_regions.csv")
+    parser.add_argument("--motifs-file", help="Optional motif library text file")
     parser.add_argument("--perplexity-window", type=int, default=PERPLEXITY_WINDOW)
     parser.add_argument("--step-size", type=int, default=1)
     parser.add_argument("--sg-window", type=int, default=SG_WINDOW_LENGTH)
@@ -209,13 +222,22 @@ def cli() -> None:
     parser.add_argument("--merge-gap", type=int, default=MERGE_GAP)
     args = parser.parse_args()
 
-    with open(args.fasta, encoding="utf-8") as handle:
-        records = parse_fasta(handle.read())
+    if bool(args.fasta) == bool(args.accession):
+        raise SystemExit("Provide exactly one input source: FASTA path or --accession.")
+
+    if args.fasta:
+        with open(args.fasta, encoding="utf-8") as handle:
+            records = parse_fasta(handle.read())
+    else:
+        records = load_records_from_accession(args.accession)
+
+    compiled_motifs = load_motifs_from_path(args.motifs_file) if args.motifs_file else None
 
     results = [
         analyze_sequence(
             header,
             sequence,
+            compiled_motifs=compiled_motifs,
             perplexity_window=args.perplexity_window,
             step_size=args.step_size,
             sg_window_length=args.sg_window,
@@ -231,7 +253,7 @@ def cli() -> None:
     ]
     df = regions_dataframe(results)
     df.to_csv(args.out, index=False)
-    print(f"Saved {len(df)} candidate regions to {args.out}")
+    print(f"Saved {len(df)} REGPLEX candidate regions to {args.out}")
 
 
 if __name__ == "__main__":

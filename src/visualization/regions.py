@@ -13,7 +13,7 @@ def add_region_highlights(fig: go.Figure, regions: list[CandidateRegion]) -> go.
 
 
 def region_summary_text(region: CandidateRegion) -> str:
-    return (
+    summary = (
         f"Mean DNA perplexity: {region.mean_perplexity:.2f}\n"
         f"Local background PPL: {region.background_perplexity:.2f}\n"
         f"Mean PDS: {region.mean_pds:.2f}\n"
@@ -21,3 +21,6 @@ def region_summary_text(region: CandidateRegion) -> str:
         f"Persistence: {region.persistence} bp\n"
         f"Prediction rank: {region.rank}"
     )
+    if region.motif_count:
+        summary += f"\nMotif hits: {region.motif_count}\nMotif summary: {region.motifs}"
+    return summary

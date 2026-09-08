@@ -25,8 +25,8 @@ def _render_shell() -> None:
 <div class="regplex-topbar">
   <div class="regplex-topbar-inner">
     <div class="brand">
-      <h1>PerCALL</h1>
-      <span>Elegant Explainable Genomic Discovery</span>
+      <h1>REGPLEX</h1>
+      <span>Regulatory Genomics via Perplexity and Motif Exploration</span>
     </div>
     <div class="top-links">
       <a href="#home">Home</a>
@@ -42,15 +42,15 @@ def _render_shell() -> None:
 
 
 def main() -> None:
-    st.set_page_config(page_title="PerCALL", page_icon="🧬", layout="wide")
+    st.set_page_config(page_title="REGPLEX", page_icon="🧬", layout="wide")
     _inject_styles()
     _render_shell()
 
     st.markdown(
         """
 <div class="hero-center">
-  <div class="hero-brand">PerCALL</div>
-  <div class="hero-subtitle">Candidate Regulatory Region Discovery via DNA Perplexity Depressions</div>
+  <div class="hero-brand">REGPLEX</div>
+  <div class="hero-subtitle">Regulatory motif and perplexity-guided candidate region discovery</div>
   <div class="hero-chips">
     <span class="hero-chip">Explainable</span>
     <span class="hero-chip">Training-Free</span>
