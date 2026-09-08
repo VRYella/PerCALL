@@ -1,45 +1,14 @@
 from __future__ import annotations
 
-import re
-
-IUPAC_MAP = {
-    "R": "[AG]",
-    "Y": "[CT]",
-    "S": "[GC]",
-    "W": "[AT]",
-    "K": "[GT]",
-    "M": "[AC]",
-    "B": "[CGT]",
-    "D": "[AGT]",
-    "H": "[ACT]",
-    "V": "[ACG]",
-    "N": "[ACGT]",
-}
-
-_IUPAC_ONLY = set("ACGTRYSWKMBDHVN")
+from src.motifs import compile_motifs as _compile_motifs
+from src.motifs import iupac_to_regex
 
 
-def _is_iupac(pattern: str) -> bool:
-    stripped = pattern.strip().upper()
-    return bool(stripped) and set(stripped) <= _IUPAC_ONLY
+def compile_motifs(text: str) -> list[tuple[str, object]]:
+    return [(motif.name, motif.regex) for motif in _compile_motifs(text)]
 
 
-def iupac_to_regex(pattern: str) -> str:
-    return "".join(IUPAC_MAP.get(ch, ch) for ch in pattern.strip().upper())
-
-
-def compile_motifs(text: str) -> list[tuple[str, re.Pattern]]:
-    motifs: list[tuple[str, re.Pattern]] = []
-    for line in text.splitlines():
-        motif = line.strip()
-        if not motif:
-            continue
-        regex = iupac_to_regex(motif) if _is_iupac(motif) else motif
-        motifs.append((motif, re.compile(regex, re.IGNORECASE)))
-    return motifs
-
-
-def annotate_regions(regions: list[dict], compiled_motifs: list[tuple[str, re.Pattern]]) -> list[dict]:
+def annotate_regions(regions: list[dict], compiled_motifs: list[tuple[str, object]]) -> list[dict]:
     """Annotate detected regions with motif counts and per-pattern hit summaries."""
     for region in regions:
         sequence = region.get("Sequence", "")
@@ -53,4 +22,3 @@ def annotate_regions(regions: list[dict], compiled_motifs: list[tuple[str, re.Pa
         region["Motif_Count"] = total
         region["Motifs"] = ";".join(hits)
     return regions
-

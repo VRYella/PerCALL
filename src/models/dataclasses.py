@@ -38,6 +38,8 @@ class CandidateRegion:
     persistence: int
     rank: int = 0
     multiscale_support: tuple[int, int] | None = None
+    motif_count: int = 0
+    motifs: str = ""
 
 
 @dataclass

@@ -1,0 +1,13 @@
+# name<TAB>pattern
+TATA_box	TATA[AT]A[AT][AG]
+CAAT_box	CCAAT
+GC_box	GGGCGG
+BRE_upstream	[GC][GC][GA]CGCC
+BRE_downstream	CGCC[GA][GC][GC]
+Initiator_YYANWYY	[CT][CT]A[ACGT][AT][CT][CT]
+DPE	[AG]G[AT][CT][GT]
+CpG_island_seed	CG(CG){2,}
+G_quadruplex	G{3,}[ACGT]{1,7}G{3,}[ACGT]{1,7}G{3,}[ACGT]{1,7}G{3,}
+Direct_repeat	([ACGT]{4,12})[ACGT]{0,20}\1
+Inverted_repeat	([ACGT]{4,12})[ACGT]{0,20}[ACGT]{4,12}
+Mirror_repeat	([ACGT]{3,8})([ACGT]{0,12})\2\1

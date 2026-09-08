@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from src.models.dataclasses import CandidateRegion, PerplexityConfig, PredictionResult
+from src.motifs import CompiledMotif, annotate_sequence
 from src.perplexity.profile import calculate_perplexity_profile
 from src.prediction.background import estimate_local_background
 from src.prediction.depression import calculate_perplexity_depression
@@ -72,7 +73,12 @@ def _bound_interval_by_max_pds(
     return best
 
 
-def predict_regulatory_regions(sequence_id: str, sequence: str, config: PerplexityConfig) -> PredictionResult:
+def predict_regulatory_regions(
+    sequence_id: str,
+    sequence: str,
+    config: PerplexityConfig,
+    compiled_motifs: list[CompiledMotif] | None = None,
+) -> PredictionResult:
     clean = clean_sequence(sequence)
     profile = calculate_perplexity_profile(clean, config)
     background = estimate_local_background(profile.smoothed_perplexity, config.flank_size)
@@ -126,6 +132,10 @@ def predict_regulatory_regions(sequence_id: str, sequence: str, config: Perplexi
         ))
 
     ranked = rank_regions(regions)
+    if compiled_motifs:
+        for region in ranked:
+            region_sequence = clean[region.start:region.end + 1]
+            region.motif_count, region.motifs = annotate_sequence(region_sequence, compiled_motifs)
     return PredictionResult(
         sequence_id=sequence_id,
         sequence_length=len(clean),

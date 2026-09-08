@@ -4,12 +4,12 @@ import streamlit as st
 
 
 def render_home_page() -> None:
-    st.subheader("Explainable DNA-perplexity predictor")
-    st.markdown('<div class="section-subtitle">High-level workflow and interpretation</div>', unsafe_allow_html=True)
+    st.subheader("REGPLEX regulatory region explorer")
+    st.markdown('<div class="section-subtitle">Sequence ingestion, motif annotation, and explainable perplexity analysis</div>', unsafe_allow_html=True)
     st.markdown(
         """
 <div class="card">
-PerCALL predicts <strong>candidate regulatory regions</strong> by finding persistent local depressions in DNA perplexity relative to nearby background context.
+REGPLEX predicts <strong>candidate regulatory regions</strong> by combining local DNA perplexity depressions with optional motif-library annotation.
 </div>
 
 <div class="section-header">
@@ -18,12 +18,12 @@ PerCALL predicts <strong>candidate regulatory regions</strong> by finding persis
 </div>
 
 <ol class="algo-list">
-  <li>DNA sequence ingestion and cleaning</li>
+  <li>DNA sequence ingestion from pasted text, disk, upload, or NCBI accession</li>
   <li>Dinucleotide probability estimation</li>
   <li>Shannon entropy and perplexity profile (PPL = 2<sup>H</sup>)</li>
   <li>Local flank-based background estimation</li>
   <li>Perplexity depression score (PDS) computation</li>
-  <li>Persistent candidate region detection and ranking</li>
+  <li>Persistent candidate region detection, motif annotation, and ranking</li>
 </ol>
 """,
         unsafe_allow_html=True,
