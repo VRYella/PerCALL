@@ -14,6 +14,26 @@ class InputSourceError(ValueError):
     pass
 
 
+def _is_within(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def _resolve_allowed_input_path(path: str) -> Path:
+    fasta_path = Path(path).expanduser()
+    if not fasta_path.is_absolute():
+        raise InputSourceError("Disk input must use an absolute path.")
+    resolved = fasta_path.resolve()
+    allowed_roots = [Path.cwd().resolve(), Path("/tmp").resolve()]
+    if not any(_is_within(resolved, root) for root in allowed_roots):
+        roots = ", ".join(str(root) for root in allowed_roots)
+        raise InputSourceError(f"Disk input must stay within approved roots: {roots}")
+    return resolved
+
+
 def _decode_uploaded_text(uploaded_bytes: bytes) -> str:
     try:
         return uploaded_bytes.decode("utf-8")
@@ -32,7 +52,7 @@ def load_records_from_text(text: str) -> list[tuple[str, str]]:
 
 
 def load_records_from_path(path: str) -> list[tuple[str, str]]:
-    fasta_path = Path(path).expanduser()
+    fasta_path = _resolve_allowed_input_path(path)
     if not fasta_path.exists():
         raise InputSourceError(f"Input file does not exist: {fasta_path}")
     if not fasta_path.is_file():
